@@ -1,0 +1,3 @@
+[submodule "external/isl"]
+	path = external/isl
+	url = http://repo.or.cz/isl.git
