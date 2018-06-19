@@ -31,6 +31,25 @@ std::vector<R> varargToVector(Args... args) {
     return matcher;                                                            \
   }
 
+DEF_TYPE_MATCHER(sequence, isl_schedule_node_sequence)
+DEF_TYPE_MATCHER(set, isl_schedule_node_set)
+
+#undef DEF_TYPE_MATCHER
+
+#define DEF_TYPE_MATCHER(name, type)                                           \
+  ScheduleNodeMatcher name() {                                                 \
+    ScheduleNodeMatcher matcher;                                               \
+    matcher.current_ = type;                                                   \
+    return matcher;                                                            \
+  }                                                                            \
+                                                                               \
+  ScheduleNodeMatcher name(ScheduleNodeMatcher &&child) {                      \
+    ScheduleNodeMatcher matcher;                                               \
+    matcher.current_ = type;                                                   \
+    matcher.children_.emplace_back(child);                                     \
+    return matcher;                                                            \
+  }
+
 DEF_TYPE_MATCHER(band, isl_schedule_node_band)
 DEF_TYPE_MATCHER(context, isl_schedule_node_context)
 DEF_TYPE_MATCHER(domain, isl_schedule_node_domain)
@@ -38,7 +57,5 @@ DEF_TYPE_MATCHER(extension, isl_schedule_node_extension)
 DEF_TYPE_MATCHER(filter, isl_schedule_node_filter)
 DEF_TYPE_MATCHER(guard, isl_schedule_node_guard)
 DEF_TYPE_MATCHER(mark, isl_schedule_node_mark)
-DEF_TYPE_MATCHER(sequence, isl_schedule_node_sequence)
-DEF_TYPE_MATCHER(set, isl_schedule_node_set)
 
 #undef DEF_TYPE_MATCHER

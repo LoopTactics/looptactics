@@ -38,6 +38,14 @@ namespace matchers {
 class ScheduleNodeMatcher {
 #define DECL_FRIEND_TYPE_MATCH(name)                                           \
   template <typename... Args> friend ScheduleNodeMatcher name(Args...);
+  DECL_FRIEND_TYPE_MATCH(sequence)
+  DECL_FRIEND_TYPE_MATCH(set)
+
+#undef DECL_FRIEND_TYPE_MATCH
+
+#define DECL_FRIEND_TYPE_MATCH(name)                                           \
+  friend ScheduleNodeMatcher name();                                           \
+  friend ScheduleNodeMatcher name(ScheduleNodeMatcher &&);
 
   DECL_FRIEND_TYPE_MATCH(band)
   DECL_FRIEND_TYPE_MATCH(context)
@@ -46,8 +54,6 @@ class ScheduleNodeMatcher {
   DECL_FRIEND_TYPE_MATCH(filter)
   DECL_FRIEND_TYPE_MATCH(guard)
   DECL_FRIEND_TYPE_MATCH(mark)
-  DECL_FRIEND_TYPE_MATCH(sequence)
-  DECL_FRIEND_TYPE_MATCH(set)
 
 #undef DECL_FRIEND_TYPE_MATCH
 
@@ -69,13 +75,27 @@ private:
  * including none.
  * \{
  */
-template <typename... Args> ScheduleNodeMatcher band(Args... args);
-template <typename... Args> ScheduleNodeMatcher context(Args... args);
-template <typename... Args> ScheduleNodeMatcher domain(Args... args);
-template <typename... Args> ScheduleNodeMatcher extension(Args... args);
-template <typename... Args> ScheduleNodeMatcher filter(Args... args);
-template <typename... Args> ScheduleNodeMatcher guard(Args... args);
-template <typename... Args> ScheduleNodeMatcher mark(Args... args);
+ScheduleNodeMatcher band();
+ScheduleNodeMatcher band(ScheduleNodeMatcher &&child);
+
+ScheduleNodeMatcher context();
+ScheduleNodeMatcher context(ScheduleNodeMatcher &&child);
+
+ScheduleNodeMatcher domain();
+ScheduleNodeMatcher domain(ScheduleNodeMatcher &&child);
+
+ScheduleNodeMatcher extension();
+ScheduleNodeMatcher extension(ScheduleNodeMatcher &&child);
+
+ScheduleNodeMatcher filter();
+ScheduleNodeMatcher filter(ScheduleNodeMatcher &&child);
+
+ScheduleNodeMatcher guard();
+ScheduleNodeMatcher guard(ScheduleNodeMatcher &&child);
+
+ScheduleNodeMatcher mark();
+ScheduleNodeMatcher mark(ScheduleNodeMatcher &&child);
+
 template <typename... Args> ScheduleNodeMatcher sequence(Args... args);
 template <typename... Args> ScheduleNodeMatcher set(Args... args);
 /** \} */
