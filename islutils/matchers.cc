@@ -12,6 +12,10 @@ bool ScheduleNodeMatcher::isMatching(const ScheduleNodeMatcher &matcher,
     return false;
   }
 
+  if (matcher.nodeCallback_ && !matcher.nodeCallback_(node)) {
+    return false;
+  }
+
   if (matcher.children_.size() == 0) {
     return true;
   }

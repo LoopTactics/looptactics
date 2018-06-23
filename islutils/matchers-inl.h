@@ -24,10 +24,24 @@ std::vector<R> varargToVector(Args... args) {
 
 /* Definitions for schedule tree matcher factory functions ********************/
 #define DEF_TYPE_MATCHER(name, type)                                           \
-  template <typename... Args> ScheduleNodeMatcher name(Args... args) {         \
+  template <typename Arg, typename... Args, typename>                          \
+  ScheduleNodeMatcher name(Arg arg, Args... args) {                            \
     ScheduleNodeMatcher matcher;                                               \
     matcher.current_ = type;                                                   \
-    matcher.children_ = varargToVector<ScheduleNodeMatcher>(args...);          \
+    matcher.children_ = varargToVector<ScheduleNodeMatcher>(arg, args...);     \
+    return matcher;                                                            \
+  }                                                                            \
+  ScheduleNodeMatcher name() {                                                 \
+    ScheduleNodeMatcher matcher;                                               \
+    matcher.current_ = type;                                                   \
+    return matcher;                                                            \
+  }                                                                            \
+                                                                               \
+  template <typename... Args>                                                  \
+  ScheduleNodeMatcher name(std::function<bool(isl::schedule_node)> callback,   \
+                           Args... args) {                                     \
+    ScheduleNodeMatcher matcher = name(std::forward<Args>(args)...);           \
+    matcher.nodeCallback_ = callback;                                          \
     return matcher;                                                            \
   }
 
@@ -47,6 +61,19 @@ DEF_TYPE_MATCHER(set, isl_schedule_node_set)
     ScheduleNodeMatcher matcher;                                               \
     matcher.current_ = type;                                                   \
     matcher.children_.emplace_back(child);                                     \
+    return matcher;                                                            \
+  }                                                                            \
+                                                                               \
+  ScheduleNodeMatcher name(std::function<bool(isl::schedule_node)> callback) { \
+    ScheduleNodeMatcher matcher = name();                                      \
+    matcher.nodeCallback_ = callback;                                          \
+    return matcher;                                                            \
+  }                                                                            \
+                                                                               \
+  ScheduleNodeMatcher name(std::function<bool(isl::schedule_node)> callback,   \
+                           ScheduleNodeMatcher &&child) {                      \
+    ScheduleNodeMatcher matcher = name(std::move(child));                      \
+    matcher.nodeCallback_ = callback;                                          \
     return matcher;                                                            \
   }
 
