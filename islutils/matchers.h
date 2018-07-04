@@ -160,6 +160,15 @@ private:
   std::function<bool(isl::schedule_node)> nodeCallback_;
 };
 
+std::function<bool(isl::schedule_node)>
+hasPreviousSibling(const ScheduleNodeMatcher &siblingMatcher);
+
+std::function<bool(isl::schedule_node)>
+hasNextSibling(const ScheduleNodeMatcher &siblingMatcher);
+
+std::function<bool(isl::schedule_node)>
+hasSibling(const ScheduleNodeMatcher &siblingMatcher);
+
 #include "matchers-inl.h"
 
 } // namespace matchers
