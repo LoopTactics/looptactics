@@ -75,4 +75,33 @@ hasSibling(const ScheduleNodeMatcher &siblingMatcher) {
   };
 }
 
+std::function<bool(isl::schedule_node)>
+hasDescendant(const ScheduleNodeMatcher &descendantMatcher) {
+  isl::schedule_node n;
+  return [descendantMatcher](isl::schedule_node node) {
+    // Cannot use capturing lambdas as C function pointers.
+    struct Data {
+      bool found;
+      const ScheduleNodeMatcher &descendantMatcher;
+    };
+    Data data{false, descendantMatcher};
+
+    auto r = isl_schedule_node_foreach_descendant_top_down(
+        node.get(),
+        [](__isl_keep isl_schedule_node *cn, void *user) -> isl_bool {
+          auto data = static_cast<Data *>(user);
+          if (data->found) {
+            return isl_bool_false;
+          }
+
+          auto n = isl::manage_copy(cn);
+          data->found =
+              ScheduleNodeMatcher::isMatching(data->descendantMatcher, n);
+          return data->found ? isl_bool_false : isl_bool_true;
+        },
+        &data);
+    return r == isl_stat_ok && data.found;
+  };
+}
+
 } // namespace matchers

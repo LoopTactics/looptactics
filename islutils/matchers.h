@@ -169,6 +169,9 @@ hasNextSibling(const ScheduleNodeMatcher &siblingMatcher);
 std::function<bool(isl::schedule_node)>
 hasSibling(const ScheduleNodeMatcher &siblingMatcher);
 
+std::function<bool(isl::schedule_node)>
+hasDescendant(const ScheduleNodeMatcher &descendantMatcher);
+
 #include "matchers-inl.h"
 
 } // namespace matchers
