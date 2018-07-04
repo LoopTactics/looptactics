@@ -1,23 +1,15 @@
 #include <type_traits>
 
 namespace {
-template <typename Arg, typename... Args>
-inline typename std::enable_if<sizeof...(Args) != 0, void>::type
-appendVarargToVector(std::vector<Arg> &vec, Args... args) {
-  vec.push_back(std::get<0>(std::tuple<Args...>(args...)));
-  appendVarargToVector<Arg>(vec, args...);
-}
-
-template <typename Arg, typename... Args>
-inline typename std::enable_if<sizeof...(Args) == 0, void>::type
-appendVarargToVector(std::vector<Arg> &vec, Args...) {
-  (void)vec;
-}
-
-template <typename R, typename... Args>
-std::vector<R> varargToVector(Args... args) {
-  std::vector<R> result;
-  appendVarargToVector<R, Args...>(result, args...);
+template <typename... Args>
+std::vector<typename std::common_type<Args...>::type>
+varargToVector(Args... args) {
+  std::vector<typename std::common_type<Args...>::type> result;
+  result.reserve(sizeof...(Args));
+  for (const auto &a :
+       {static_cast<typename std::common_type<Args...>::type>(args)...}) {
+    result.emplace_back(a);
+  }
   return result;
 }
 } // namespace
