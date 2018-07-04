@@ -151,7 +151,8 @@ class ScheduleNodeMatcher {
 #undef DECL_FRIEND_TYPE_MATCH
 
 public:
-  bool isMatching(const ScheduleNodeMatcher &matcher, isl::schedule_node node);
+  static bool isMatching(const ScheduleNodeMatcher &matcher,
+                         isl::schedule_node node);
 
 private:
   isl_schedule_node_type current_;
