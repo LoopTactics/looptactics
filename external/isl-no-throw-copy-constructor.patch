@@ -1,0 +1,14 @@
+diff --git a/interface/cpp.cc b/interface/cpp.cc
+index a52e6fec..89401d39 100644
+--- a/interface/cpp.cc
++++ b/interface/cpp.cc
+@@ -559,9 +559,7 @@ void cpp_generator::print_public_constructors_impl(ostream &os,
+ 	osprintf(os, "%s::%s(const %s &obj)\n    : ptr(nullptr)\n",
+ 		 cppname, cppname, cppname);
+ 	osprintf(os, "{\n");
+-	print_check_ptr_start(os, clazz, "obj.ptr");
+ 	osprintf(os, "  ptr = obj.copy();\n");
+-	print_check_ptr_end(os, "ptr");
+ 	osprintf(os, "}\n");
+ }
+ 
