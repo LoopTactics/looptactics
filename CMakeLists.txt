@@ -12,3 +12,5 @@ add_library(islutils islutils/matchers.cc)
 target_include_directories(islutils PUBLIC ${CMAKE_SOURCE_DIR})
 target_include_directories(islutils PUBLIC ${isl_INCLUDE})
 target_link_libraries(islutils ${isl_LIB})
+
+add_subdirectory(test)
