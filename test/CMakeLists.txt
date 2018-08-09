@@ -20,5 +20,15 @@ add_dependencies(check check-matchers)
 add_custom_target(check-set-maker COMMAND test_set_maker)
 add_dependencies(check check-set-maker)
 
+
 add_custom_target(check-builders COMMAND test_builders)
 add_dependencies(check check-builders)
+
+file(GLOB TEST_INPUTS
+  "inputs/*"
+)
+
+foreach (loop_var ${TEST_INPUTS})
+  configure_file(${loop_var} ${CMAKE_BINARY_DIR}/test/inputs; COPYONLY)
+endforeach(loop_var)
+
