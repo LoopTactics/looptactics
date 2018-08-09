@@ -1,0 +1,12 @@
+diff --git a/googletest/cmake/internal_utils.cmake b/googletest/cmake/internal_utils.cmake
+index 086f51c..483daaf 100644
+--- a/googletest/cmake/internal_utils.cmake
++++ b/googletest/cmake/internal_utils.cmake
+@@ -97,6 +97,7 @@ macro(config_compiler_and_linker)
+     set(cxx_base_flags "-Wall -Wshadow -Werror")
+     if(NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 7.0.0)
+       set(cxx_base_flags "${cxx_base_flags} -Wno-error=dangling-else")
++      set(cxx_base_flags "${cxx_base_flags} -Wno-error=misleading-indentation")
+     endif()
+     set(cxx_exception_flags "-fexceptions")
+     set(cxx_no_exception_flags "-fno-exceptions")

@@ -1,13 +1,14 @@
 #include <islutils/matchers.h>
 #include <islutils/parser.h>
 
-void test_from_file() {
+#include "gtest/gtest.h"
+
+TEST(TreeMatcher, ReadFromFile) { 
   Scop S = Parser("inputs/one-dimensional-init.c").getScop();
-  S.dump();
+  EXPECT_TRUE(!S.schedule.is_null());
 }
 
-int main() {
-  test_from_file();
+TEST(TreeMatcher, CompileTest) { 
   using namespace matchers;
 
   auto matcher = domain(context(sequence(band(), band(), filter())));
@@ -24,3 +25,9 @@ int main() {
   auto m10 = band(leaf());
   auto m11 = band([](isl::schedule_node n) { return true;}, leaf());
 }
+ 
+int main(int argc, char **argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}
+
