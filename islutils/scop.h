@@ -5,17 +5,17 @@
 
 /// Minimalist container for a static control part (SCoP).
 /// Contains domain, schedule and access information, where the domain is
-//encoded only as a part of schedule.
+/// encoded only as a part of schedule.
 class Scop {
- public:
+public:
   /// Convenience function to extract the iteration domain of a Scop from its
   /// schedule tree as a union_set.
   /// Returns the domain contained by the root node of the schedule tree, which
-  //is assumed to be a domain node (it is one for valid Scops).
+  /// is assumed to be a domain node (it is one for valid Scops).
   inline isl::union_set domain() const;
 
   /// Schedule of the Scop, defined over its domain.
-  isl::schedule schedule;  
+  isl::schedule schedule;
   /// \{
   /// Access relations of different types.
   isl::union_map reads;
@@ -36,4 +36,4 @@ isl::union_set Scop::domain() const {
   return isl::manage(isl_schedule_node_domain_get_domain(root.get()));
 }
 
-#endif //SCOP_H
+#endif // SCOP_H
