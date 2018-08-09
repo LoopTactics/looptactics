@@ -68,6 +68,8 @@ ScheduleNodeBuilder set(Args... children) {
 
 ScheduleNodeBuilder set(std::vector<ScheduleNodeBuilder> &&children);
 
+ScheduleNodeBuilder subtree(isl::schedule_node node);
+
 } // namespace builders
 
 #endif // BUILDERS_H

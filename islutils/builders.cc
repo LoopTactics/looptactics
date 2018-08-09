@@ -187,4 +187,42 @@ ScheduleNodeBuilder set(std::vector<ScheduleNodeBuilder> &&children) {
   return builder;
 }
 
+ScheduleNodeBuilder subtree(isl::schedule_node node) {
+  ScheduleNodeBuilder builder;
+  builder.current_ = isl_schedule_node_get_type(node.get());
+
+  if (builder.current_ == isl_schedule_node_domain) {
+    builder.uset_ =
+        isl::manage(isl_schedule_node_domain_get_domain(node.get()));
+  } else if (builder.current_ == isl_schedule_node_filter) {
+    builder.uset_ =
+        isl::manage(isl_schedule_node_filter_get_filter(node.get()));
+  } else if (builder.current_ == isl_schedule_node_context) {
+    builder.set_ =
+        isl::manage(isl_schedule_node_context_get_context(node.get()));
+  } else if (builder.current_ == isl_schedule_node_guard) {
+    builder.set_ = isl::manage(isl_schedule_node_guard_get_guard(node.get()));
+  } else if (builder.current_ == isl_schedule_node_mark) {
+    builder.id_ = isl_id_copy(isl_schedule_node_mark_get_id(node.get()));
+  } else if (builder.current_ == isl_schedule_node_band) {
+    builder.mupa_ =
+        isl::manage(isl_schedule_node_band_get_partial_schedule(node.get()));
+  } else if (builder.current_ == isl_schedule_node_extension) {
+    builder.umap_ =
+        isl::manage(isl_schedule_node_extension_get_extension(node.get()));
+  } else if (builder.current_ == isl_schedule_node_sequence ||
+             builder.current_ == isl_schedule_node_set) {
+    /* no payload */
+  } else {
+    assert(false && "unhandled node type");
+  }
+
+  int nChildren = isl_schedule_node_n_children(node.get());
+  for (int i = 0; i < nChildren; ++i) {
+    builder.children_.push_back(subtree(node.child(i)));
+  }
+
+  return builder;
+}
+
 } // namespace builders
