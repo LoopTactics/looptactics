@@ -2,9 +2,17 @@ cmake_minimum_required(VERSION 3.2)
 
 add_executable(test_set_maker test_set_maker.cc)
 target_link_libraries(test_set_maker islutils)
+target_link_libraries(test_set_maker gtest_main)
 
 add_executable(test_matcher test_matcher.cc)
 target_link_libraries(test_matcher islutils)
 target_link_libraries(test_matcher gtest_main)
 
-add_test(NAME test_matcher COMMAND test)
+add_custom_target(check COMMAND echo "Running all")
+
+add_custom_target(check-matchers  COMMAND test_matcher)
+add_dependencies(check check-matchers)
+
+add_custom_target(check-set-maker COMMAND test_set_maker)
+add_dependencies(check check-set-maker)
+
