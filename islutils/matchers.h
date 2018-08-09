@@ -37,7 +37,6 @@ namespace matchers {
 // write - write access
 // readAndWrite - read and write access
 
-/*
 enum class RelationKind {
   read,
   write,
@@ -51,11 +50,13 @@ typedef std::vector<std::string> matchingDims;
 
 // TODO: extend to use variadic template
 class RelationMatcher {
-#define DECL_FRIEND_TYPE_MATCH(name)                    \
-  friend RelationMatcher name(char a, char b);          \
-  friend RelationMatcher name(char a);
+#define DECL_FRIEND_TYPE_MATCH(name) 			\
+  friend RelationMatcher name(char a, char b);		\
+  friend RelationMatcher name(char a);		
   DECL_FRIEND_TYPE_MATCH(read)
+  DECL_FRIEND_TYPE_MATCH(write)
 #undef DECL_FRIEND_TYPE_MATCH
+
 
 public:
   // is a read access?
@@ -78,7 +79,7 @@ private:
   // dimensions.
   std::vector<matchingDims> setDim_;
 };
-*/
+
 
 class ScheduleNodeMatcher;
 
