@@ -6,7 +6,7 @@ Modern C++ utility library for isl.
 git submodule update --init --recursive
 cd external/isl
 ./autogen.sh
-./configure.sh
+./configure --with-clang-exec-prefix=/usr/bin # replace with installation path of clang
 make -j$(nproc)
 cd ../..
 mkdir build
