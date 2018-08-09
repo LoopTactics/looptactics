@@ -14,6 +14,32 @@ varargToVector(Args... args) {
 }
 } // namespace
 
+// TODO: use variadic template.
+/* Definitions for relation matcher factory functions *************************/
+/*
+#define DEF_TYPE_MATCHER_RELATION(name, type)                                   \
+inline RelationMatcher name(char a, char b) {                                   \
+  RelationMatcher matcher;                                                      \
+  matcher.current_ = type;                                                      \
+  matcher.Indexes_.push_back(a);                                                \
+  matcher.Indexes_.push_back(b);                                                \
+  matcher.SetDim_.reserve(2);                                                   \
+  return matcher;                                                               \
+}                                                                               \
+                                                                                \
+inline RelationMatcher name(char a) {                                           \
+  RelationMatcher matcher;                                                      \
+  matcher.current_ = type;                                                      \
+  matcher.Indexes_.push_back(a);                                                \
+  matcher.SetDim_.reserve(1);                                                   \
+  return matcher;                                                               \
+}
+
+DEF_TYPE_MATCHER_RELATION(read, RelationKind::read)
+//DEF_TYPE_MATCHER_RELATION(read, RelationKind::write)
+*/
+
+
 /* Definitions for schedule tree matcher factory functions ********************/
 #define DEF_TYPE_MATCHER(name, type)                                           \
   template <typename Arg, typename... Args, typename>                          \
@@ -78,5 +104,6 @@ DEF_TYPE_MATCHER(extension, isl_schedule_node_extension)
 DEF_TYPE_MATCHER(filter, isl_schedule_node_filter)
 DEF_TYPE_MATCHER(guard, isl_schedule_node_guard)
 DEF_TYPE_MATCHER(mark, isl_schedule_node_mark)
+DEF_TYPE_MATCHER(leaf, isl_schedule_node_leaf)
 
 #undef DEF_TYPE_MATCHER

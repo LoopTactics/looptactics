@@ -32,6 +32,54 @@
 /** \ingroup Matchers */
 namespace matchers {
 
+// It describes the type of matcher.
+// read - read access
+// write - write access
+// readAndWrite - read and write access
+
+/*
+enum class RelationKind {
+  read,
+  write,
+  readAndWrite
+};
+
+class RelationMatcher;
+
+// TODO: change std::string.
+typedef std::vector<std::string> matchingDims;
+
+// TODO: extend to use variadic template
+class RelationMatcher {
+#define DECL_FRIEND_TYPE_MATCH(name)                    \
+  friend RelationMatcher name(char a, char b);          \
+  friend RelationMatcher name(char a);
+  DECL_FRIEND_TYPE_MATCH(read)
+#undef DECL_FRIEND_TYPE_MATCH
+
+public:
+  // is a read access?
+  bool isRead() const;
+  // is a write access?
+  bool isWrite() const;
+  // return literal at index i
+  char getIndex(unsigned i)const;
+  // get number of literals
+  int getIndexesSize() const;
+  ~RelationMatcher() = default;
+
+private:
+  // type (read, write or readAndWrite)
+  RelationKind type_;
+  // describe how the indexes should look like. Indexes layout.
+  std::vector<char> indexes_;
+  // once we figured out a combination that
+  // satisfy all the matcher we "fixed" the
+  // dimensions.
+  std::vector<matchingDims> setDim_;
+};
+*/
+
 class ScheduleNodeMatcher;
 
 /** \defgroup MatchersStructuralCstr Structural Matcher Constructors.
@@ -115,6 +163,8 @@ ScheduleNodeMatcher mark(ScheduleNodeMatcher &&child);
 ScheduleNodeMatcher mark(std::function<bool(isl::schedule_node)> callback);
 ScheduleNodeMatcher mark(std::function<bool(isl::schedule_node)> callback,
                          ScheduleNodeMatcher &&child);
+
+ScheduleNodeMatcher leaf();
 /** \} */
 
 /** Node type matcher class for isl schedule trees.
@@ -147,6 +197,7 @@ class ScheduleNodeMatcher {
   DECL_FRIEND_TYPE_MATCH(filter)
   DECL_FRIEND_TYPE_MATCH(guard)
   DECL_FRIEND_TYPE_MATCH(mark)
+  DECL_FRIEND_TYPE_MATCH(leaf)
 
 #undef DECL_FRIEND_TYPE_MATCH
 
@@ -175,3 +226,68 @@ hasDescendant(const ScheduleNodeMatcher &descendantMatcher);
 #include "matchers-inl.h"
 
 } // namespace matchers
+
+// A constraint is introduced by an access and a matcher.
+// In more details, a constraint looks like (A, i0). Meaning that
+// we have assigned dimension i0 to literal A.
+/*
+namespace constraint {
+
+// represents single constraint.
+typedef std::tuple<char, isl::pw_aff> singleConstraint;
+// represents collection of constraints.
+typedef std::vector<singleConstraint> MultipleConstraints;
+
+// TODO: check if we can avoid int dimsInvolved.
+// decouple matcher from constraint list.
+struct MatcherConstraints {
+  int dimsInvolved = -1;
+  MultipleConstraints constraints;
+};
+
+// helper function for printing single constraint.
+inline void print_single_constraint(raw_ostream &OS,
+                                    const singleConstraint &c) {
+  OS << std::get<0>(c) << "," << std::get<1>(c).to_str();
+}
+
+// overloading << for printing single constraint.
+inline auto& operator<<(raw_ostream &OS, const singleConstraint &c) {
+  OS << "(";
+  print_single_constraint(OS, c);
+  return OS << ")";
+}
+
+// helper function for multiple constraints.
+inline void print_multiple_constraints(raw_ostream &OS,
+                                       const MultipleConstraints &mc) {
+  for(std::size_t i = 0; i < mc.size()-1; ++i) {
+    OS << mc[i] << ",";
+  }
+  OS << mc[mc.size()-1];
+}
+
+// overloading << for multiple constraints.
+inline auto& operator<<(raw_ostream &OS, const MultipleConstraints &mc) {
+  OS << "[";
+  print_multiple_constraints(OS, mc);
+  return OS << "]";
+}
+
+// overloading << for MatcherConstraints
+inline auto& operator<<(raw_ostream &OS, const MatcherConstraints &mc) {
+  OS << "{";
+  OS << "\n";
+  OS << "Involved Dims = " << mc.dimsInvolved << "\n";
+  if(mc.dimsInvolved == -1) {
+    OS << "Constraints = empty";
+    OS << "\n";
+    return OS << "}";
+  }
+  OS << "Constraints = " << mc.constraints;
+  OS << "\n";
+  return OS << "}";
+}
+
+} // namespace constraint
+*/
