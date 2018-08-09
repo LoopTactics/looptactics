@@ -12,7 +12,7 @@ ExternalProject_Add(isl
      BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/build-isl
      INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/install-isl
      UPDATE_COMMAND ./autogen.sh
-     CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --with-clang=system
+     CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --with-clang=system --with-int=imath-32
      BUILD_COMMAND make -j
 )
 
@@ -27,11 +27,15 @@ ExternalProject_Add(pet
      BUILD_COMMAND make -j
 )
 
-set(isl_LIB "external/install-isl/lib/libisl.a")
+set(isl_LIB "libisl.a")
+set(isl_LIBPATH "external/install-isl/lib")
 set(isl_INCLUDE "external/install-isl/include")
 
-set(pet_LIB "external/install-pet/lib/libpet.a")
+set(pet_LIB "libpet.a")
+set(pet_LIBPATH "external/install-pet/lib/")
 set(pet_INCLUDE "external/install-pet/include")
+
+link_directories(islutils ${isl_LIBPATH} ${pet_LIBPATH})
 
 add_library(islutils islutils/matchers.cc)
 target_include_directories(islutils PUBLIC ${CMAKE_SOURCE_DIR})
