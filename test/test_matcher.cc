@@ -14,4 +14,6 @@ int main() {
   auto m8 = sequence(filter(hasSibling(filter())));
 
   auto m9 = sequence(hasDescendant(band()));
+  auto m10 = band(leaf());
+  auto m11 = band([](isl::schedule_node n) { return true;}, leaf());
 }
