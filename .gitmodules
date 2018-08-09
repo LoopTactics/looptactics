@@ -1,3 +1,6 @@
 [submodule "external/isl"]
 	path = external/isl
 	url = http://repo.or.cz/isl.git
+[submodule "external/pet"]
+	path = external/pet
+	url = git://repo.or.cz/pet.git
