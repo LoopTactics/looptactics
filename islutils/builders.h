@@ -34,23 +34,39 @@ public:
   isl_id *id_;
 };
 
-ScheduleNodeBuilder domain(isl::union_set uset,
-                           std::vector<ScheduleNodeBuilder> &&children =
-                               std::vector<ScheduleNodeBuilder>());
+ScheduleNodeBuilder domain(isl::union_set uset);
+ScheduleNodeBuilder domain(isl::union_set uset, ScheduleNodeBuilder &&child);
 
+ScheduleNodeBuilder band(isl::multi_union_pw_aff mupa);
 ScheduleNodeBuilder band(isl::multi_union_pw_aff mupa,
-                         std::vector<ScheduleNodeBuilder> &&children =
-                             std::vector<ScheduleNodeBuilder>());
+                         ScheduleNodeBuilder &&child);
 
-ScheduleNodeBuilder filter(isl::union_set uset,
-                           std::vector<ScheduleNodeBuilder> &&children =
-                               std::vector<ScheduleNodeBuilder>());
+ScheduleNodeBuilder filter(isl::union_set uset);
+ScheduleNodeBuilder filter(isl::union_set uset, ScheduleNodeBuilder &&child);
 
-ScheduleNodeBuilder sequence(std::vector<ScheduleNodeBuilder> &&children =
-                                 std::vector<ScheduleNodeBuilder>());
+template <typename... Args, typename = typename std::enable_if<std::is_same<
+                                typename std::common_type<Args...>::type,
+                                ScheduleNodeBuilder>::value>::type>
+ScheduleNodeBuilder sequence(Args... children) {
+  ScheduleNodeBuilder builder;
+  builder.current_ = isl_schedule_node_sequence;
+  builder.children_ = {children...};
+  return builder;
+}
 
-ScheduleNodeBuilder set(std::vector<ScheduleNodeBuilder> &&children =
-                            std::vector<ScheduleNodeBuilder>());
+ScheduleNodeBuilder sequence(std::vector<ScheduleNodeBuilder> &&children);
+
+template <typename... Args, typename = typename std::enable_if<std::is_same<
+                                typename std::common_type<Args...>::type,
+                                ScheduleNodeBuilder>::value>::type>
+ScheduleNodeBuilder set(Args... children) {
+  ScheduleNodeBuilder builder;
+  builder.current_ = isl_schedule_node_set;
+  builder.children_ = {children...};
+  return builder;
+}
+
+ScheduleNodeBuilder set(std::vector<ScheduleNodeBuilder> &&children);
 
 } // namespace builders
 

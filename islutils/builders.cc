@@ -133,30 +133,43 @@ isl::schedule_node ScheduleNodeBuilder::build() const {
   return insertAt(isl::schedule_node());
 }
 
-ScheduleNodeBuilder domain(isl::union_set uset,
-                           std::vector<ScheduleNodeBuilder> &&children) {
+ScheduleNodeBuilder domain(isl::union_set uset) {
   ScheduleNodeBuilder builder;
   builder.current_ = isl_schedule_node_domain;
-  builder.children_ = children;
   builder.uset_ = uset;
   return builder;
 }
 
-ScheduleNodeBuilder band(isl::multi_union_pw_aff mupa,
-                         std::vector<ScheduleNodeBuilder> &&children) {
+ScheduleNodeBuilder domain(isl::union_set uset, ScheduleNodeBuilder &&child) {
+  auto builder = domain(uset);
+  builder.children_.emplace_back(child);
+  return builder;
+}
+
+ScheduleNodeBuilder band(isl::multi_union_pw_aff mupa) {
   ScheduleNodeBuilder builder;
   builder.current_ = isl_schedule_node_band;
-  builder.children_ = children;
   builder.mupa_ = mupa;
   return builder;
 }
 
-ScheduleNodeBuilder filter(isl::union_set uset,
-                           std::vector<ScheduleNodeBuilder> &&children) {
+ScheduleNodeBuilder band(isl::multi_union_pw_aff mupa,
+                         ScheduleNodeBuilder &&child) {
+  auto builder = band(mupa);
+  builder.children_.emplace_back(child);
+  return builder;
+}
+
+ScheduleNodeBuilder filter(isl::union_set uset) {
   ScheduleNodeBuilder builder;
   builder.current_ = isl_schedule_node_filter;
-  builder.children_ = children;
   builder.uset_ = uset;
+  return builder;
+}
+
+ScheduleNodeBuilder filter(isl::union_set uset, ScheduleNodeBuilder &&child) {
+  auto builder = filter(uset);
+  builder.children_.emplace_back(child);
   return builder;
 }
 
@@ -173,4 +186,5 @@ ScheduleNodeBuilder set(std::vector<ScheduleNodeBuilder> &&children) {
   builder.children_ = children;
   return builder;
 }
+
 } // namespace builders

@@ -16,11 +16,15 @@ int main() {
   auto filterS1 = isl::union_set(ctx, "{S1[i,j]}");
   auto filterS2 = isl::union_set(ctx, "{S2[i,j]}");
 
+  // clang-format off
   auto node =
       domain(iterationDomain,
-             {band(firstBand, {sequence({filter(filterS2, {band(secondBand)}),
-                                         filter(filterS1)})})})
-          .build();
+        band(firstBand,
+          sequence(
+            filter(filterS2,
+              band(secondBand)),
+            filter(filterS1)))).build();
+  // clang-format on
 
   isl_schedule_node_dump(node.get());
 
