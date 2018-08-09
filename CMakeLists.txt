@@ -27,19 +27,19 @@ ExternalProject_Add(pet
      BUILD_COMMAND make -j
 )
 
-set(isl_LIB "libisl.a")
+set(isl_LIB "libisl.so")
 set(isl_LIBPATH "external/install-isl/lib")
 set(isl_INCLUDE "external/install-isl/include")
 
-set(pet_LIB "libpet.a")
+set(pet_LIB "libpet.so")
 set(pet_LIBPATH "external/install-pet/lib/")
 set(pet_INCLUDE "external/install-pet/include")
 
 link_directories(islutils ${isl_LIBPATH} ${pet_LIBPATH})
 
-add_library(islutils islutils/matchers.cc)
+add_library(islutils islutils/matchers.cc islutils/parser.cc)
 target_include_directories(islutils PUBLIC ${CMAKE_SOURCE_DIR})
-target_include_directories(islutils PUBLIC ${isl_INCLUDE})
-target_link_libraries(islutils ${isl_LIB})
+target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})
+target_link_libraries(islutils ${isl_LIB} ${pet_LIB})
 
 add_subdirectory(test)

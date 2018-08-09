@@ -3,6 +3,8 @@
 
 #include <isl/cpp.h>
 
+#include <iostream>
+
 /// Minimalist container for a static control part (SCoP).
 /// Contains domain, schedule and access information, where the domain is
 /// encoded only as a part of schedule.
@@ -22,6 +24,8 @@ public:
   isl::union_map mayWrites;
   isl::union_map mustWrites;
   /// \}
+
+  inline void dump();
 };
 
 isl::union_set Scop::domain() const {
@@ -34,6 +38,13 @@ isl::union_set Scop::domain() const {
     return isl::union_set();
   }
   return isl::manage(isl_schedule_node_domain_get_domain(root.get()));
+}
+
+void Scop::dump() {
+  isl_schedule_dump(schedule.get());
+  isl_union_map_dump(reads.get());
+  isl_union_map_dump(mayWrites.get());
+  isl_union_map_dump(mustWrites.get());
 }
 
 #endif // SCOP_H

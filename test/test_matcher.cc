@@ -1,6 +1,13 @@
 #include <islutils/matchers.h>
+#include <islutils/parser.h>
+
+void test_from_file() {
+  Scop S = Parser("inputs/one-dimensional-init.c").getScop();
+  S.dump();
+}
 
 int main() {
+  test_from_file();
   using namespace matchers;
 
   auto matcher = domain(context(sequence(band(), band(), filter())));
