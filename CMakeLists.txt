@@ -15,6 +15,7 @@ ExternalProject_Add(isl
      PATCH_COMMAND patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/external/isl-no-throw-copy-constructor.patch
      CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --with-clang=system --with-int=imath-32
      BUILD_COMMAND make -j
+     EXCLUDE_FROM_ALL 1
 )
 
 ExternalProject_Add(pet
@@ -26,6 +27,7 @@ ExternalProject_Add(pet
      UPDATE_COMMAND ./autogen.sh
      CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --with-isl-prefix=${CMAKE_CURRENT_SOURCE_DIR}/external/install-isl --with-isl=system
      BUILD_COMMAND make -j
+     EXCLUDE_FROM_ALL 1
 )
 
 # Download and unpack googletest at configure time
