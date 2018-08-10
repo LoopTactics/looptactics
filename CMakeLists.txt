@@ -12,7 +12,7 @@ ExternalProject_Add(isl
      BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/build-isl
      INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/install-isl
      UPDATE_COMMAND ./autogen.sh
-     PATCH_COMMAND patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/external/isl-no-throw-copy-constructor.patch
+     PATCH_COMMAND patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/external/isl-no-throw-copy-constructor.patch COMMAND patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/external/isl-expose-all.patch
      CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --with-clang=system --with-int=imath-32
      BUILD_COMMAND make -j
      EXCLUDE_FROM_ALL 1

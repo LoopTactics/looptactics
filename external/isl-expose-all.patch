@@ -1,0 +1,749 @@
+diff --git a/all.h b/all.h
+index ea0b4982..86830fb3 100644
+--- a/all.h
++++ b/all.h
+@@ -1,7 +1,10 @@
+ #include <isl/val.h>
+ #include <isl/aff.h>
+ #include <isl/set.h>
++#include <isl/space.h>
++#include <isl/id.h>
+ #include <isl/map.h>
++#include <isl/vec.h>
+ #include <isl/ilp.h>
+ #include <isl/union_set.h>
+ #include <isl/union_map.h>
+@@ -9,3 +12,7 @@
+ #include <isl/schedule.h>
+ #include <isl/schedule_node.h>
+ #include <isl/ast_build.h>
++#include <isl/constraint.h>
++#include <isl/polynomial.h>
++#include <isl/mat.h>
++#include <isl/fixed_box.h>
+diff --git a/cpp/cpp-checked.h.pre b/cpp/cpp-checked.h.pre
+index 43911e57..f157f4ed 100644
+--- a/cpp/cpp-checked.h.pre
++++ b/cpp/cpp-checked.h.pre
+@@ -32,7 +32,7 @@ public:
+   boolean()
+       : val(isl_bool_error) {}
+   ~boolean() {
+-    ISLPP_ASSERT(checked, "IMPLEMENTATION ERROR: Unchecked state");
++    // ISLPP_ASSERT(checked, "IMPLEMENTATION ERROR: Unchecked state");
+   }
+ 
+   /* implicit */ boolean(bool val)
+@@ -42,8 +42,8 @@ public:
+   bool is_false() const { checked = true; return val == isl_bool_false; }
+   bool is_true() const { checked = true; return val == isl_bool_true; }
+ 
+-  explicit operator bool() const {
+-    ISLPP_ASSERT(checked, "IMPLEMENTATION ERROR: Unchecked error state");
++  operator bool() const {
++    // ISLPP_ASSERT(checked, "IMPLEMENTATION ERROR: Unchecked error state");
+     ISLPP_ASSERT(!is_error(), "IMPLEMENTATION ERROR: Unhandled error state");
+     return is_true();
+   }
+@@ -82,8 +82,8 @@ private:
+ 	isl_stat val;
+ 
+ 	friend stat manage(isl_stat val);
+-	constexpr stat(isl_stat val) : val(val) {}
+ public:
++	constexpr stat(isl_stat val) : val(val) {}
+ 	static stat ok() {
+ 		return stat(isl_stat_ok);
+ 	}
+@@ -92,7 +92,7 @@ public:
+ 	}
+ 	stat() : val(isl_stat_error) {}
+ 	~stat() {
+-		ISLPP_ASSERT(checked, "IMPLEMENTATION ERROR: Unchecked state");
++		// ISLPP_ASSERT(checked, "IMPLEMENTATION ERROR: Unchecked state");
+ 	}
+ 
+ 	isl_stat release() {
+@@ -110,10 +110,21 @@ public:
+ 	}
+ };
+ 
++
+ inline stat manage(isl_stat val)
+ {
+ 	return stat(val);
+ }
+ 
++enum class dim {
++  cst = isl_dim_cst,
++  param = isl_dim_param,
++  in = isl_dim_in,
++  out = isl_dim_out,
++  set = isl_dim_set,
++  div = isl_dim_div,
++  all = isl_dim_all
++};
++
+ }
+ } // namespace isl
+diff --git a/cpp/cpp.h.pre b/cpp/cpp.h.pre
+index bf1fdf80..bfa3c507 100644
+--- a/cpp/cpp.h.pre
++++ b/cpp/cpp.h.pre
+@@ -240,4 +240,14 @@ public:
+ 	}
+ };
+ 
++enum class dim {                                                                
++  cst = isl_dim_cst,                                                            
++  param = isl_dim_param,                                                        
++  in = isl_dim_in,                                                              
++  out = isl_dim_out,                                                            
++  set = isl_dim_set,                                                            
++  div = isl_dim_div,                                                            
++  all = isl_dim_all                                                             
++};                                                                              
++
+ } // namespace isl
+diff --git a/include/isl/aff.h b/include/isl/aff.h
+index 9b411617..b1533979 100644
+--- a/include/isl/aff.h
++++ b/include/isl/aff.h
+@@ -16,7 +16,9 @@
+ extern "C" {
+ #endif
+ 
++__isl_constructor
+ __isl_give isl_aff *isl_aff_zero_on_domain(__isl_take isl_local_space *ls);
++__isl_constructor
+ __isl_give isl_aff *isl_aff_val_on_domain(__isl_take isl_local_space *ls,
+ 	__isl_take isl_val *val);
+ __isl_give isl_aff *isl_aff_var_on_domain(__isl_take isl_local_space *ls,
+@@ -194,11 +196,13 @@ __isl_give isl_pw_aff *isl_pw_aff_from_aff(__isl_take isl_aff *aff);
+ __isl_give isl_pw_aff *isl_pw_aff_empty(__isl_take isl_space *dim);
+ __isl_give isl_pw_aff *isl_pw_aff_alloc(__isl_take isl_set *set,
+ 	__isl_take isl_aff *aff);
++__isl_constructor
+ __isl_give isl_pw_aff *isl_pw_aff_zero_on_domain(
+ 	__isl_take isl_local_space *ls);
+ __isl_give isl_pw_aff *isl_pw_aff_var_on_domain(__isl_take isl_local_space *ls,
+ 	enum isl_dim_type type, unsigned pos);
+ __isl_give isl_pw_aff *isl_pw_aff_nan_on_domain(__isl_take isl_local_space *ls);
++__isl_constructor
+ __isl_give isl_pw_aff *isl_pw_aff_val_on_domain(__isl_take isl_set *domain,
+ 	__isl_take isl_val *v);
+ 
+@@ -645,11 +649,13 @@ void isl_pw_multi_aff_dump(__isl_keep isl_pw_multi_aff *pma);
+ 
+ __isl_give isl_union_pw_multi_aff *isl_union_pw_multi_aff_empty(
+ 	__isl_take isl_space *space);
++__isl_constructor
+ __isl_give isl_union_pw_multi_aff *isl_union_pw_multi_aff_from_aff(
+ 	__isl_take isl_aff *aff);
+ __isl_constructor
+ __isl_give isl_union_pw_multi_aff *isl_union_pw_multi_aff_from_pw_multi_aff(
+ 	__isl_take isl_pw_multi_aff *pma);
++__isl_constructor
+ __isl_give isl_union_pw_multi_aff *isl_union_pw_multi_aff_from_domain(
+ 	__isl_take isl_union_set *uset);
+ __isl_give isl_union_pw_multi_aff *isl_union_pw_multi_aff_multi_val_on_domain(
+@@ -766,6 +772,7 @@ __isl_give isl_union_pw_multi_aff *isl_union_pw_multi_aff_subtract_domain(
+ 	__isl_take isl_union_pw_multi_aff *upma,
+ 	__isl_take isl_union_set *uset);
+ 
++__isl_constructor
+ __isl_overload
+ __isl_give isl_union_map *isl_union_map_from_union_pw_multi_aff(
+ 	__isl_take isl_union_pw_multi_aff *upma);
+@@ -775,6 +782,7 @@ __isl_give isl_printer *isl_printer_print_union_pw_multi_aff(
+ 
+ __isl_give isl_union_pw_multi_aff *isl_union_pw_multi_aff_from_union_set(
+ 	__isl_take isl_union_set *uset);
++__isl_constructor
+ __isl_give isl_union_pw_multi_aff *isl_union_pw_multi_aff_from_union_map(
+ 	__isl_take isl_union_map *umap);
+ 
+@@ -881,6 +889,7 @@ __isl_give isl_union_pw_aff *isl_union_pw_aff_empty(
+ __isl_constructor
+ __isl_give isl_union_pw_aff *isl_union_pw_aff_from_pw_aff(
+ 	__isl_take isl_pw_aff *pa);
++__isl_constructor
+ __isl_give isl_union_pw_aff *isl_union_pw_aff_val_on_domain(
+ 	__isl_take isl_union_set *domain, __isl_take isl_val *v);
+ __isl_give isl_union_pw_aff *isl_union_pw_aff_aff_on_domain(
+@@ -1027,6 +1036,7 @@ isl_multi_union_pw_aff_pullback_union_pw_multi_aff(
+ 	__isl_take isl_multi_union_pw_aff *mupa,
+ 	__isl_take isl_union_pw_multi_aff *upma);
+ 
++__isl_constructor
+ __isl_give isl_union_pw_multi_aff *
+ isl_union_pw_multi_aff_from_multi_union_pw_aff(
+ 	__isl_take isl_multi_union_pw_aff *mupa);
+@@ -1036,6 +1046,7 @@ __isl_give isl_multi_union_pw_aff *isl_multi_union_pw_aff_union_add(
+ 	__isl_take isl_multi_union_pw_aff *mupa1,
+ 	__isl_take isl_multi_union_pw_aff *mupa2);
+ 
++__isl_constructor
+ __isl_give isl_multi_union_pw_aff *
+ isl_multi_union_pw_aff_from_union_pw_multi_aff(
+ 	__isl_take isl_union_pw_multi_aff *upma);
+diff --git a/include/isl/constraint.h b/include/isl/constraint.h
+index adb0d863..5cc5abef 100644
+--- a/include/isl/constraint.h
++++ b/include/isl/constraint.h
+@@ -22,7 +22,7 @@
+ extern "C" {
+ #endif
+ 
+-struct isl_constraint;
++struct __isl_export isl_constraint;
+ typedef struct isl_constraint isl_constraint;
+ 
+ ISL_DECLARE_LIST(constraint)
+diff --git a/include/isl/fixed_box.h b/include/isl/fixed_box.h
+index 5a40a6f0..ac64fbd2 100644
+--- a/include/isl/fixed_box.h
++++ b/include/isl/fixed_box.h
+@@ -14,7 +14,7 @@
+ extern "C" {
+ #endif
+ 
+-struct isl_fixed_box;
++struct __isl_export isl_fixed_box;
+ typedef struct isl_fixed_box isl_fixed_box;
+ 
+ isl_ctx *isl_fixed_box_get_ctx(__isl_keep isl_fixed_box *box);
+diff --git a/include/isl/hmap.h b/include/isl/hmap.h
+index 21612217..fa1f4bce 100644
+--- a/include/isl/hmap.h
++++ b/include/isl/hmap.h
+@@ -11,7 +11,7 @@ extern "C" {
+ #define ISL_xFN(TYPE,NAME) TYPE ## _ ## NAME
+ #define ISL_FN(TYPE,NAME) ISL_xFN(TYPE,NAME)
+ 
+-struct ISL_HMAP;
++struct __isl_export ISL_HMAP;
+ typedef struct ISL_HMAP	ISL_HMAP;
+ 
+ __isl_give ISL_HMAP *ISL_FN(ISL_HMAP,alloc)(isl_ctx *ctx, int min_size);
+diff --git a/include/isl/id_type.h b/include/isl/id_type.h
+index e87f8437..8620a0ff 100644
+--- a/include/isl/id_type.h
++++ b/include/isl/id_type.h
+@@ -7,7 +7,7 @@
+ extern "C" {
+ #endif
+ 
+-struct isl_id;
++struct __isl_export isl_id;
+ typedef struct isl_id isl_id;
+ 
+ ISL_DECLARE_LIST_TYPE(id)
+diff --git a/include/isl/list.h b/include/isl/list.h
+index 49d2f914..16f08668 100644
+--- a/include/isl/list.h
++++ b/include/isl/list.h
+@@ -19,12 +19,12 @@ extern "C" {
+ 
+ #define ISL_DECLARE_LIST_TYPE(EL)					\
+ struct isl_##EL;							\
+-struct isl_##EL##_list;							\
++struct __isl_export isl_##EL##_list;							\
+ typedef struct isl_##EL##_list isl_##EL##_list;
+ #define ISL_DECLARE_LIST_FN(EL)						\
+ isl_ctx *isl_##EL##_list_get_ctx(__isl_keep isl_##EL##_list *list);	\
+ __isl_give isl_##EL##_list *isl_##EL##_list_from_##EL(			\
+-	__isl_take struct isl_##EL *el);				\
++	__isl_take isl_##EL *el);				\
+ __isl_give isl_##EL##_list *isl_##EL##_list_alloc(isl_ctx *ctx, int n);	\
+ __isl_give isl_##EL##_list *isl_##EL##_list_copy(			\
+ 	__isl_keep isl_##EL##_list *list);				\
+@@ -32,10 +32,10 @@ __isl_null isl_##EL##_list *isl_##EL##_list_free(			\
+ 	__isl_take isl_##EL##_list *list);				\
+ __isl_give isl_##EL##_list *isl_##EL##_list_add(			\
+ 	__isl_take isl_##EL##_list *list,				\
+-	__isl_take struct isl_##EL *el);				\
++	__isl_take isl_##EL *el);				\
+ __isl_give isl_##EL##_list *isl_##EL##_list_insert(			\
+ 	__isl_take isl_##EL##_list *list, unsigned pos,			\
+-	__isl_take struct isl_##EL *el);				\
++	__isl_take isl_##EL *el);				\
+ __isl_give isl_##EL##_list *isl_##EL##_list_drop(			\
+ 	__isl_take isl_##EL##_list *list, unsigned first, unsigned n);	\
+ __isl_give isl_##EL##_list *isl_##EL##_list_swap(			\
+@@ -50,13 +50,13 @@ int isl_##EL##_list_size(__isl_keep isl_##EL##_list *list);		\
+ int isl_##EL##_list_n_##EL(__isl_keep isl_##EL##_list *list);		\
+ __isl_give isl_##EL *isl_##EL##_list_get_at(				\
+ 	__isl_keep isl_##EL##_list *list, int index);			\
+-__isl_give struct isl_##EL *isl_##EL##_list_get_##EL(			\
++__isl_give isl_##EL *isl_##EL##_list_get_##EL(			\
+ 	__isl_keep isl_##EL##_list *list, int index);			\
+-__isl_give struct isl_##EL##_list *isl_##EL##_list_set_##EL(		\
+-	__isl_take struct isl_##EL##_list *list, int index,		\
+-	__isl_take struct isl_##EL *el);				\
++__isl_give isl_##EL##_list *isl_##EL##_list_set_##EL(		\
++	__isl_take isl_##EL##_list *list, int index,		\
++	__isl_take isl_##EL *el);				\
+ isl_stat isl_##EL##_list_foreach(__isl_keep isl_##EL##_list *list,	\
+-	isl_stat (*fn)(__isl_take struct isl_##EL *el, void *user),	\
++	isl_stat (*fn)(__isl_take isl_##EL *el, void *user),	\
+ 	void *user);							\
+ __isl_give isl_##EL##_list *isl_##EL##_list_map(			\
+ 	__isl_take isl_##EL##_list *list,				\
+@@ -65,12 +65,12 @@ __isl_give isl_##EL##_list *isl_##EL##_list_map(			\
+ 	void *user);							\
+ __isl_give isl_##EL##_list *isl_##EL##_list_sort(			\
+ 	__isl_take isl_##EL##_list *list,				\
+-	int (*cmp)(__isl_keep struct isl_##EL *a,			\
+-		__isl_keep struct isl_##EL *b,				\
++	int (*cmp)(__isl_keep isl_##EL *a,			\
++		__isl_keep isl_##EL *b,				\
+ 		void *user), void *user);				\
+ isl_stat isl_##EL##_list_foreach_scc(__isl_keep isl_##EL##_list *list,	\
+-	isl_bool (*follows)(__isl_keep struct isl_##EL *a,		\
+-			__isl_keep struct isl_##EL *b, void *user),	\
++	isl_bool (*follows)(__isl_keep isl_##EL *a,		\
++			__isl_keep isl_##EL *b, void *user),	\
+ 	void *follows_user,						\
+ 	isl_stat (*fn)(__isl_take isl_##EL##_list *scc, void *user),	\
+ 	void *fn_user);							\
+diff --git a/include/isl/local_space.h b/include/isl/local_space.h
+index a7201b05..a3dcbfad 100644
+--- a/include/isl/local_space.h
++++ b/include/isl/local_space.h
+@@ -10,11 +10,12 @@
+ extern "C" {
+ #endif
+ 
+-struct isl_local_space;
++struct __isl_export isl_local_space;
+ typedef struct isl_local_space isl_local_space;
+ 
+ isl_ctx *isl_local_space_get_ctx(__isl_keep isl_local_space *ls);
+ 
++__isl_constructor
+ __isl_give isl_local_space *isl_local_space_from_space(__isl_take isl_space *dim);
+ 
+ __isl_give isl_local_space *isl_local_space_copy(
+diff --git a/include/isl/mat.h b/include/isl/mat.h
+index ed3ee349..70f6164d 100644
+--- a/include/isl/mat.h
++++ b/include/isl/mat.h
+@@ -20,7 +20,7 @@
+ extern "C" {
+ #endif
+ 
+-struct isl_mat;
++struct __isl_export isl_mat;
+ typedef struct isl_mat	isl_mat;
+ 
+ isl_ctx *isl_mat_get_ctx(__isl_keep isl_mat *mat);
+diff --git a/include/isl/point.h b/include/isl/point.h
+index 1dddc628..08431c60 100644
+--- a/include/isl/point.h
++++ b/include/isl/point.h
+@@ -15,6 +15,7 @@ typedef struct isl_point isl_point;
+ isl_ctx *isl_point_get_ctx(__isl_keep isl_point *pnt);
+ __isl_give isl_space *isl_point_get_space(__isl_keep isl_point *pnt);
+ 
++__isl_constructor
+ __isl_give isl_point *isl_point_zero(__isl_take isl_space *dim);
+ __isl_give isl_point *isl_point_copy(__isl_keep isl_point *pnt);
+ __isl_null isl_point *isl_point_free(__isl_take isl_point *pnt);
+diff --git a/include/isl/polynomial_type.h b/include/isl/polynomial_type.h
+index a8fe3cdf..34344be2 100644
+--- a/include/isl/polynomial_type.h
++++ b/include/isl/polynomial_type.h
+@@ -1,10 +1,10 @@
+ #ifndef ISL_POLYNOMIAL_TYPE_H
+ #define ISL_POLYNOMIAL_TYPE_H
+ 
+-struct isl_qpolynomial;
++struct __isl_export isl_qpolynomial;
+ typedef struct isl_qpolynomial isl_qpolynomial;
+ 
+-struct isl_term;
++struct __isl_export isl_term;
+ typedef struct isl_term isl_term;
+ 
+ struct __isl_export isl_pw_qpolynomial;
+diff --git a/include/isl/space.h b/include/isl/space.h
+index 40a333ea..6280d020 100644
+--- a/include/isl/space.h
++++ b/include/isl/space.h
+@@ -20,8 +20,10 @@ extern "C" {
+ #endif
+ 
+ isl_ctx *isl_space_get_ctx(__isl_keep isl_space *dim);
++__isl_constructor
+ __isl_give isl_space *isl_space_alloc(isl_ctx *ctx,
+ 			unsigned nparam, unsigned n_in, unsigned n_out);
++__isl_constructor
+ __isl_give isl_space *isl_space_set_alloc(isl_ctx *ctx,
+ 			unsigned nparam, unsigned dim);
+ __isl_give isl_space *isl_space_params_alloc(isl_ctx *ctx, unsigned nparam);
+diff --git a/include/isl/space_type.h b/include/isl/space_type.h
+index 6a181555..c3d245c1 100644
+--- a/include/isl/space_type.h
++++ b/include/isl/space_type.h
+@@ -5,7 +5,7 @@
+ extern "C" {
+ #endif
+ 
+-struct isl_space;
++struct __isl_export isl_space;
+ typedef struct isl_space isl_space;
+ 
+ enum isl_dim_type {
+diff --git a/include/isl/union_set.h b/include/isl/union_set.h
+index 0e6fc984..33bba859 100644
+--- a/include/isl/union_set.h
++++ b/include/isl/union_set.h
+@@ -127,6 +127,7 @@ isl_bool isl_union_set_contains(__isl_keep isl_union_set *uset,
+ 	__isl_keep isl_space *space);
+ __isl_give isl_set *isl_union_set_extract_set(__isl_keep isl_union_set *uset,
+ 	__isl_take isl_space *dim);
++__isl_constructor
+ __isl_give isl_set *isl_set_from_union_set(__isl_take isl_union_set *uset);
+ __isl_export
+ isl_stat isl_union_set_foreach_point(__isl_keep isl_union_set *uset,
+diff --git a/include/isl/vec.h b/include/isl/vec.h
+index 23c8f581..e41024cd 100644
+--- a/include/isl/vec.h
++++ b/include/isl/vec.h
+@@ -20,7 +20,7 @@
+ extern "C" {
+ #endif
+ 
+-struct isl_vec;
++struct __isl_export isl_vec;
+ typedef struct isl_vec isl_vec;
+ 
+ __isl_give isl_vec *isl_vec_alloc(isl_ctx *ctx, unsigned size);
+diff --git a/interface/cpp.cc b/interface/cpp.cc
+index a52e6fec..288cfb45 100644
+--- a/interface/cpp.cc
++++ b/interface/cpp.cc
+@@ -175,6 +175,8 @@ void cpp_generator::print_class(ostream &os, const isl_class &clazz)
+ 	print_destructor_decl(os, clazz);
+ 	print_ptr_decl(os, clazz);
+ 	print_get_ctx_decl(os);
++	print_str_decl(os, clazz);
++	print_dump_decl(os, clazz);
+ 	osprintf(os, "\n");
+ 	print_methods_decl(os, clazz);
+ 
+@@ -266,6 +268,8 @@ void cpp_generator::print_public_constructors_decl(ostream &os,
+ 
+ 	osprintf(os, "  inline /* implicit */ %s(const %s &obj);\n",
+ 		 cppname, cppname);
++	osprintf(os, "  inline /* implicit */ %s(std::nullptr_t);\n",
++		 cppname);
+ }
+ 
+ /* Print declarations for constructors for class "class" to "os".
+@@ -361,6 +365,7 @@ void cpp_generator::print_ptr_decl(ostream &os, const isl_class &clazz)
+ 	osprintf(os, "  inline __isl_keep %s *get() const;\n", name);
+ 	osprintf(os, "  inline __isl_give %s *release();\n", name);
+ 	osprintf(os, "  inline bool is_null() const;\n");
++	osprintf(os, "  inline explicit operator bool() const;\n", name);
+ }
+ 
+ /* Print the declaration of the get_ctx method.
+@@ -369,6 +374,21 @@ void cpp_generator::print_get_ctx_decl(ostream &os)
+ {
+ 	osprintf(os, "  inline ctx get_ctx() const;\n");
+ }
++void cpp_generator::print_str_decl(ostream &os, const isl_class &clazz)
++{
++	if (!clazz.fn_to_str)
++		return;
++
++	osprintf(os, "  inline std::string to_str() const;\n");
++}
++
++void cpp_generator::print_dump_decl(ostream &os, const isl_class &clazz)
++{
++	if (!clazz.fn_dump)
++		return;
++
++	osprintf(os, "  inline void dump() const;\n");
++}
+ 
+ /* Print declarations for methods in class "clazz" to "os".
+  */
+@@ -427,6 +447,9 @@ void cpp_generator::print_class_impl(ostream &os, const isl_class &clazz)
+ 	print_ptr_impl(os, clazz);
+ 	osprintf(os, "\n");
+ 	print_get_ctx_impl(os, clazz);
++	print_str_impl(os, clazz);
++	osprintf(os, "\n");
++	print_dump_impl(os, clazz);
+ 	osprintf(os, "\n");
+ 	print_methods_impl(os, clazz);
+ }
+@@ -563,6 +586,8 @@ void cpp_generator::print_public_constructors_impl(ostream &os,
+ 	osprintf(os, "  ptr = obj.copy();\n");
+ 	print_check_ptr_end(os, "ptr");
+ 	osprintf(os, "}\n");
++	osprintf(os, "%s::%s(std::nullptr_t)\n    : ptr(nullptr) {}\n\n",
++		cppname, cppname);
+ }
+ 
+ /* Print implementations of constructors for class "clazz" to "os".
+@@ -633,6 +658,9 @@ void cpp_generator::print_ptr_impl(ostream &os, const isl_class &clazz)
+ 	osprintf(os, "bool %s::is_null() const {\n", cppname);
+ 	osprintf(os, "  return ptr == nullptr;\n");
+ 	osprintf(os, "}\n");
++	osprintf(os, "%s::operator bool() const {\n", cppname);
++	osprintf(os, "  return !is_null();\n");
++	osprintf(os, "}\n\n");
+ }
+ 
+ /* Print the implementation of the get_ctx method.
+@@ -648,6 +676,37 @@ void cpp_generator::print_get_ctx_impl(ostream &os, const isl_class &clazz)
+ 	osprintf(os, "}\n");
+ }
+ 
++void cpp_generator::print_dump_impl(ostream &os, const isl_class &clazz)
++{
++	if (!clazz.fn_dump)
++		return;
++
++	const char *name = clazz.name.c_str();
++	std::string cppstring = type2cpp(clazz);
++	const char *cppname = cppstring.c_str();
++	osprintf(os, "void %s::dump() const {\n", cppname);
++	osprintf(os, "  %s_dump(get());\n", name, name);
++	osprintf(os, "}\n\n");
++}
++
++void cpp_generator::print_str_impl(ostream &os, const isl_class &clazz)
++{
++	if (!clazz.fn_to_str)
++		return;
++
++	const char *name = clazz.name.c_str();
++	std::string cppstring = type2cpp(clazz);
++	const char *cppname = cppstring.c_str();
++	osprintf(os, "std::string %s::to_str() const {\n", cppname);
++	osprintf(os, "  char *Tmp = %s_to_str(get());\n", name, name);
++	osprintf(os, "  if (!Tmp)\n");
++	osprintf(os, "    return \"\";\n");
++	osprintf(os, "  std::string S(Tmp);\n");
++	osprintf(os, "  free(Tmp);\n");
++	osprintf(os, "  return S;\n");
++	osprintf(os, "}\n\n");
++}
++
+ /* Print definitions for methods of class "clazz" to "os".
+  */
+ void cpp_generator::print_methods_impl(ostream &os, const isl_class &clazz)
+@@ -710,7 +769,13 @@ void cpp_generator::print_method_param_use(ostream &os, ParmVarDecl *param,
+ 	const char *name_str = name.c_str();
+ 	QualType type = param->getOriginalType();
+ 
+-	if (type->isIntegerType()) {
++	if (type->isEnumeralType()) {
++		string typestr = type.getAsString();
++		osprintf(os, "static_cast<%s>(%s)", typestr.c_str(), name_str);
++		return;
++	}
++
++	if (type->isIntegerType() || type->isVoidPointerType()) {
+ 		osprintf(os, "%s", name_str);
+ 		return;
+ 	}
+@@ -1392,6 +1457,12 @@ string cpp_generator::type2cpp(QualType type)
+ 	if (is_isl_stat(type))
+ 		return checked ? "stat" : "void";
+ 
++	if (type->isEnumeralType())
++		if (checked)
++			return "isl::checked::dim";
++		else
++			return "isl::dim";
++
+ 	if (type->isIntegerType())
+ 		return type.getAsString();
+ 
+@@ -1401,6 +1472,11 @@ string cpp_generator::type2cpp(QualType type)
+ 	if (is_callback(type))
+ 		return generate_callback_type(type);
+ 
++	if (type->isVoidType())
++		return "void";
++
++	return "void *";
++
+ 	die("Cannot convert type to C++ type");
+ }
+ 
+diff --git a/interface/cpp.h b/interface/cpp.h
+index 0e97c715..f779b3e9 100644
+--- a/interface/cpp.h
++++ b/interface/cpp.h
+@@ -43,9 +43,12 @@ private:
+ 	void print_destructor_decl(ostream &os, const isl_class &clazz);
+ 	void print_ptr_decl(ostream &os, const isl_class &clazz);
+ 	void print_get_ctx_decl(ostream &os);
++	void print_str_decl(ostream &os, const isl_class &clazz);
++	void print_dump_decl(ostream &os, const isl_class &clazz);
+ 	void print_methods_decl(ostream &os, const isl_class &clazz);
+ 	void print_method_group_decl(ostream &os, const isl_class &clazz,
+ 		const set<FunctionDecl *> &methods);
++	void print_dump(ostream &os, const isl_class &clazz);
+ 	void print_method_decl(ostream &os, const isl_class &clazz,
+ 		FunctionDecl *method, function_kind kind);
+ 	void print_implementations(ostream &os);
+@@ -64,6 +67,8 @@ private:
+ 	void print_destructor_impl(ostream &os, const isl_class &clazz);
+ 	void print_ptr_impl(ostream &os, const isl_class &clazz);
+ 	void print_get_ctx_impl(ostream &os, const isl_class &clazz);
++	void print_str_impl(ostream &os, const isl_class &clazz);
++	void print_dump_impl(ostream &os, const isl_class &clazz);
+ 	void print_methods_impl(ostream &os, const isl_class &clazz);
+ 	void print_method_group_impl(ostream &os, const isl_class &clazz,
+ 		const set<FunctionDecl *> &methods);
+diff --git a/interface/extract_interface.cc b/interface/extract_interface.cc
+index 1267c370..e40c1554 100644
+--- a/interface/extract_interface.cc
++++ b/interface/extract_interface.cc
+@@ -127,6 +127,113 @@ bool has_annotation(Decl *decl, const char *name)
+  */
+ static bool is_exported(Decl *decl)
+ {
++	if (isa<FunctionDecl>(decl)) {
++	FunctionDecl *FDecl = cast<FunctionDecl>(decl);
++	std::string N = FDecl->getName();
++	if (	N.find("fold_get_domain") != std::string::npos ||
++		N.find("fold_align_params") != std::string::npos)
++		return false;
++
++	if (	N.find("is_disjoint") != std::string::npos ||
++		N.find("get_domain") != std::string::npos ||
++		N.find("band_member_set_coincident") != std::string::npos ||
++		N.find("band_member_get_coincident") != std::string::npos ||
++		N.find("insert_partial_schedule") != std::string::npos ||
++		N.find("get_partial_schedule") != std::string::npos ||
++		N.find("isl_schedule_node_band_set_ast_build_options") != std::string::npos ||
++		N.find("align_params") != std::string::npos ||
++		N.find("gist_domain_params") != std::string::npos ||
++		N.find("from_domain_and_range") != std::string::npos)
++		return true;
++
++	return (N.find("dump") == std::string::npos &&
++		N.find("get_ctx") == std::string::npos &&
++		N.find("stride_info") == std::string::npos &&
++		N.find("isl_ast_expr_or") == std::string::npos &&
++		N.find("foreach_ast_op_type") == std::string::npos &&
++		N.find("foreach_descendant_top_down") == std::string::npos &&
++		N.find("foreach_schedule_node_top_down") == std::string::npos &&
++		N.find("foreach_descendant_top_down") == std::string::npos &&
++		N.find("set_dim_name") == std::string::npos &&
++		N.find("set_dim_name") == std::string::npos &&
++		N.find("isl_qpolynomial_substitute") == std::string::npos &&
++		N.find("from_constraint_matrices") == std::string::npos &&
++		N.find("partial_") == std::string::npos &&
++		N.find("total_dim") == std::string::npos &&
++		N.find("compare_at") == std::string::npos &&
++		N.find("map_descendant_bottom_up") == std::string::npos &&
++		N.find("isl_space_drop_outputs") == std::string::npos &&
++		N.find("isl_space_extend") == std::string::npos &&
++		N.find("isl_space_match") == std::string::npos &&
++		N.find("isl_space_tuple_match") == std::string::npos &&
++		N.find("isl_union_map_compute_flow") == std::string::npos &&
++		N.find("isl_val_gcdext") == std::string::npos &&
++		N.find("list_map") == std::string::npos &&
++		N.find("list_sort") == std::string::npos &&
++		N.find("list_intersect") == std::string::npos &&
++		N.find("multiplicative_call") == std::string::npos &&
++		N.find("pw_qpolynomial_fold") == std::string::npos &&
++		N.find("fold") == std::string::npos &&
++		N.find("pw_qpolynomial_bound") == std::string::npos &&
++		N.find("fold_get") == std::string::npos &&
++		N.find("isl_val_get_d") == std::string::npos &&
++		N.find("compute_divs") == std::string::npos &&
++		N.find("dims_get_sign") == std::string::npos &&
++		N.find("basic_set_add") == std::string::npos &&
++		N.find("align_divs") == std::string::npos &&
++		N.find("_n_div") == std::string::npos &&
++		N.find("schedule_set") == std::string::npos &&
++		N.find("_n_in") == std::string::npos &&
++		N.find("_n_out") == std::string::npos &&
++		N.find("_n_param") == std::string::npos &&
++		N.find("fix_input_si") == std::string::npos &&
++		N.find("map_power") == std::string::npos &&
++		N.find("path_lengths") == std::string::npos &&
++		N.find("remove_inputs") == std::string::npos &&
++		N.find("isl_mat_col_add") == std::string::npos &&
++		N.find("isl_mat_extend") == std::string::npos &&
++		N.find("isl_mat_identity") == std::string::npos &&
++		N.find("isl_mat_left_hermite") == std::string::npos &&
++		N.find("read_from_file") == std::string::npos &&
++		N.find("every_descendant") == std::string::npos &&
++		N.find("remove_map_if") == std::string::npos &&
++		N.find("isl_vec_normalize") == std::string::npos &&
++		N.find("every_map") == std::string::npos &&
++		N.find("transitive_closure") == std::string::npos &&
++		N.find("disjoint") == std::string::npos &&
++		N.find("lift") == std::string::npos &&
++		N.find("isl_val_get_abs_num_chunks") == std::string::npos &&
++		N.find("isl_val_int_from_chunks") == std::string::npos &&
++		N.find("isl_ast_build_set") == std::string::npos &&
++		N.find("copy") == std::string::npos &&
++		N.find("try_get") == std::string::npos &&
++		N.find("get_parent_type") == std::string::npos &&
++		N.find("isl_basic_set_has_defining_inequalities") == std::string::npos &&
++		N.find("isl_basic_map_has_defining_equality") == std::string::npos &&
++		N.find("isl_constraint_dim") == std::string::npos &&
++		N.find("isl_basic_set_has_defining_equality") == std::string::npos &&
++		N.find("isl_constraint_is_equal") == std::string::npos &&
++		N.find("isl_constraint_negate") == std::string::npos &&
++		N.find("isl_constraint_cow") == std::string::npos &&
++		N.find("isl_set_fix_dim_si") == std::string::npos &&
++		N.find("isl_set_eliminate_dims") == std::string::npos &&
++		N.find("isl_set_get_hash") == std::string::npos &&
++		N.find("isl_space_drop_inputs") == std::string::npos &&
++		N.find("dim_residue_class_val") == std::string::npos &&
++		N.find("map_schedule_node_bottom_up") == std::string::npos &&
++		N.find("void") == std::string::npos &&
++		N.find("to_str") == std::string::npos &&
++		N.find("foreach_scc") == std::string::npos &&
++		N.find("set_free_user") == std::string::npos &&
++		N.find("and") == std::string::npos &&
++		N.find("get_op_type") == std::string::npos &&
++		N.find("get_type") == std::string::npos &&
++		N.find("apply_multi_aff") == std::string::npos &&
++		N.find("free") == std::string::npos &&
++		N.find("delete") == std::string::npos &&
++		N.find("print") == std::string::npos &&
++		N.find("2exp") == std::string::npos);
++	}
+ 	return has_annotation(decl, "isl_export");
+ }
+ 
+diff --git a/interface/generator.cc b/interface/generator.cc
+index fee2347b..59ef42d8 100644
+--- a/interface/generator.cc
++++ b/interface/generator.cc
+@@ -106,6 +106,7 @@ generator::generator(SourceManager &SM, set<RecordDecl *> &exported_types,
+ 		classes[name].fn_to_str = find_by_name(name + "_to_str", false);
+ 		classes[name].fn_copy = find_by_name(name + "_copy", true);
+ 		classes[name].fn_free = find_by_name(name + "_free", true);
++		classes[name].fn_dump = find_by_name(name + "_dump", false);
+ 	}
+ 
+ 	for (in = exported_functions.begin(); in != exported_functions.end();
+diff --git a/interface/generator.h b/interface/generator.h
+index 2f8d88db..037b112a 100644
+--- a/interface/generator.h
++++ b/interface/generator.h
+@@ -25,6 +25,7 @@ struct isl_class {
+ 	map<string, set<FunctionDecl *> > methods;
+ 	FunctionDecl *fn_to_str;
+ 	FunctionDecl *fn_copy;
++	FunctionDecl *fn_dump;
+ 	FunctionDecl *fn_free;
+ 
+ 	/* Return name of "fd" without type suffix, if any. */
