@@ -123,6 +123,7 @@ bool ScheduleNodeMatcher::isMatching(const ScheduleNodeMatcher &matcher,
   }
 
   if (matcher.current_ == ScheduleNodeType::Any) {
+    matcher.capture_ = node;
     return true;
   }
 
@@ -145,6 +146,7 @@ bool ScheduleNodeMatcher::isMatching(const ScheduleNodeMatcher &matcher,
       return false;
     }
   }
+  matcher.capture_ = node;
   return true;
 }
 

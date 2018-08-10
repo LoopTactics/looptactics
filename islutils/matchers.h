@@ -99,6 +99,12 @@ template <typename Arg, typename... Args,
                            ScheduleNodeMatcher>::value>::type>
 ScheduleNodeMatcher sequence(Arg, Args... args);
 
+template <typename Arg, typename... Args,
+          typename = typename std::enable_if<
+              std::is_same<typename std::remove_reference<Arg>::type,
+                           ScheduleNodeMatcher>::value>::type>
+ScheduleNodeMatcher sequence(isl::schedule_node &node, Arg, Args... args);
+
 template <typename... Args>
 ScheduleNodeMatcher sequence(std::function<bool(isl::schedule_node)> callback,
                              Args... args);
@@ -109,40 +115,61 @@ template <typename Arg, typename... Args,
                            ScheduleNodeMatcher>::value>::type>
 ScheduleNodeMatcher set(Arg, Args... args);
 
+template <typename Arg, typename... Args,
+          typename = typename std::enable_if<
+              std::is_same<typename std::remove_reference<Arg>::type,
+                           ScheduleNodeMatcher>::value>::type>
+ScheduleNodeMatcher set(isl::schedule_node &node, Arg, Args... args);
+
 template <typename... Args>
 ScheduleNodeMatcher set(std::function<bool(isl::schedule_node)> callback,
                         Args... args);
 
+ScheduleNodeMatcher band(isl::schedule_node &capture,
+                         ScheduleNodeMatcher &&child);
 ScheduleNodeMatcher band(ScheduleNodeMatcher &&child);
 ScheduleNodeMatcher band(std::function<bool(isl::schedule_node)> callback,
                          ScheduleNodeMatcher &&child);
 
+ScheduleNodeMatcher context(isl::schedule_node &capture,
+                            ScheduleNodeMatcher &&child);
 ScheduleNodeMatcher context(ScheduleNodeMatcher &&child);
 ScheduleNodeMatcher context(std::function<bool(isl::schedule_node)> callback,
                             ScheduleNodeMatcher &&child);
 
+ScheduleNodeMatcher domain(isl::schedule_node &capture,
+                           ScheduleNodeMatcher &&child);
 ScheduleNodeMatcher domain(ScheduleNodeMatcher &&child);
 ScheduleNodeMatcher domain(std::function<bool(isl::schedule_node)> callback,
                            ScheduleNodeMatcher &&child);
 
+ScheduleNodeMatcher extension(isl::schedule_node &capture,
+                              ScheduleNodeMatcher &&child);
 ScheduleNodeMatcher extension(ScheduleNodeMatcher &&child);
 ScheduleNodeMatcher extension(std::function<bool(isl::schedule_node)> callback,
                               ScheduleNodeMatcher &&child);
 
+ScheduleNodeMatcher filter(isl::schedule_node &capture,
+                           ScheduleNodeMatcher &&child);
 ScheduleNodeMatcher filter(ScheduleNodeMatcher &&child);
 ScheduleNodeMatcher filter(std::function<bool(isl::schedule_node)> callback,
                            ScheduleNodeMatcher &&child);
 
+ScheduleNodeMatcher guard(isl::schedule_node &capture,
+                          ScheduleNodeMatcher &&child);
 ScheduleNodeMatcher guard(ScheduleNodeMatcher &&child);
 ScheduleNodeMatcher guard(std::function<bool(isl::schedule_node)> callback,
                           ScheduleNodeMatcher &&child);
 
+ScheduleNodeMatcher mark(isl::schedule_node &capture,
+                         ScheduleNodeMatcher &&child);
 ScheduleNodeMatcher mark(ScheduleNodeMatcher &&child);
 ScheduleNodeMatcher mark(std::function<bool(isl::schedule_node)> callback,
                          ScheduleNodeMatcher &&child);
 
 ScheduleNodeMatcher leaf();
 
+ScheduleNodeMatcher any(isl::schedule_node &capture);
 ScheduleNodeMatcher any();
 /** \} */
 
@@ -169,10 +196,11 @@ inline ScheduleNodeType fromIslType(isl_schedule_node_type type);
  */
 class ScheduleNodeMatcher {
 #define DECL_FRIEND_TYPE_MATCH(name)                                           \
-  friend ScheduleNodeMatcher name();                                           \
   template <typename... Args>                                                  \
   friend ScheduleNodeMatcher name(std::function<bool(isl::schedule_node)>,     \
                                   Args...);                                    \
+  template <typename Arg, typename... Args, typename>                          \
+  friend ScheduleNodeMatcher name(isl::schedule_node &, Arg, Args...);         \
   template <typename Arg, typename... Args, typename>                          \
   friend ScheduleNodeMatcher name(Arg, Args...);
   DECL_FRIEND_TYPE_MATCH(sequence)
@@ -182,6 +210,8 @@ class ScheduleNodeMatcher {
 
 #define DECL_FRIEND_TYPE_MATCH(name)                                           \
   friend ScheduleNodeMatcher name(ScheduleNodeMatcher &&);                     \
+  friend ScheduleNodeMatcher name(isl::schedule_node &,                        \
+                                  ScheduleNodeMatcher &&);                     \
   friend ScheduleNodeMatcher name(std::function<bool(isl::schedule_node)>,     \
                                   ScheduleNodeMatcher &&);
 
@@ -197,6 +227,11 @@ class ScheduleNodeMatcher {
 
   friend ScheduleNodeMatcher leaf();
   friend ScheduleNodeMatcher any();
+  friend ScheduleNodeMatcher any(isl::schedule_node &);
+
+private:
+  explicit ScheduleNodeMatcher(isl::schedule_node &capture)
+      : capture_(capture) {}
 
 public:
   static bool isMatching(const ScheduleNodeMatcher &matcher,
@@ -206,6 +241,7 @@ private:
   ScheduleNodeType current_;
   std::vector<ScheduleNodeMatcher> children_;
   std::function<bool(isl::schedule_node)> nodeCallback_;
+  isl::schedule_node &capture_;
 };
 
 std::function<bool(isl::schedule_node)>

@@ -72,11 +72,19 @@ DEF_TYPE_MATCHER_RELATION(write, RelationKind::write)
 /* Definitions for schedule tree matcher factory functions ********************/
 #define DEF_TYPE_MATCHER(name, type)                                           \
   template <typename Arg, typename... Args, typename>                          \
-  inline ScheduleNodeMatcher name(Arg arg, Args... args) {                     \
-    ScheduleNodeMatcher matcher;                                               \
+  inline ScheduleNodeMatcher name(isl::schedule_node &capture, Arg arg,        \
+                                  Args... args) {                              \
+    ScheduleNodeMatcher matcher(capture);                                      \
     matcher.current_ = type;                                                   \
     matcher.children_ = varargToVector<ScheduleNodeMatcher>(arg, args...);     \
     return matcher;                                                            \
+  }                                                                            \
+                                                                               \
+  template <typename Arg, typename... Args, typename>                          \
+  inline ScheduleNodeMatcher name(Arg arg, Args... args) {                     \
+    static isl::schedule_node dummyCapture;                                    \
+    return name(dummyCapture, std::forward<Arg>(arg),                          \
+                std::forward<Args>(args)...);                                  \
   }                                                                            \
                                                                                \
   template <typename... Args>                                                  \
@@ -93,11 +101,18 @@ DEF_TYPE_MATCHER(set, ScheduleNodeType::Set)
 #undef DEF_TYPE_MATCHER
 
 #define DEF_TYPE_MATCHER(name, type)                                           \
-  inline ScheduleNodeMatcher name(ScheduleNodeMatcher &&child) {               \
-    ScheduleNodeMatcher matcher;                                               \
+  inline ScheduleNodeMatcher name(isl::schedule_node &capture,                 \
+                                  ScheduleNodeMatcher &&child) {               \
+    ScheduleNodeMatcher matcher(capture);                                      \
     matcher.current_ = type;                                                   \
     matcher.children_.emplace_back(child);                                     \
+    matcher.capture_ = capture;                                                \
     return matcher;                                                            \
+  }                                                                            \
+                                                                               \
+  inline ScheduleNodeMatcher name(ScheduleNodeMatcher &&child) {               \
+    static isl::schedule_node dummyCapture;                                    \
+    return name(dummyCapture, std::move(child));                               \
   }                                                                            \
                                                                                \
   inline ScheduleNodeMatcher name(                                             \
@@ -119,15 +134,21 @@ DEF_TYPE_MATCHER(mark, ScheduleNodeType::Mark)
 #undef DEF_TYPE_MATCHER
 
 inline ScheduleNodeMatcher leaf() {
-  ScheduleNodeMatcher matcher;
+  static isl::schedule_node dummyCapture;
+  ScheduleNodeMatcher matcher(dummyCapture);
   matcher.current_ = ScheduleNodeType::Leaf;
   return matcher;
 }
 
-inline ScheduleNodeMatcher any() {
-  ScheduleNodeMatcher matcher;
+inline ScheduleNodeMatcher any(isl::schedule_node &capture) {
+  ScheduleNodeMatcher matcher(capture);
   matcher.current_ = ScheduleNodeType::Any;
   return matcher;
+}
+
+inline ScheduleNodeMatcher any() {
+  static isl::schedule_node dummyCapture;
+  return any(dummyCapture);
 }
 
 } // namespace matchers
