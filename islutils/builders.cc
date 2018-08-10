@@ -119,6 +119,16 @@ ScheduleNodeBuilder::insertAt(isl::schedule_node node) const {
   } else if (current_ == isl_schedule_node_sequence ||
              current_ == isl_schedule_node_set) {
     return insertSequenceOrSetAt(node, current_);
+  } else if (current_ == isl_schedule_node_leaf) {
+    // Leaf is a special type in isl that has no children, it gets added
+    // automatically, i.e. there is no need to insert it. Builder with leaf
+    // type can only be constructed from isl subtree.  Double-check that there
+    // are no children and stop here.
+    if (!children_.empty()) {
+      assert(false && "leaf builder has children");
+      return isl::schedule_node();
+    }
+    return node;
   }
 
   assert(false && "unsupported node type");
@@ -211,7 +221,8 @@ ScheduleNodeBuilder subtree(isl::schedule_node node) {
     builder.umap_ =
         isl::manage(isl_schedule_node_extension_get_extension(node.get()));
   } else if (builder.current_ == isl_schedule_node_sequence ||
-             builder.current_ == isl_schedule_node_set) {
+             builder.current_ == isl_schedule_node_set ||
+             builder.current_ == isl_schedule_node_leaf) {
     /* no payload */
   } else {
     assert(false && "unhandled node type");
