@@ -4,12 +4,12 @@
 
 #include "gtest/gtest.h"
 
-TEST(TreeMatcher, ReadFromFile) { 
+TEST(TreeMatcher, ReadFromFile) {
   Scop S = Parser("inputs/one-dimensional-init.c").getScop();
   EXPECT_TRUE(!S.schedule.is_null());
 }
 
-TEST(TreeMatcher, CompileTest) { 
+TEST(TreeMatcher, CompileTest) {
   using namespace matchers;
 
   // clang-format off
@@ -41,9 +41,9 @@ TEST(TreeMatcher, CompileTest) {
 
   // access pattern matchers.
   auto m12 = read('X');
-  auto m13 = read('X','Y');
+  auto m13 = read('X', 'Y');
   auto m14 = write('Z');
-  auto m15 = write('S','Y');
+  auto m15 = write('S', 'Y');
 }
 
 static isl::schedule_node makeGemmTree() {
@@ -101,7 +101,7 @@ TEST(TreeMatcher, LeafMatchesLeaf) {
   // clang-format on
 
   auto node = makeGemmTree();
-  EXPECT_FALSE(ScheduleNodeMatcher::isMatching(matcher, node.child(0)));
+  EXPECT_TRUE(ScheduleNodeMatcher::isMatching(matcher, node.child(0)));
 }
 
 int main(int argc, char **argv) {
