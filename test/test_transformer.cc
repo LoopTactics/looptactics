@@ -11,11 +11,11 @@ TEST(Transformer, Capture) {
     using namespace matchers;
     // clang-format off
     return
-      band([&](isl::schedule_node node) { bandNode = node; return true; },
+      band(bandNode,
         sequence(
-          filter([&](isl::schedule_node node) { filterNode1 = node; return true; },
+          filter(filterNode1,
             leaf()),
-          filter([&](isl::schedule_node node) { filterNode2 = node; return true; },
+          filter(filterNode2,
             leaf())));
     // clang-format on
   }();
