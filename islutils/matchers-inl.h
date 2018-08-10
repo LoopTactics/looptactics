@@ -48,27 +48,26 @@ isl_schedule_node_type toIslType(ScheduleNodeType type) {
 
 // TODO: use variadic template.
 /* Definitions for relation matcher factory functions *************************/
-#define DEF_TYPE_MATCHER_RELATION(name, type) 					\
-inline RelationMatcher name(char a, char b) {					\
-  RelationMatcher matcher;							\
-  matcher.type_ = type; 							\
-  matcher.indexes_.push_back(a);						\
-  matcher.indexes_.push_back(b);						\
-  matcher.setDim_.reserve(2);							\
-  return matcher;								\
-}										\
-										\
-inline RelationMatcher name(char a) {						\
-  RelationMatcher matcher;							\
-  matcher.type_ = type;							\
-  matcher.indexes_.push_back(a);						\
-  matcher.setDim_.reserve(1);							\
-  return matcher;								\
-}
+#define DEF_TYPE_MATCHER_RELATION(name, type)                                  \
+  inline RelationMatcher name(char a, char b) {                                \
+    RelationMatcher matcher;                                                   \
+    matcher.type_ = type;                                                      \
+    matcher.indexes_.push_back(a);                                             \
+    matcher.indexes_.push_back(b);                                             \
+    matcher.setDim_.reserve(2);                                                \
+    return matcher;                                                            \
+  }                                                                            \
+                                                                               \
+  inline RelationMatcher name(char a) {                                        \
+    RelationMatcher matcher;                                                   \
+    matcher.type_ = type;                                                      \
+    matcher.indexes_.push_back(a);                                             \
+    matcher.setDim_.reserve(1);                                                \
+    return matcher;                                                            \
+  }
 
 DEF_TYPE_MATCHER_RELATION(read, RelationKind::read)
 DEF_TYPE_MATCHER_RELATION(write, RelationKind::write)
-
 
 /* Definitions for schedule tree matcher factory functions ********************/
 #define DEF_TYPE_MATCHER(name, type)                                           \
