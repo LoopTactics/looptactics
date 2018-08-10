@@ -87,10 +87,12 @@ DEF_TYPE_MATCHER_RELATION(write, RelationKind::write)
                 std::forward<Args>(args)...);                                  \
   }                                                                            \
                                                                                \
-  template <typename... Args>                                                  \
+  template <typename Arg, typename... Args, typename>                          \
   inline ScheduleNodeMatcher name(                                             \
-      std::function<bool(isl::schedule_node)> callback, Args... args) {        \
-    ScheduleNodeMatcher matcher = name(std::forward<Args>(args)...);           \
+      std::function<bool(isl::schedule_node)> callback, Arg arg,               \
+      Args... args) {                                                          \
+    ScheduleNodeMatcher matcher =                                              \
+        name(std::forward<Arg>(arg), std::forward<Args>(args)...);             \
     matcher.nodeCallback_ = callback;                                          \
     return matcher;                                                            \
   }

@@ -105,9 +105,12 @@ template <typename Arg, typename... Args,
                            ScheduleNodeMatcher>::value>::type>
 ScheduleNodeMatcher sequence(isl::schedule_node &node, Arg, Args... args);
 
-template <typename... Args>
+template <typename Arg, typename... Args,
+          typename = typename std::enable_if<
+              std::is_same<typename std::remove_reference<Arg>::type,
+                           ScheduleNodeMatcher>::value>::type>
 ScheduleNodeMatcher sequence(std::function<bool(isl::schedule_node)> callback,
-                             Args... args);
+                             Arg arg, Args... args);
 
 template <typename Arg, typename... Args,
           typename = typename std::enable_if<
@@ -121,9 +124,12 @@ template <typename Arg, typename... Args,
                            ScheduleNodeMatcher>::value>::type>
 ScheduleNodeMatcher set(isl::schedule_node &node, Arg, Args... args);
 
-template <typename... Args>
+template <typename Arg, typename... Args,
+          typename = typename std::enable_if<
+              std::is_same<typename std::remove_reference<Arg>::type,
+                           ScheduleNodeMatcher>::value>::type>
 ScheduleNodeMatcher set(std::function<bool(isl::schedule_node)> callback,
-                        Args... args);
+                        Arg arg, Args... args);
 
 ScheduleNodeMatcher band(isl::schedule_node &capture,
                          ScheduleNodeMatcher &&child);
@@ -196,9 +202,9 @@ inline ScheduleNodeType fromIslType(isl_schedule_node_type type);
  */
 class ScheduleNodeMatcher {
 #define DECL_FRIEND_TYPE_MATCH(name)                                           \
-  template <typename... Args>                                                  \
+  template <typename Arg, typename... Args, typename>                          \
   friend ScheduleNodeMatcher name(std::function<bool(isl::schedule_node)>,     \
-                                  Args...);                                    \
+                                  Arg, Args...);                               \
   template <typename Arg, typename... Args, typename>                          \
   friend ScheduleNodeMatcher name(isl::schedule_node &, Arg, Args...);         \
   template <typename Arg, typename... Args, typename>                          \
