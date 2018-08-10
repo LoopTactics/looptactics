@@ -4,7 +4,7 @@
 #include "gtest/gtest.h"
 
 TEST(Transformer, Capture) {
-  isl::schedule_node bandNode, filterNode1, filterNode2;
+  isl::schedule_node bandNode, filterNode1, filterNode2, filterSubtree;
   auto ctx = isl::ctx(isl_ctx_alloc());
 
   auto matcher = [&]() {
@@ -16,19 +16,20 @@ TEST(Transformer, Capture) {
           filter(filterNode1,
             leaf()),
           filter(filterNode2,
-            leaf())));
+            any(filterSubtree))));
     // clang-format on
   }();
 
   auto node = [ctx]() {
     using namespace builders;
-    auto iterationDomain =
-        isl::union_set(ctx, "{S1[i,j]: 0 <= i,j < 10; S2[i,j]: 0 <= i,j < 42}");
+    auto iterationDomain = isl::union_set(
+        ctx, "{S1[i,j]: 0 <= i,j < 10; S2[i,j,k]: 0 <= i,j,k < 42}");
     auto sched =
         isl::multi_union_pw_aff(ctx, "[{S1[i,j]->[(i)]; S2[i,j]->[(i)]}, "
                                      "{S1[i,j]->[(j)]; S2[i,j]->[(j)]}]");
     auto filterS1 = isl::union_set(ctx, "{S1[i,j]}");
     auto filterS2 = isl::union_set(ctx, "{S2[i,j]}");
+    auto innerSched = isl::multi_union_pw_aff(ctx, "[{S2[i,j,k]->[(k)]}]");
 
     // clang-format off
     auto builder =
@@ -36,7 +37,8 @@ TEST(Transformer, Capture) {
         band(sched,
           sequence(
             filter(filterS1),
-            filter(filterS2))));
+            filter(filterS2,
+              band(innerSched)))));
     // clang-format on
 
     return builder.build();
@@ -65,15 +67,14 @@ TEST(Transformer, Capture) {
         filter(filter1,
           band(isl::manage(isl_multi_union_pw_aff_intersect_domain(schedule.copy(), filter1.copy())))),
         filter(filter2,
-          band(isl::manage(isl_multi_union_pw_aff_intersect_domain(schedule.copy(), filter2.copy())))));
+          band(isl::manage(isl_multi_union_pw_aff_intersect_domain(schedule.copy(), filter2.copy())),
+            subtree(filterSubtree))));
     // clang-format on
   }();
   node = node.child(0);
   node = isl::manage(isl_schedule_node_cut(node.release()));
   node = transformedBuilder.insertAt(node);
   node = node.parent();
-
-  // TODO: how do we keep child subtrees?
 
   isl_schedule_node_dump(node.get());
 }
