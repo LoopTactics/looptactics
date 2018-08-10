@@ -49,34 +49,31 @@ TEST(Transformer, Capture) {
   // now.
   ASSERT_TRUE(
       matchers::ScheduleNodeMatcher::isMatching(matcher, node.child(0)));
-  isl_schedule_node_dump(node.get());
+  node.dump();
 
   // Let's transform!
   auto transformedBuilder = [=]() {
-    auto filter1 =
-        isl::manage(isl_schedule_node_filter_get_filter(filterNode1.get()));
-    auto filter2 =
-        isl::manage(isl_schedule_node_filter_get_filter(filterNode2.get()));
-    auto schedule = isl::manage(
-        isl_schedule_node_band_get_partial_schedule(bandNode.get()));
+    auto filter1 = filterNode1.filter_get_filter();
+    auto filter2 = filterNode2.filter_get_filter();
+    auto schedule = bandNode.band_get_partial_schedule();
 
     using namespace builders;
     // clang-format off
     return
       sequence(
         filter(filter1,
-          band(isl::manage(isl_multi_union_pw_aff_intersect_domain(schedule.copy(), filter1.copy())))),
+          band(schedule.intersect_domain(filter1))),
         filter(filter2,
-          band(isl::manage(isl_multi_union_pw_aff_intersect_domain(schedule.copy(), filter2.copy())),
+          band(schedule.intersect_domain(filter2),
             subtree(filterSubtree))));
     // clang-format on
   }();
   node = node.child(0);
-  node = isl::manage(isl_schedule_node_cut(node.release()));
+  node = node.cut();
   node = transformedBuilder.insertAt(node);
   node = node.parent();
 
-  isl_schedule_node_dump(node.get());
+  node.dump();
 }
 
 int main(int argc, char **argv) {
