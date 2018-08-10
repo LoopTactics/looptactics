@@ -212,10 +212,10 @@ class ScheduleNodeMatcher {
   DECL_FRIEND_TYPE_MATCH(filter)
   DECL_FRIEND_TYPE_MATCH(guard)
   DECL_FRIEND_TYPE_MATCH(mark)
-  DECL_FRIEND_TYPE_MATCH(leaf)
 
 #undef DECL_FRIEND_TYPE_MATCH
 
+  friend ScheduleNodeMatcher leaf();
   friend ScheduleNodeMatcher any();
 
 public:

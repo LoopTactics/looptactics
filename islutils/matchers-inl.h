@@ -133,9 +133,14 @@ DEF_TYPE_MATCHER(extension, ScheduleNodeType::Extension)
 DEF_TYPE_MATCHER(filter, ScheduleNodeType::Filter)
 DEF_TYPE_MATCHER(guard, ScheduleNodeType::Guard)
 DEF_TYPE_MATCHER(mark, ScheduleNodeType::Mark)
-DEF_TYPE_MATCHER(leaf, ScheduleNodeType::Leaf)
 
 #undef DEF_TYPE_MATCHER
+
+inline ScheduleNodeMatcher leaf() {
+  ScheduleNodeMatcher matcher;
+  matcher.current_ = ScheduleNodeType::Leaf;
+  return matcher;
+}
 
 inline ScheduleNodeMatcher any() {
   ScheduleNodeMatcher matcher;
