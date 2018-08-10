@@ -93,8 +93,6 @@ class ScheduleNodeMatcher;
  * matchers are provided, the node is allowed to have zero or more children.
  */
 /** \{ */
-ScheduleNodeMatcher sequence();
-
 template <typename Arg, typename... Args,
           typename = typename std::enable_if<
               std::is_same<typename std::remove_reference<Arg>::type,
@@ -104,8 +102,6 @@ ScheduleNodeMatcher sequence(Arg, Args... args);
 template <typename... Args>
 ScheduleNodeMatcher sequence(std::function<bool(isl::schedule_node)> callback,
                              Args... args);
-
-ScheduleNodeMatcher set();
 
 template <typename Arg, typename... Args,
           typename = typename std::enable_if<
@@ -117,45 +113,31 @@ template <typename... Args>
 ScheduleNodeMatcher set(std::function<bool(isl::schedule_node)> callback,
                         Args... args);
 
-ScheduleNodeMatcher band();
 ScheduleNodeMatcher band(ScheduleNodeMatcher &&child);
-ScheduleNodeMatcher band(std::function<bool(isl::schedule_node)> callback);
 ScheduleNodeMatcher band(std::function<bool(isl::schedule_node)> callback,
                          ScheduleNodeMatcher &&child);
 
-ScheduleNodeMatcher context();
 ScheduleNodeMatcher context(ScheduleNodeMatcher &&child);
-ScheduleNodeMatcher context(std::function<bool(isl::schedule_node)> callback);
 ScheduleNodeMatcher context(std::function<bool(isl::schedule_node)> callback,
                             ScheduleNodeMatcher &&child);
 
-ScheduleNodeMatcher domain();
 ScheduleNodeMatcher domain(ScheduleNodeMatcher &&child);
-ScheduleNodeMatcher domain(std::function<bool(isl::schedule_node)> callback);
 ScheduleNodeMatcher domain(std::function<bool(isl::schedule_node)> callback,
                            ScheduleNodeMatcher &&child);
 
-ScheduleNodeMatcher extension();
 ScheduleNodeMatcher extension(ScheduleNodeMatcher &&child);
-ScheduleNodeMatcher extension(std::function<bool(isl::schedule_node)> callback);
 ScheduleNodeMatcher extension(std::function<bool(isl::schedule_node)> callback,
                               ScheduleNodeMatcher &&child);
 
-ScheduleNodeMatcher filter();
 ScheduleNodeMatcher filter(ScheduleNodeMatcher &&child);
-ScheduleNodeMatcher filter(std::function<bool(isl::schedule_node)> callback);
 ScheduleNodeMatcher filter(std::function<bool(isl::schedule_node)> callback,
                            ScheduleNodeMatcher &&child);
 
-ScheduleNodeMatcher guard();
 ScheduleNodeMatcher guard(ScheduleNodeMatcher &&child);
-ScheduleNodeMatcher guard(std::function<bool(isl::schedule_node)> callback);
 ScheduleNodeMatcher guard(std::function<bool(isl::schedule_node)> callback,
                           ScheduleNodeMatcher &&child);
 
-ScheduleNodeMatcher mark();
 ScheduleNodeMatcher mark(ScheduleNodeMatcher &&child);
-ScheduleNodeMatcher mark(std::function<bool(isl::schedule_node)> callback);
 ScheduleNodeMatcher mark(std::function<bool(isl::schedule_node)> callback,
                          ScheduleNodeMatcher &&child);
 
@@ -199,9 +181,7 @@ class ScheduleNodeMatcher {
 #undef DECL_FRIEND_TYPE_MATCH
 
 #define DECL_FRIEND_TYPE_MATCH(name)                                           \
-  friend ScheduleNodeMatcher name();                                           \
   friend ScheduleNodeMatcher name(ScheduleNodeMatcher &&);                     \
-  friend ScheduleNodeMatcher name(std::function<bool(isl::schedule_node)>);    \
   friend ScheduleNodeMatcher name(std::function<bool(isl::schedule_node)>,     \
                                   ScheduleNodeMatcher &&);
 

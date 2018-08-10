@@ -12,19 +12,32 @@ TEST(TreeMatcher, ReadFromFile) {
 TEST(TreeMatcher, CompileTest) { 
   using namespace matchers;
 
-  auto matcher = domain(context(sequence(band(), band(), filter())));
-  auto m2 = sequence();
-  auto m3 = sequence(filter(), filter());
-  auto m4 = sequence([](isl::schedule_node n) { return true; });
-  auto m5 = sequence([](isl::schedule_node n) { return true; }, filter(), filter());
+  // clang-format off
+  auto matcher =
+      domain(
+        context(
+          sequence(
+            band(
+              leaf()),
+            band(
+              leaf()),
+            filter(
+              any()))));
+  // clang-format on
+  auto m2 = sequence(any());
+  auto m3 = sequence(filter(any()), filter(any()));
+  auto m4 = sequence([](isl::schedule_node n) { return true; }, any());
+  auto m5 = sequence([](isl::schedule_node n) { return true; }, filter(leaf()),
+                     filter(leaf()));
 
-  auto m6 = sequence(filter(hasNextSibling(filter())));
-  auto m7 = sequence(filter(hasNextSibling(filter(hasPreviousSibling(filter())))));
-  auto m8 = sequence(filter(hasSibling(filter())));
+  auto m6 = sequence(filter(hasNextSibling(filter(any())), any()));
+  auto m7 = sequence(filter(
+      hasNextSibling(filter(hasPreviousSibling(filter(any())), any())), any()));
+  auto m8 = sequence(filter(hasSibling(filter(any())), any()));
 
-  auto m9 = sequence(hasDescendant(band()));
+  auto m9 = sequence(hasDescendant(band(leaf())), any());
   auto m10 = band(leaf());
-  auto m11 = band([](isl::schedule_node n) { return true;}, leaf());
+  auto m11 = band([](isl::schedule_node n) { return true; }, leaf());
 
   // access pattern matchers.
   auto m12 = read('X');
@@ -74,7 +87,7 @@ TEST(TreeMatcher, AnyMatchesLeaf) {
   EXPECT_TRUE(ScheduleNodeMatcher::isMatching(matcher, node.child(0)));
 }
 
-TEST(TreeMatcher, EmptyNotMatchesLeaf) {
+TEST(TreeMatcher, LeafMatchesLeaf) {
   using namespace matchers;
   // clang-format off
   auto matcher =
@@ -83,7 +96,8 @@ TEST(TreeMatcher, EmptyNotMatchesLeaf) {
         filter(
           leaf()),
         filter(
-          band())));
+          band(
+            leaf()))));
   // clang-format on
 
   auto node = makeGemmTree();
