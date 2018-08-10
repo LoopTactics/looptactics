@@ -116,14 +116,13 @@ void ScheduleNodeMatcher::printMatcher(raw_ostream &OS,
 }
 */
 
-
 bool ScheduleNodeMatcher::isMatching(const ScheduleNodeMatcher &matcher,
                                      isl::schedule_node node) {
   if (!node.get()) {
     return false;
   }
 
-  if (matcher.current_ != isl_schedule_node_get_type(node.get())) {
+  if (toIslType(matcher.current_) != isl_schedule_node_get_type(node.get())) {
     return false;
   }
 

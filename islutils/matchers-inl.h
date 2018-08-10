@@ -1,5 +1,9 @@
 #include <type_traits>
 
+#include <cassert>
+
+namespace matchers {
+
 namespace {
 template <typename... Args>
 std::vector<typename std::common_type<Args...>::type>
@@ -13,6 +17,34 @@ varargToVector(Args... args) {
   return result;
 }
 } // namespace
+
+isl_schedule_node_type toIslType(ScheduleNodeType type) {
+  switch (type) {
+  case ScheduleNodeType::Band:
+    return isl_schedule_node_band;
+  case ScheduleNodeType::Context:
+    return isl_schedule_node_context;
+  case ScheduleNodeType::Domain:
+    return isl_schedule_node_domain;
+  case ScheduleNodeType::Extension:
+    return isl_schedule_node_extension;
+  case ScheduleNodeType::Filter:
+    return isl_schedule_node_filter;
+  case ScheduleNodeType::Guard:
+    return isl_schedule_node_guard;
+  case ScheduleNodeType::Mark:
+    return isl_schedule_node_mark;
+  case ScheduleNodeType::Leaf:
+    return isl_schedule_node_leaf;
+  case ScheduleNodeType::Sequence:
+    return isl_schedule_node_sequence;
+  case ScheduleNodeType::Set:
+    return isl_schedule_node_set;
+  default:
+    assert(false && "cannot convert the given node type");
+    return isl_schedule_node_leaf;
+  }
+}
 
 // TODO: use variadic template.
 /* Definitions for relation matcher factory functions *************************/
@@ -61,8 +93,8 @@ DEF_TYPE_MATCHER_RELATION(write, RelationKind::write)
     return matcher;                                                            \
   }
 
-DEF_TYPE_MATCHER(sequence, isl_schedule_node_sequence)
-DEF_TYPE_MATCHER(set, isl_schedule_node_set)
+DEF_TYPE_MATCHER(sequence, ScheduleNodeType::Sequence)
+DEF_TYPE_MATCHER(set, ScheduleNodeType::Set)
 
 #undef DEF_TYPE_MATCHER
 
@@ -95,13 +127,15 @@ DEF_TYPE_MATCHER(set, isl_schedule_node_set)
     return matcher;                                                            \
   }
 
-DEF_TYPE_MATCHER(band, isl_schedule_node_band)
-DEF_TYPE_MATCHER(context, isl_schedule_node_context)
-DEF_TYPE_MATCHER(domain, isl_schedule_node_domain)
-DEF_TYPE_MATCHER(extension, isl_schedule_node_extension)
-DEF_TYPE_MATCHER(filter, isl_schedule_node_filter)
-DEF_TYPE_MATCHER(guard, isl_schedule_node_guard)
-DEF_TYPE_MATCHER(mark, isl_schedule_node_mark)
-DEF_TYPE_MATCHER(leaf, isl_schedule_node_leaf)
+DEF_TYPE_MATCHER(band, ScheduleNodeType::Band)
+DEF_TYPE_MATCHER(context, ScheduleNodeType::Context)
+DEF_TYPE_MATCHER(domain, ScheduleNodeType::Domain)
+DEF_TYPE_MATCHER(extension, ScheduleNodeType::Extension)
+DEF_TYPE_MATCHER(filter, ScheduleNodeType::Filter)
+DEF_TYPE_MATCHER(guard, ScheduleNodeType::Guard)
+DEF_TYPE_MATCHER(mark, ScheduleNodeType::Mark)
+DEF_TYPE_MATCHER(leaf, ScheduleNodeType::Leaf)
 
 #undef DEF_TYPE_MATCHER
+
+} // namespace matchers

@@ -37,11 +37,7 @@ namespace matchers {
 // write - write access
 // readAndWrite - read and write access
 
-enum class RelationKind {
-  read,
-  write,
-  readAndWrite
-};
+enum class RelationKind { read, write, readAndWrite };
 
 class RelationMatcher;
 
@@ -50,13 +46,12 @@ typedef std::vector<std::string> matchingDims;
 
 // TODO: extend to use variadic template
 class RelationMatcher {
-#define DECL_FRIEND_TYPE_MATCH(name) 			\
-  friend RelationMatcher name(char a, char b);		\
-  friend RelationMatcher name(char a);		
+#define DECL_FRIEND_TYPE_MATCH(name)                                           \
+  friend RelationMatcher name(char a, char b);                                 \
+  friend RelationMatcher name(char a);
   DECL_FRIEND_TYPE_MATCH(read)
   DECL_FRIEND_TYPE_MATCH(write)
 #undef DECL_FRIEND_TYPE_MATCH
-
 
 public:
   // is a read access?
@@ -64,7 +59,7 @@ public:
   // is a write access?
   bool isWrite() const;
   // return literal at index i
-  char getIndex(unsigned i)const;
+  char getIndex(unsigned i) const;
   // get number of literals
   int getIndexesSize() const;
   ~RelationMatcher() = default;
@@ -79,7 +74,6 @@ private:
   // dimensions.
   std::vector<matchingDims> setDim_;
 };
-
 
 class ScheduleNodeMatcher;
 
@@ -168,6 +162,24 @@ ScheduleNodeMatcher mark(std::function<bool(isl::schedule_node)> callback,
 ScheduleNodeMatcher leaf();
 /** \} */
 
+enum class ScheduleNodeType {
+  Band,
+  Context,
+  Domain,
+  Extension,
+  Filter,
+  Guard,
+  Mark,
+  Leaf,
+  Sequence,
+  Set,
+
+  Any
+};
+
+inline isl_schedule_node_type toIslType(ScheduleNodeType type);
+inline ScheduleNodeType fromIslType(isl_schedule_node_type type);
+
 /** Node type matcher class for isl schedule trees.
  * \ingroup Matchers
  */
@@ -207,7 +219,7 @@ public:
                          isl::schedule_node node);
 
 private:
-  isl_schedule_node_type current_;
+  ScheduleNodeType current_;
   std::vector<ScheduleNodeMatcher> children_;
   std::function<bool(isl::schedule_node)> nodeCallback_;
 };
@@ -224,9 +236,9 @@ hasSibling(const ScheduleNodeMatcher &siblingMatcher);
 std::function<bool(isl::schedule_node)>
 hasDescendant(const ScheduleNodeMatcher &descendantMatcher);
 
-#include "matchers-inl.h"
-
 } // namespace matchers
+
+#include "matchers-inl.h"
 
 // A constraint is introduced by an access and a matcher.
 // In more details, a constraint looks like (A, i0). Meaning that
