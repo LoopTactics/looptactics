@@ -29,11 +29,6 @@ add_dependencies(check check-builders)
 add_custom_target(check-transformer COMMAND test_transformer)
 add_dependencies(check check-transformer)
 
-file(GLOB TEST_INPUTS
-  "inputs/*"
-)
-
-foreach (loop_var ${TEST_INPUTS})
-  configure_file(${loop_var} ${CMAKE_BINARY_DIR}/test/inputs; COPYONLY)
-endforeach(loop_var)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/inputs/one-dimensional-init.c"
+     "${CMAKE_CURRENT_BINARY_DIR}/inputs/one-dimensional-init.c"; COPYONLY)
 
