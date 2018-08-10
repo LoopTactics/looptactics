@@ -122,16 +122,16 @@ bool ScheduleNodeMatcher::isMatching(const ScheduleNodeMatcher &matcher,
     return false;
   }
 
+  if (matcher.current_ == ScheduleNodeType::Any) {
+    return true;
+  }
+
   if (toIslType(matcher.current_) != isl_schedule_node_get_type(node.get())) {
     return false;
   }
 
   if (matcher.nodeCallback_ && !matcher.nodeCallback_(node)) {
     return false;
-  }
-
-  if (matcher.children_.size() == 0) {
-    return true;
   }
 
   size_t nChildren =

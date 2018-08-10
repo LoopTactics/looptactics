@@ -137,4 +137,10 @@ DEF_TYPE_MATCHER(leaf, ScheduleNodeType::Leaf)
 
 #undef DEF_TYPE_MATCHER
 
+inline ScheduleNodeMatcher any() {
+  ScheduleNodeMatcher matcher;
+  matcher.current_ = ScheduleNodeType::Any;
+  return matcher;
+}
+
 } // namespace matchers

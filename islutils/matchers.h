@@ -160,6 +160,8 @@ ScheduleNodeMatcher mark(std::function<bool(isl::schedule_node)> callback,
                          ScheduleNodeMatcher &&child);
 
 ScheduleNodeMatcher leaf();
+
+ScheduleNodeMatcher any();
 /** \} */
 
 enum class ScheduleNodeType {
@@ -213,6 +215,8 @@ class ScheduleNodeMatcher {
   DECL_FRIEND_TYPE_MATCH(leaf)
 
 #undef DECL_FRIEND_TYPE_MATCH
+
+  friend ScheduleNodeMatcher any();
 
 public:
   static bool isMatching(const ScheduleNodeMatcher &matcher,
