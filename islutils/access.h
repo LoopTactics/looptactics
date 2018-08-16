@@ -35,6 +35,7 @@ public:
 class Placeholder {
 public:
   isl::val coefficient_;
+  isl::val constant_;
   int outDimPos_;
   std::vector<DimCandidate> candidates_;
 };

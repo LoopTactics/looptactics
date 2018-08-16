@@ -8,6 +8,8 @@ static matchers::PlaceholderSet makePlaceholderSet(isl::ctx ctx) {
   Placeholder p1, p2;
   p1.coefficient_ = isl::val(ctx, 1);
   p2.coefficient_ = isl::val(ctx, 2);
+  p1.constant_ = isl::val::zero(ctx);
+  p2.constant_ = isl::val::zero(ctx);
   p1.outDimPos_ = 1;
   p2.outDimPos_ = 0;
   PlaceholderSet ps;
@@ -47,6 +49,7 @@ static matchers::PlaceholderSet makeTwoGroupPlaceholderSet(isl::ctx ctx) {
   // Make this similar to p1.
   Placeholder p3;
   p3.coefficient_ = isl::val(ctx, 1);
+  p3.constant_ = isl::val::zero(ctx);
   p3.outDimPos_ = 1;
   ps.placeholders_.push_back(p3);
   ps.placeholderFolds_.push_back(2);
@@ -97,6 +100,8 @@ makeSameGroupSameFoldPlaceholderSet(isl::ctx ctx) {
   Placeholder p1, p2;
   p1.coefficient_ = isl::val(ctx, 1);
   p2.coefficient_ = isl::val(ctx, 1);
+  p1.constant_ = isl::val::zero(ctx);
+  p2.constant_ = isl::val::zero(ctx);
   p1.outDimPos_ = 1;
   p2.outDimPos_ = 0;
   PlaceholderSet ps;
@@ -147,6 +152,7 @@ struct NamedPlaceholder {
 NamedPlaceholder placeholder(isl::ctx ctx, const std::string n) {
   NamedPlaceholder result;
   result.p.coefficient_ = isl::val::one(ctx);
+  result.p.constant_ = isl::val::zero(ctx);
   result.p.outDimPos_ = -1;
   result.name = n;
   return result;
@@ -166,6 +172,12 @@ NamedPlaceholder operator*(int i, NamedPlaceholder np) {
   // FIXME: assuming val is always initialized...
   np.p.coefficient_ =
       np.p.coefficient_.mul(isl::val(np.p.coefficient_.get_ctx(), i));
+  return np;
+}
+
+NamedPlaceholder operator+(NamedPlaceholder np, int i) {
+  // FIXME: assuming val is always initialized...
+  np.p.constant_ = np.p.constant_.add(isl::val(np.p.constant_.get_ctx(), i));
   return np;
 }
 
@@ -247,6 +259,34 @@ TEST(AccessMatcher, FoldAcrossGroupsDifferent) {
       ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=i and y=j}");
   auto matches = match(umap, ps);
   // Expect not to have a match because b=i and y=j are not properly folded.
+  EXPECT_EQ(matches.size(), 0);
+
+  isl_ctx_free(ctx.release());
+}
+
+TEST(AccessMatcher, PlaceholderWithConstants) {
+  using namespace matchers;
+
+  auto ctx = isl::ctx(isl_ctx_alloc());
+  auto _1 = placeholder(ctx);
+  auto _2 = placeholder(ctx);
+  auto umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=2*j+1 and b=i+42}");
+  auto ps = makePS(access(dim(0, 2 * _1 + 1), dim(1, _2 + 42)));
+  auto matches = match(umap, ps);
+  EXPECT_EQ(matches.size(), 1);
+
+  isl_ctx_free(ctx.release());
+}
+
+TEST(AccessMatcher, PlaceholderWithConstantsNoMatch) {
+  using namespace matchers;
+
+  auto ctx = isl::ctx(isl_ctx_alloc());
+  auto _1 = placeholder(ctx);
+  auto _2 = placeholder(ctx);
+  auto umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=2*j+1 and b=i+42}");
+  auto ps = makePS(access(dim(0, 2 * _1 + 1), dim(1, _2)));
+  auto matches = match(umap, ps);
   EXPECT_EQ(matches.size(), 0);
 
   isl_ctx_free(ctx.release());

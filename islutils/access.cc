@@ -47,6 +47,7 @@ static void appendToCandidateList(isl::map singleOutDimMap, isl::map fullMap,
   for (int i = 0; i < dim; ++i) {
     auto candidateAff = isl::aff::var_on_domain(lspace, isl::dim::set, i);
     candidateAff = candidateAff.scale(placeholder.coefficient_);
+    candidateAff = candidateAff.add_constant_val(placeholder.constant_);
     auto candidatePwAff =
         isl::pw_aff(candidateAff).intersect_domain(pa.domain());
     if (pa.is_equal(candidatePwAff)) {
