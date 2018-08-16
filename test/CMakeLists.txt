@@ -38,3 +38,5 @@ add_dependencies(check check-transformer)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/inputs/one-dimensional-init.c"
      "${CMAKE_CURRENT_BINARY_DIR}/inputs/one-dimensional-init.c"; COPYONLY)
 
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/inputs/stencil.c"
+     "${CMAKE_CURRENT_BINARY_DIR}/inputs/stencil.c"; COPYONLY)

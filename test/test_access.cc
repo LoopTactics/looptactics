@@ -1,4 +1,5 @@
 #include "islutils/access.h"
+#include "islutils/parser.h"
 
 #include "gtest/gtest.h"
 
@@ -288,6 +289,31 @@ TEST(AccessMatcher, PlaceholderWithConstantsNoMatch) {
   auto ps = makePS(access(dim(0, 2 * _1 + 1), dim(1, _2)));
   auto matches = match(umap, ps);
   EXPECT_EQ(matches.size(), 0);
+
+  isl_ctx_free(ctx.release());
+}
+
+TEST(AccessMatcher, Stencil) {
+  using namespace matchers;
+  auto ctx = isl::ctx(isl_ctx_alloc());
+  auto scop = Parser("inputs/stencil.c").getScop();
+  ASSERT_FALSE(scop.schedule.is_null());
+
+  // Don't want to include tree matchers in this _unit_ test, go to the first
+  // leaf. This should go into integration tests.
+  auto node =
+      scop.schedule.get_root().child(0).child(0).child(0).child(0).child(0);
+  auto schedule = node.get_prefix_schedule_union_map();
+  auto reads = scop.reads.curry().apply_domain(schedule);
+  auto writes = scop.mustWrites.curry().apply_domain(schedule);
+
+  // Note that placeholders are _not_ reused between different calls to makePS.
+  auto _1 = placeholder(ctx);
+  auto psReads = makePS(access(dim(0, _1 + (-1))), access(dim(0, _1)),
+                        access(dim(0, _1 + 1)));
+  auto psWrites = makePS(access(dim(0, _1)));
+  EXPECT_EQ(match(reads, psReads).size(), 1);
+  EXPECT_EQ(match(writes, psWrites).size(), 1);
 
   isl_ctx_free(ctx.release());
 }
