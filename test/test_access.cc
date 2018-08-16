@@ -275,6 +275,8 @@ TEST(AccessMatcher, PlaceholderWithConstants) {
   auto ps = makePS(access(dim(0, 2 * _1 + 1), dim(1, _2 + 42)));
   auto matches = match(umap, ps);
   EXPECT_EQ(matches.size(), 1);
+  umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=2*j+1 and b=i+43}");
+  EXPECT_EQ(match(umap, ps).size(), 0);
 
   isl_ctx_free(ctx.release());
 }

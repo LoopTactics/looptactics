@@ -154,7 +154,7 @@ static std::vector<std::vector<DimCandidate>> suitableCombinations(
 }
 
 std::vector<std::vector<DimCandidate>> match(isl::union_map access,
-                                             PlaceholderSet &ps) {
+                                             PlaceholderSet ps) {
   std::vector<isl::map> accesses;
   access.foreach_map([&accesses](isl::map m) { accesses.push_back(m); });
 

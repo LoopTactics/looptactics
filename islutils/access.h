@@ -74,7 +74,7 @@ public:
 };
 
 std::vector<std::vector<DimCandidate>> match(isl::union_map access,
-                                             PlaceholderSet &ps);
+                                             PlaceholderSet ps);
 
 } // namespace matchers
 
