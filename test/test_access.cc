@@ -16,9 +16,14 @@ TEST(AccessMatcher, Simple) {
   ps.placeholders_.push_back(p1);
   ps.placeholders_.push_back(p2);
 
-  auto umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=2*j and b=i}");
+  auto umap = isl::union_map(
+      ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=2*j and y=i}");
 
-  EXPECT_EQ(match(umap, ps).size(), 1);
+  // There are 4 matches because we don't force placeholders to be in the same
+  // relation (yet).  So we can get p1 matching b from the first relation and
+  // p2 matching x from the second relation as a match.
+  // TODO: don't consider those as matches.
+  EXPECT_EQ(match(umap, ps).size(), 4);
 
   isl_ctx_free(ctx.release());
 }

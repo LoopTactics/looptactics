@@ -19,7 +19,7 @@
 
 namespace matchers {
 
-static void appendToCandidateList(isl::map singleOutDimMap,
+static void appendToCandidateList(isl::map singleOutDimMap, isl::map fullMap,
                                   Placeholder &placeholder) {
   singleOutDimMap = singleOutDimMap.coalesce();
   if (!singleOutDimMap.is_single_valued()) {
@@ -49,14 +49,7 @@ static void appendToCandidateList(isl::map singleOutDimMap,
     auto candidatePwAff =
         isl::pw_aff(candidateAff).intersect_domain(pa.domain());
     if (pa.is_equal(candidatePwAff)) {
-      // TODO: maybe we should use better descriptors of individual maps here...
-      // if not maps directly (but we don't have entire maps here and the id is
-      // dropped by projection...)
-      isl::id id;
-      if (space.has_tuple_id(isl::dim::out)) {
-        id = space.get_tuple_id(isl::dim::out);
-      }
-      placeholder.candidates_.emplace_back(i, id);
+      placeholder.candidates_.emplace_back(i, fullMap);
     }
   }
 }
@@ -145,7 +138,7 @@ std::vector<std::vector<DimCandidate>> match(isl::union_map access,
         // If there is a lot of placeholders with the same coefficient, we want
         // to also group placeholders by coefficient and only call the
         // aff-matching computation once per coefficient.  Punting for now.
-        appendToCandidateList(single, dimPlaceholders[j].get());
+        appendToCandidateList(single, acc, dimPlaceholders[j].get());
       }
     }
   }

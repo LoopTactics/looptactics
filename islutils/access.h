@@ -6,23 +6,27 @@
 #include <functional>
 #include <vector>
 
+#include "islutils/operators.h"
+
 namespace matchers {
 
 class DimCandidate {
 public:
-  DimCandidate(int inputDimPos, isl::id outTupleId)
-      : inputDimPos_(inputDimPos), outTupleId_(outTupleId) {}
+  DimCandidate(int inputDimPos, isl::map candidateMap)
+      : inputDimPos_(inputDimPos), candidateMap_(candidateMap) {}
 
   bool operator==(const DimCandidate &other) const {
     return inputDimPos_ == other.inputDimPos_ &&
-           ((outTupleId_.is_null() && other.outTupleId_.is_null()) ||
-            outTupleId_.get() == other.outTupleId_.get());
+           candidateMap_ == other.candidateMap_;
   }
 
   // Assuming the input space of all candidates is the same (e.g., schedule
   // space), we only need to keep the position in this space.
+  // TODO: We may want to abstract away the candidate description together with
+  // the candidate-filling function and comparison operators.
   int inputDimPos_;
-  isl::id outTupleId_;
+
+  isl::map candidateMap_;
 };
 
 class Placeholder {
