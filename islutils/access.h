@@ -15,9 +15,12 @@ public:
   DimCandidate(int inputDimPos, isl::map candidateMap)
       : inputDimPos_(inputDimPos), candidateMap_(candidateMap) {}
 
+  bool isEqualModuloMap(const DimCandidate &other) const {
+    return inputDimPos_ == other.inputDimPos_;
+  }
+
   bool operator==(const DimCandidate &other) const {
-    return inputDimPos_ == other.inputDimPos_ &&
-           candidateMap_ == other.candidateMap_;
+    return isEqualModuloMap(other) && candidateMap_ == other.candidateMap_;
   }
 
   // Assuming the input space of all candidates is the same (e.g., schedule
@@ -49,6 +52,18 @@ public:
   // as the position of the placeholder in placeholders_.  This may change in
   // the future for a more C++-idiomatic API.
   std::vector<std::vector<size_t>> placeholderGroups_;
+
+  // Placeholder fold is an identifier of a set of placeholders that must get
+  // assigned the same candidate value modulo the matched map.  The idea is to
+  // reuse, at the API level, placeholders in multiple places to indicate
+  // equality of the matched access patterns.
+  // This vector is co-indexed with placeholders_.  By default, each
+  // placeholder gets assigned its index in the placeholders_ list, that is
+  // placeholderFolds_[i] == i. Placeholders that belong to the same group have
+  // the same fold index, by convention we assume it is the index in
+  // placeholders_ of the first placeholder in the fold.
+  // One placeholder cannot belong to multiple folds.
+  std::vector<size_t> placeholderFolds_;
 };
 
 class Match {

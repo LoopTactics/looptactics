@@ -55,14 +55,28 @@ static void appendToCandidateList(isl::map singleOutDimMap, isl::map fullMap,
   }
 }
 
+// All placeholders should get different assignments, except those that belong
+// to the same fold which should get equal assignments modulo matched map.
 static bool
-hasNoDuplicateAssignments(const std::vector<DimCandidate> &combination) {
+hasNoDuplicateAssignments(const std::vector<DimCandidate> &combination,
+                          const PlaceholderSet &ps) {
   // Algorithmically not the most efficient way of finding duplicates, but
   // removes the need to include hash-tables and/or perform additional
   // allocations.
   size_t size = combination.size();
+  if (ps.placeholders_.size() != ps.placeholderFolds_.size()) {
+    ISLUTILS_DIE("placeholder folds are not properly set up");
+  }
+
   for (size_t i = 0; i < size; ++i) {
     for (size_t j = i + 1; j < size; ++j) {
+      if (ps.placeholderFolds_[i] == ps.placeholderFolds_[j]) {
+        if (!combination.at(i).isEqualModuloMap(combination.at(j))) {
+          return false;
+        } else {
+          continue;
+        }
+      }
       if (combination.at(i) == combination.at(j)) {
         return false;
       }
@@ -198,11 +212,11 @@ std::vector<std::vector<DimCandidate>> match(isl::union_map access,
   // the N-element list if we know that elements of (N-1) array are unique.
   // This algorithmic optimization requires some API changes and is left for
   // future work.
-  return suitableCombinations(ps,
-                              [ps](const std::vector<DimCandidate> &candidate) {
-                                return hasNoDuplicateAssignments(candidate) &&
-                                       groupsAreProperlyFormed(candidate, ps);
-                              });
+  return suitableCombinations(
+      ps, [ps](const std::vector<DimCandidate> &candidate) {
+        return hasNoDuplicateAssignments(candidate, ps) &&
+               groupsAreProperlyFormed(candidate, ps);
+      });
 }
 
 //-----------------//

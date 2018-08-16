@@ -13,6 +13,8 @@ static matchers::PlaceholderSet makePlaceholderSet(isl::ctx ctx) {
   PlaceholderSet ps;
   ps.placeholders_.push_back(p1);
   ps.placeholders_.push_back(p2);
+  ps.placeholderFolds_.push_back(0);
+  ps.placeholderFolds_.push_back(1);
 
   // Both placeholders must appear in the same relation.
   ps.placeholderGroups_.emplace_back();
@@ -84,6 +86,89 @@ TEST(AccessMatcher, TwoMapsOneMatch) {
       ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=j and y=i}");
   auto matches = match(umap, ps);
   EXPECT_EQ(matches.size(), 1);
+
+  isl_ctx_free(ctx.release());
+}
+
+static matchers::PlaceholderSet
+makeSameGroupSameFoldPlaceholderSet(isl::ctx ctx) {
+  using namespace matchers;
+
+  Placeholder p1, p2;
+  p1.coefficient_ = isl::val(ctx, 1);
+  p2.coefficient_ = isl::val(ctx, 1);
+  p1.outDimPos_ = 1;
+  p2.outDimPos_ = 0;
+  PlaceholderSet ps;
+  ps.placeholders_.push_back(p1);
+  ps.placeholders_.push_back(p2);
+
+  // Placeholders belong to the same fold.
+  ps.placeholderFolds_.push_back(0);
+  ps.placeholderFolds_.push_back(0);
+
+  // Both placeholders must appear in the same relation.
+  ps.placeholderGroups_.emplace_back();
+  ps.placeholderGroups_.back().push_back(0);
+  ps.placeholderGroups_.back().push_back(1);
+
+  return ps;
+}
+
+TEST(AccessMatcher, FoldDiagonalAccess) {
+  using namespace matchers;
+
+  auto ctx = isl::ctx(isl_ctx_alloc());
+  auto ps = makeSameGroupSameFoldPlaceholderSet(ctx);
+  auto umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=i and b=i}");
+  auto matches = match(umap, ps);
+  EXPECT_EQ(matches.size(), 1);
+
+  isl_ctx_free(ctx.release());
+}
+
+TEST(AccessMatcher, FoldNonDiagonalAccess) {
+  using namespace matchers;
+
+  auto ctx = isl::ctx(isl_ctx_alloc());
+  auto ps = makeSameGroupSameFoldPlaceholderSet(ctx);
+  auto umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=i and b=j}");
+  auto matches = match(umap, ps);
+  EXPECT_EQ(matches.size(), 0);
+
+  isl_ctx_free(ctx.release());
+}
+
+TEST(AccessMatcher, FoldAcrossGroupsSame) {
+  using namespace matchers;
+
+  auto ctx = isl::ctx(isl_ctx_alloc());
+  auto ps = makeTwoGroupPlaceholderSet(ctx);
+  // Rewrite two-group placeholder set to have the same fold for p1 and p3.
+  ps.placeholderFolds_[2] = 0;
+
+  auto umap = isl::union_map(
+      ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=j and y=i}");
+  auto matches = match(umap, ps);
+  // Expect to have a match because b=i and y=i are properly folded.
+  EXPECT_EQ(matches.size(), 1);
+
+  isl_ctx_free(ctx.release());
+}
+
+TEST(AccessMatcher, FoldAcrossGroupsDifferent) {
+  using namespace matchers;
+
+  auto ctx = isl::ctx(isl_ctx_alloc());
+  auto ps = makeTwoGroupPlaceholderSet(ctx);
+  // Rewrite two-group placeholder set to have the same fold for p1 and p3.
+  ps.placeholderFolds_[2] = 0;
+
+  auto umap = isl::union_map(
+      ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=i and y=j}");
+  auto matches = match(umap, ps);
+  // Expect not to have a match because b=i and y=j are not properly folded.
+  EXPECT_EQ(matches.size(), 0);
 
   isl_ctx_free(ctx.release());
 }
