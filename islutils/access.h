@@ -39,6 +39,16 @@ public:
 class PlaceholderSet {
 public:
   std::vector<Placeholder> placeholders_;
+
+  // Each inner vector has a set of indices of placeholders that should appear
+  // together in a relation.  Different groups must correspond to different
+  // relations.  We store indices separately because a placeholder may appear
+  // in multiple relations, actual objects are stored in placeholders_.  We
+  // don't store references because of how the match is currently structured: a
+  // vector of candidates, each of which is itself a vector with the same index
+  // as the position of the placeholder in placeholders_.  This may change in
+  // the future for a more C++-idiomatic API.
+  std::vector<std::vector<size_t>> placeholderGroups_;
 };
 
 class Match {

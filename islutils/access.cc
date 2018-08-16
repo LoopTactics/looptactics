@@ -1,5 +1,6 @@
 #include <isl/cpp.h>
 
+#include <algorithm>
 #include <functional>
 #include <vector>
 
@@ -64,6 +65,41 @@ hasNoDuplicateAssignments(const std::vector<DimCandidate> &combination) {
     for (size_t j = i + 1; j < size; ++j) {
       if (combination.at(i) == combination.at(j)) {
         return false;
+      }
+    }
+  }
+  return true;
+}
+
+// All placeholders in a group are either not yet matched, or matched the same
+// map.  A map matched in the group is not matched in any previous group.
+static bool
+groupsAreProperlyFormed(const std::vector<DimCandidate> &combination,
+                        const PlaceholderSet &ps) {
+  std::vector<isl::map> previouslyMatchedMaps;
+  for (const auto &group : ps.placeholderGroups_) {
+    isl::map matchedMap;
+    // Ignore parts that are not yet matched.
+    for (size_t pos : group) {
+      if (pos >= combination.size()) {
+        continue;
+      }
+      auto candidateMap = combination.at(pos).candidateMap_;
+      if (matchedMap) { // A group has already matched a map.
+        // If matched a different map, groups are not a match.
+        if (matchedMap != candidateMap) {
+          return false;
+        }
+      } else { // First time a map is matched in the group.
+        matchedMap = candidateMap;
+        auto it = std::find(previouslyMatchedMaps.begin(),
+                            previouslyMatchedMaps.end(), matchedMap);
+        // If the same map as one of the previously considered groups, groups
+        // are not a match.
+        if (it != previouslyMatchedMaps.end()) {
+          return false;
+        }
+        previouslyMatchedMaps.push_back(matchedMap);
       }
     }
   }
@@ -162,7 +198,11 @@ std::vector<std::vector<DimCandidate>> match(isl::union_map access,
   // the N-element list if we know that elements of (N-1) array are unique.
   // This algorithmic optimization requires some API changes and is left for
   // future work.
-  return suitableCombinations(ps, hasNoDuplicateAssignments);
+  return suitableCombinations(ps,
+                              [ps](const std::vector<DimCandidate> &candidate) {
+                                return hasNoDuplicateAssignments(candidate) &&
+                                       groupsAreProperlyFormed(candidate, ps);
+                              });
 }
 
 //-----------------//
