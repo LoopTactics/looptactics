@@ -139,14 +139,93 @@ TEST(AccessMatcher, FoldNonDiagonalAccess) {
   isl_ctx_free(ctx.release());
 }
 
+struct NamedPlaceholder {
+  matchers::Placeholder p;
+  std::string name;
+};
+
+NamedPlaceholder placeholder(isl::ctx ctx, const std::string n) {
+  NamedPlaceholder result;
+  result.p.coefficient_ = isl::val::one(ctx);
+  result.p.outDimPos_ = -1;
+  result.name = n;
+  return result;
+}
+
+NamedPlaceholder placeholder(isl::ctx ctx) {
+  static thread_local size_t counter = 0;
+  return placeholder(ctx, std::to_string(counter++));
+}
+
+static NamedPlaceholder dim(int pos, NamedPlaceholder np) {
+  np.p.outDimPos_ = pos;
+  return np;
+}
+
+NamedPlaceholder operator*(int i, NamedPlaceholder np) {
+  // FIXME: assuming val is always initialized...
+  np.p.coefficient_ =
+      np.p.coefficient_.mul(isl::val(np.p.coefficient_.get_ctx(), i));
+  return np;
+}
+
+using NamedPlaceholderList = std::vector<NamedPlaceholder>;
+
+template <typename... Args> static NamedPlaceholderList access(Args... args) {
+  static_assert(std::is_same<typename std::common_type<Args...>::type,
+                             NamedPlaceholder>::value,
+                "accesses can only be constructed from named placeholders");
+
+  return {args...};
+}
+
+template <typename... Args>
+static matchers::PlaceholderSet makePS(Args... args) {
+  static_assert(
+      std::is_same<typename std::common_type<Args...>::type,
+                   NamedPlaceholderList>::value,
+      "can only make PlaceholderSet from lists of named placeholders");
+
+  using namespace matchers;
+
+  std::vector<NamedPlaceholderList> placeholderLists = {args...};
+  std::vector<std::pair<std::string, size_t>> knownNames;
+  PlaceholderSet ps;
+  for (const auto &npl : placeholderLists) {
+    if (npl.empty()) {
+      continue;
+    }
+
+    size_t index = ps.placeholders_.size();
+    ps.placeholderGroups_.emplace_back();
+    for (const auto &np : npl) {
+      ps.placeholders_.push_back(np.p);
+      ps.placeholderGroups_.back().push_back(index);
+      auto namePos =
+          std::find_if(knownNames.begin(), knownNames.end(),
+                       [np](const std::pair<std::string, size_t> &pair) {
+                         return pair.first == np.name;
+                       });
+      if (namePos == knownNames.end()) {
+        knownNames.emplace_back(np.name, index);
+        ps.placeholderFolds_.emplace_back(index);
+      } else {
+        ps.placeholderFolds_.emplace_back(namePos->second);
+      }
+      ++index;
+    }
+  }
+
+  return ps;
+}
+
 TEST(AccessMatcher, FoldAcrossGroupsSame) {
   using namespace matchers;
 
   auto ctx = isl::ctx(isl_ctx_alloc());
-  auto ps = makeTwoGroupPlaceholderSet(ctx);
-  // Rewrite two-group placeholder set to have the same fold for p1 and p3.
-  ps.placeholderFolds_[2] = 0;
-
+  auto _1 = placeholder(ctx);
+  auto _2 = placeholder(ctx);
+  auto ps = makePS(access(dim(0, 2 * _2), dim(1, _1)), access(dim(1, _1)));
   auto umap = isl::union_map(
       ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=j and y=i}");
   auto matches = match(umap, ps);
