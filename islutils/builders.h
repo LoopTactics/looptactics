@@ -17,6 +17,8 @@ private:
   insertSingleChildTypeNodeAt(isl::schedule_node,
                               isl_schedule_node_type type) const;
 
+  isl::schedule_node expandTree(isl::schedule_node) const;
+
 public:
   isl::schedule_node insertAt(isl::schedule_node node) const;
   isl::schedule_node build() const;
@@ -31,6 +33,7 @@ public:
   isl::union_set uset_;
   isl::multi_union_pw_aff mupa_;
   isl::union_map umap_;
+  isl::union_pw_multi_aff upma_;
   isl_id *id_;
 };
 
@@ -46,6 +49,10 @@ ScheduleNodeBuilder filter(isl::union_set uset, ScheduleNodeBuilder &&child);
 
 ScheduleNodeBuilder extension(isl::union_map umap);
 ScheduleNodeBuilder extension(isl::union_map umap, ScheduleNodeBuilder &&child);
+
+ScheduleNodeBuilder expansion(isl::union_map expansion);
+ScheduleNodeBuilder expansion(isl::union_map expansion,
+                              ScheduleNodeBuilder &&child);
 
 template <typename... Args, typename = typename std::enable_if<std::is_same<
                                 typename std::common_type<Args...>::type,
