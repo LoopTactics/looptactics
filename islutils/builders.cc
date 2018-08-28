@@ -157,10 +157,8 @@ ScheduleNodeBuilder::expandTree(isl::schedule_node node) const {
 
   // Insert a mark node so that we can find the position in the transformed
   // tree (yes, this is quite ugly but seems to be the only way around CoW).
-  ScheduleNodeBuilder markBuilder;
-  markBuilder.current_ = isl_schedule_node_mark;
-  markBuilder.id_ =
-      isl::id::alloc(node.get_ctx(), "__islutils_expand_builder", nullptr);
+  auto markBuilder = mark(
+      isl::id::alloc(node.get_ctx(), "__islutils_expand_builder", nullptr));
   node = markBuilder.insertAt(node);
 
   // Transform the entire schedule and find the corresponding location by
@@ -291,6 +289,19 @@ ScheduleNodeBuilder expansion(isl::union_map umap) {
 ScheduleNodeBuilder expansion(isl::union_map umap,
                               ScheduleNodeBuilder &&child) {
   auto builder = expansion(umap);
+  builder.children_.emplace_back(child);
+  return builder;
+}
+
+ScheduleNodeBuilder mark(isl::id id) {
+  ScheduleNodeBuilder builder;
+  builder.current_ = isl_schedule_node_mark;
+  builder.id_ = id;
+  return builder;
+}
+
+ScheduleNodeBuilder mark(isl::id id, ScheduleNodeBuilder &&child) {
+  auto builder = mark(id);
   builder.children_.emplace_back(child);
   return builder;
 }

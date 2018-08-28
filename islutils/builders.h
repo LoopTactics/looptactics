@@ -54,6 +54,9 @@ ScheduleNodeBuilder expansion(isl::union_map expansion);
 ScheduleNodeBuilder expansion(isl::union_map expansion,
                               ScheduleNodeBuilder &&child);
 
+ScheduleNodeBuilder mark(isl::id id);
+ScheduleNodeBuilder mark(isl::id id, ScheduleNodeBuilder &&child);
+
 template <typename... Args, typename = typename std::enable_if<std::is_same<
                                 typename std::common_type<Args...>::type,
                                 ScheduleNodeBuilder>::value>::type>
