@@ -44,6 +44,9 @@ ScheduleNodeBuilder band(isl::multi_union_pw_aff mupa,
 ScheduleNodeBuilder filter(isl::union_set uset);
 ScheduleNodeBuilder filter(isl::union_set uset, ScheduleNodeBuilder &&child);
 
+ScheduleNodeBuilder extension(isl::union_map umap);
+ScheduleNodeBuilder extension(isl::union_map umap, ScheduleNodeBuilder &&child);
+
 template <typename... Args, typename = typename std::enable_if<std::is_same<
                                 typename std::common_type<Args...>::type,
                                 ScheduleNodeBuilder>::value>::type>

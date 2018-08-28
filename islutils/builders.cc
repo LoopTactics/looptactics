@@ -88,11 +88,21 @@ isl::schedule_node ScheduleNodeBuilder::insertSingleChildTypeNodeAt(
     node = isl::manage(
         isl_schedule_node_insert_mark(node.release(), isl_id_copy(id_)));
   } else if (current_ == isl_schedule_node_extension) {
-    assert(false && "NYI: extension nodes");
-    return isl::schedule_node();
-    // TODO: implement extension nodes
-    // we probably need to constuct a subtree starting at this node then "graft"
-    // it. hopefully this will not screw up the anchoring constraints.
+    // There is no way to directly insert an extension node in isl.
+    // isl_schedule_node_graft_* functions insert an extension node followed by
+    // a sequence with two filters (one for the original domain points and
+    // another for the introduced points) and leave the node pointer at a leaf
+    // below the filter with the original domain points.  Go back to the
+    // introduced sequence node and remove it, letting any child subtree to be
+    // constructed as usual.
+    auto extensionRoot =
+        isl::manage(isl_schedule_node_from_extension(umap_.copy()));
+    node = isl::manage(isl_schedule_node_graft_before(node.release(),
+                                                      extensionRoot.release()))
+               .parent()
+               .parent();
+    node = node.cut();
+    node = node.parent();
   }
 
   if (children_.size() > 1) {
@@ -179,6 +189,20 @@ ScheduleNodeBuilder filter(isl::union_set uset) {
 
 ScheduleNodeBuilder filter(isl::union_set uset, ScheduleNodeBuilder &&child) {
   auto builder = filter(uset);
+  builder.children_.emplace_back(child);
+  return builder;
+}
+
+ScheduleNodeBuilder extension(isl::union_map umap) {
+  ScheduleNodeBuilder builder;
+  builder.current_ = isl_schedule_node_extension;
+  builder.umap_ = umap;
+  return builder;
+}
+
+ScheduleNodeBuilder extension(isl::union_map umap,
+                              ScheduleNodeBuilder &&child) {
+  auto builder = extension(umap);
   builder.children_.emplace_back(child);
   return builder;
 }
