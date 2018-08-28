@@ -319,6 +319,19 @@ ScheduleNodeBuilder guard(isl::set set, ScheduleNodeBuilder &&child) {
   return builder;
 }
 
+ScheduleNodeBuilder context(isl::set set) {
+  ScheduleNodeBuilder builder;
+  builder.current_ = isl_schedule_node_context;
+  builder.set_ = set;
+  return builder;
+}
+
+ScheduleNodeBuilder context(isl::set set, ScheduleNodeBuilder &&child) {
+  auto builder = context(set);
+  builder.children_.emplace_back(child);
+  return builder;
+}
+
 ScheduleNodeBuilder sequence(std::vector<ScheduleNodeBuilder> &&children) {
   ScheduleNodeBuilder builder;
   builder.current_ = isl_schedule_node_sequence;
