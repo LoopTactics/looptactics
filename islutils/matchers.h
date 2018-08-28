@@ -173,6 +173,12 @@ ScheduleNodeMatcher mark(ScheduleNodeMatcher &&child);
 ScheduleNodeMatcher mark(std::function<bool(isl::schedule_node)> callback,
                          ScheduleNodeMatcher &&child);
 
+ScheduleNodeMatcher expansion(isl::schedule_node &capture,
+                              ScheduleNodeMatcher &&child);
+ScheduleNodeMatcher expansion(ScheduleNodeMatcher &&child);
+ScheduleNodeMatcher expansion(std::function<bool(isl::schedule_node)> callback,
+                              ScheduleNodeMatcher &&child);
+
 ScheduleNodeMatcher leaf();
 
 ScheduleNodeMatcher any(isl::schedule_node &capture);
@@ -190,6 +196,7 @@ enum class ScheduleNodeType {
   Leaf,
   Sequence,
   Set,
+  Expansion,
 
   Any
 };
@@ -228,6 +235,7 @@ class ScheduleNodeMatcher {
   DECL_FRIEND_TYPE_MATCH(filter)
   DECL_FRIEND_TYPE_MATCH(guard)
   DECL_FRIEND_TYPE_MATCH(mark)
+  DECL_FRIEND_TYPE_MATCH(expansion)
 
 #undef DECL_FRIEND_TYPE_MATCH
 
