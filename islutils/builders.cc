@@ -85,8 +85,8 @@ isl::schedule_node ScheduleNodeBuilder::insertSingleChildTypeNodeAt(
     node = isl::manage(
         isl_schedule_node_insert_guard(node.release(), set_.copy()));
   } else if (current_ == isl_schedule_node_mark) {
-    node = isl::manage(
-        isl_schedule_node_insert_mark(node.release(), isl_id_copy(id_)));
+    node =
+        isl::manage(isl_schedule_node_insert_mark(node.release(), id_.copy()));
   } else if (current_ == isl_schedule_node_extension) {
     // There is no way to directly insert an extension node in isl.
     // isl_schedule_node_graft_* functions insert an extension node followed by
@@ -160,8 +160,7 @@ ScheduleNodeBuilder::expandTree(isl::schedule_node node) const {
   ScheduleNodeBuilder markBuilder;
   markBuilder.current_ = isl_schedule_node_mark;
   markBuilder.id_ =
-      isl::id::alloc(node.get_ctx(), "__islutils_expand_builder", nullptr)
-          .release();
+      isl::id::alloc(node.get_ctx(), "__islutils_expand_builder", nullptr);
   node = markBuilder.insertAt(node);
 
   // Transform the entire schedule and find the corresponding location by
@@ -173,7 +172,7 @@ ScheduleNodeBuilder::expandTree(isl::schedule_node node) const {
   auto optionalNewNode =
       dfsFirst(schedule.get_root(), [markBuilder](isl::schedule_node n) {
         return isl_schedule_node_get_type(n.get()) == isl_schedule_node_mark &&
-               isl_schedule_node_mark_get_id(n.get()) == markBuilder.id_;
+               isl_schedule_node_mark_get_id(n.get()) == markBuilder.id_.get();
       });
   if (optionalNewNode.empty()) {
     assert(false && "could not find mark node after expansion");
@@ -326,7 +325,7 @@ ScheduleNodeBuilder subtree(isl::schedule_node node) {
   } else if (builder.current_ == isl_schedule_node_guard) {
     builder.set_ = isl::manage(isl_schedule_node_guard_get_guard(node.get()));
   } else if (builder.current_ == isl_schedule_node_mark) {
-    builder.id_ = isl_id_copy(isl_schedule_node_mark_get_id(node.get()));
+    builder.id_ = isl::manage(isl_schedule_node_mark_get_id(node.get()));
   } else if (builder.current_ == isl_schedule_node_band) {
     builder.mupa_ =
         isl::manage(isl_schedule_node_band_get_partial_schedule(node.get()));

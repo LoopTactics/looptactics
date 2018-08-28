@@ -34,7 +34,7 @@ public:
   isl::multi_union_pw_aff mupa_;
   isl::union_map umap_;
   isl::union_pw_multi_aff upma_;
-  isl_id *id_;
+  isl::id id_;
 };
 
 ScheduleNodeBuilder domain(isl::union_set uset);
