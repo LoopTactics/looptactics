@@ -306,6 +306,19 @@ ScheduleNodeBuilder mark(isl::id id, ScheduleNodeBuilder &&child) {
   return builder;
 }
 
+ScheduleNodeBuilder guard(isl::set set) {
+  ScheduleNodeBuilder builder;
+  builder.current_ = isl_schedule_node_guard;
+  builder.set_ = set;
+  return builder;
+}
+
+ScheduleNodeBuilder guard(isl::set set, ScheduleNodeBuilder &&child) {
+  auto builder = guard(set);
+  builder.children_.emplace_back(child);
+  return builder;
+}
+
 ScheduleNodeBuilder sequence(std::vector<ScheduleNodeBuilder> &&children) {
   ScheduleNodeBuilder builder;
   builder.current_ = isl_schedule_node_sequence;
