@@ -4,7 +4,9 @@
 
 #include <iostream>
 
-int main() {
+#include <gtest/gtest.h>
+
+TEST(Builders, SimpleMatmul) {
   using namespace builders;
   auto ctx = isl::ctx(isl_ctx_alloc());
   auto iterationDomain = isl::union_set(
@@ -26,8 +28,5 @@ int main() {
             filter(filterS1)))).build();
   // clang-format on
 
-  isl_schedule_node_dump(node.get());
-
   ctx.release();
-  return 0;
 }

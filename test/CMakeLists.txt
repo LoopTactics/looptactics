@@ -9,6 +9,7 @@ target_link_libraries(test_matcher islutils)
 
 add_executable(test_builders test_builders.cc)
 target_link_libraries(test_builders islutils)
+target_link_libraries(test_builders gtest_main)
 
 target_link_libraries(test_matcher gtest_main)
 
