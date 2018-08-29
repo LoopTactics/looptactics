@@ -20,7 +20,7 @@
 
 namespace matchers {
 
-thread_local size_t Placeholder::nextId_ = 0;
+thread_local size_t UnpositionedPlaceholder::nextId_ = 0;
 
 static void appendToCandidateList(isl::map singleOutDimMap, isl::map fullMap,
                                   Placeholder &placeholder) {

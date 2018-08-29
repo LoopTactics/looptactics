@@ -32,15 +32,15 @@ public:
   isl::map candidateMap_;
 };
 
-class Placeholder {
+class UnpositionedPlaceholder {
 public:
-  explicit Placeholder(isl::ctx ctx)
+  explicit UnpositionedPlaceholder(isl::ctx ctx)
       : coefficient_(isl::val::one(ctx)), constant_(isl::val::zero(ctx)),
-        outDimPos_(-1), candidates_({}), id_(nextId_++) {}
+        candidates_({}), id_(nextId_++) {}
+  UnpositionedPlaceholder(const UnpositionedPlaceholder &) = default;
 
   isl::val coefficient_;
   isl::val constant_;
-  int outDimPos_;
   std::vector<DimCandidate> candidates_;
 
   const size_t id_;
@@ -49,16 +49,33 @@ private:
   static thread_local size_t nextId_;
 };
 
-inline Placeholder operator*(int i, Placeholder p) {
+class Placeholder : public UnpositionedPlaceholder {
+public:
+  explicit Placeholder(isl::ctx ctx, int pos)
+      : UnpositionedPlaceholder(ctx), outDimPos_(pos) {}
+  explicit Placeholder(const UnpositionedPlaceholder &other, int pos)
+      : UnpositionedPlaceholder(other), outDimPos_(pos) {}
+
+  int outDimPos_;
+};
+
+inline UnpositionedPlaceholder placeholder(isl::ctx ctx) {
+  return UnpositionedPlaceholder(ctx);
+}
+
+inline Placeholder dim(int pos, UnpositionedPlaceholder ph) {
+  return Placeholder(ph, pos);
+}
+
+inline UnpositionedPlaceholder operator*(int i, UnpositionedPlaceholder p) {
   p.coefficient_ = p.coefficient_.mul(isl::val(p.coefficient_.get_ctx(), i));
   return p;
 }
 
-inline Placeholder operator+(Placeholder p, int i) {
+inline UnpositionedPlaceholder operator+(UnpositionedPlaceholder p, int i) {
   p.constant_ = p.constant_.add(isl::val(p.constant_.get_ctx(), i));
   return p;
 }
-
 
 class PlaceholderSet {
 public:
