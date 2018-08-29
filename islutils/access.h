@@ -3,6 +3,7 @@
 
 #include <isl/cpp.h>
 
+#include <algorithm>
 #include <functional>
 #include <vector>
 
@@ -107,7 +108,13 @@ access(Args... args) {
   return result;
 }
 
+class PlaceholderSet;
+
+template <typename... Args> PlaceholderSet allOf(Args... args);
+
 class PlaceholderSet {
+  template <typename... Args> friend PlaceholderSet allOf(Args... args);
+
 public:
   std::vector<Placeholder> placeholders_;
 
@@ -133,6 +140,44 @@ public:
   // One placeholder cannot belong to multiple folds.
   std::vector<size_t> placeholderFolds_;
 };
+
+/// Build an object used to match all of the access patterns provided as
+/// arguments. Individual patterns can be constructed by calling "access(...)".
+template <typename... Args> PlaceholderSet allOf(Args... args) {
+  static_assert(std::is_same<typename std::common_type<Args...>::type,
+                             PlaceholderList>::value,
+                "can only make PlaceholderSet from lists of placeholders");
+
+  std::vector<PlaceholderList> placeholderLists = {args...};
+  std::vector<std::pair<size_t, size_t>> knownIds;
+  PlaceholderSet ps;
+  for (const auto &pl : placeholderLists) {
+    if (pl.empty()) {
+      continue;
+    }
+
+    size_t index = ps.placeholders_.size();
+    ps.placeholderGroups_.emplace_back();
+    for (const auto &p : pl) {
+      ps.placeholders_.push_back(p);
+      ps.placeholderGroups_.back().push_back(index);
+      auto namePos = std::find_if(knownIds.begin(), knownIds.end(),
+                                  [p](const std::pair<size_t, size_t> &pair) {
+                                    return pair.first == p.id_;
+                                  });
+      if (namePos == knownIds.end()) {
+        knownIds.emplace_back(p.id_, index);
+        ps.placeholderFolds_.emplace_back(index);
+      } else {
+        ps.placeholderFolds_.emplace_back(namePos->second);
+      }
+      ++index;
+    }
+  }
+
+  return ps;
+}
+
 
 class Match {
 public:

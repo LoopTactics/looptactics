@@ -7,44 +7,6 @@
 using util::ScopedCtx;
 using namespace matchers;
 
-template <typename... Args>
-static matchers::PlaceholderSet makePS(Args... args) {
-  static_assert(std::is_same<typename std::common_type<Args...>::type,
-                             PlaceholderList>::value,
-                "can only make PlaceholderSet from lists of placeholders");
-
-  using namespace matchers;
-
-  std::vector<PlaceholderList> placeholderLists = {args...};
-  std::vector<std::pair<size_t, size_t>> knownIds;
-  PlaceholderSet ps;
-  for (const auto &pl : placeholderLists) {
-    if (pl.empty()) {
-      continue;
-    }
-
-    size_t index = ps.placeholders_.size();
-    ps.placeholderGroups_.emplace_back();
-    for (const auto &p : pl) {
-      ps.placeholders_.push_back(p);
-      ps.placeholderGroups_.back().push_back(index);
-      auto namePos = std::find_if(knownIds.begin(), knownIds.end(),
-                                  [p](const std::pair<size_t, size_t> &pair) {
-                                    return pair.first == p.id_;
-                                  });
-      if (namePos == knownIds.end()) {
-        knownIds.emplace_back(p.id_, index);
-        ps.placeholderFolds_.emplace_back(index);
-      } else {
-        ps.placeholderFolds_.emplace_back(namePos->second);
-      }
-      ++index;
-    }
-  }
-
-  return ps;
-}
-
 static matchers::PlaceholderSet makePlaceholderSet(isl::ctx ctx) {
   using namespace matchers;
 
@@ -90,7 +52,7 @@ TEST(AccessMatcher, PositionalArguments) {
 
   auto _1 = placeholder(ctx);
   auto _2 = placeholder(ctx);
-  auto matches = match(umap, makePS(access(2 * _1, _2)));
+  auto matches = match(umap, allOf(access(2 * _1, _2)));
   // There are 2 possible matches: the first and the second map of the union.
   EXPECT_EQ(matches.size(), 2);
 }
@@ -124,7 +86,7 @@ TEST(AccessMatcher, TwoGroups) {
   auto _1 = placeholder(ctx);
   auto _2 = placeholder(ctx);
   auto matches = match(
-      umap, makePS(access(dim(0, 2 * _2), dim(1, _1)), access(dim(1, _1))));
+      umap, allOf(access(dim(0, 2 * _2), dim(1, _1)), access(dim(1, _1))));
   // Only one match possible: anonymous space to p1,p2, "A" space to p3.
   // Because p3 and p1 belong to different groups, they cannot both match the
   // anonymous space.
@@ -134,7 +96,7 @@ TEST(AccessMatcher, TwoGroups) {
 
   auto _3 = placeholder(ctx);
   matches = match(
-      umap, makePS(access(dim(0, 2 * _2), dim(1, _1)), access(dim(1, _3))));
+      umap, allOf(access(dim(0, 2 * _2), dim(1, _1)), access(dim(1, _3))));
   // No matches possible because _3 cannot be assigned the same candidate as _1.
   EXPECT_EQ(matches.size(), 0);
 }
@@ -203,7 +165,7 @@ TEST(AccessMatcher, FoldAcrossGroupsSame) {
   auto ctx = ScopedCtx();
   auto _1 = placeholder(ctx);
   auto _2 = placeholder(ctx);
-  auto ps = makePS(access(dim(0, 2 * _2), dim(1, _1)), access(dim(1, _1)));
+  auto ps = allOf(access(dim(0, 2 * _2), dim(1, _1)), access(dim(1, _1)));
   auto umap = isl::union_map(
       ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=j and y=i}");
   auto matches = match(umap, ps);
@@ -233,7 +195,7 @@ TEST(AccessMatcher, PlaceholderWithConstants) {
   auto _1 = placeholder(ctx);
   auto _2 = placeholder(ctx);
   auto umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=2*j+1 and b=i+42}");
-  auto ps = makePS(access(dim(0, 2 * _1 + 1), dim(1, _2 + 42)));
+  auto ps = allOf(access(dim(0, 2 * _1 + 1), dim(1, _2 + 42)));
   auto matches = match(umap, ps);
   EXPECT_EQ(matches.size(), 1);
   umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=2*j+1 and b=i+43}");
@@ -247,7 +209,7 @@ TEST(AccessMatcher, PlaceholderWithConstantsNoMatch) {
   auto _1 = placeholder(ctx);
   auto _2 = placeholder(ctx);
   auto umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=2*j+1 and b=i+42}");
-  auto ps = makePS(access(dim(0, 2 * _1 + 1), dim(1, _2)));
+  auto ps = allOf(access(dim(0, 2 * _1 + 1), dim(1, _2)));
   auto matches = match(umap, ps);
   EXPECT_EQ(matches.size(), 0);
 }
@@ -267,11 +229,11 @@ TEST(AccessMatcher, Stencil) {
   auto reads = scop.reads.curry().apply_domain(schedule);
   auto writes = scop.mustWrites.curry().apply_domain(schedule);
 
-  // Note that placeholders are _not_ reused between different calls to makePS.
+  // Note that placeholders are _not_ reused between different calls to allOf.
   auto _1 = placeholder(ctx);
-  auto psReads = makePS(access(dim(0, _1 + (-1))), access(dim(0, _1)),
-                        access(dim(0, _1 + 1)));
-  auto psWrites = makePS(access(dim(0, _1)));
+  auto psReads = allOf(access(dim(0, _1 + (-1))), access(dim(0, _1)),
+                       access(dim(0, _1 + 1)));
+  auto psWrites = allOf(access(dim(0, _1)));
   EXPECT_EQ(match(reads, psReads).size(), 1);
   EXPECT_EQ(match(writes, psWrites).size(), 1);
 }
