@@ -1,7 +1,10 @@
 #include "islutils/access.h"
+#include "islutils/ctx.h"
 #include "islutils/parser.h"
 
 #include "gtest/gtest.h"
+
+using util::ScopedCtx;
 
 static matchers::PlaceholderSet makePlaceholderSet(isl::ctx ctx) {
   using namespace matchers;
@@ -30,7 +33,7 @@ static matchers::PlaceholderSet makePlaceholderSet(isl::ctx ctx) {
 TEST(AccessMatcher, TwoMapsTwoMatches) {
   using namespace matchers;
 
-  auto ctx = isl::ctx(isl_ctx_alloc());
+  auto ctx = ScopedCtx();
   auto ps = makePlaceholderSet(ctx);
   auto umap = isl::union_map(
       ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=2*j and y=i}");
@@ -38,8 +41,6 @@ TEST(AccessMatcher, TwoMapsTwoMatches) {
   // There are 2 possible matches: the first and the second map of the union.
   auto matches = match(umap, ps);
   EXPECT_EQ(matches.size(), 2);
-
-  isl_ctx_free(ctx.release());
 }
 
 static matchers::PlaceholderSet makeTwoGroupPlaceholderSet(isl::ctx ctx) {
@@ -65,7 +66,7 @@ static matchers::PlaceholderSet makeTwoGroupPlaceholderSet(isl::ctx ctx) {
 TEST(AccessMatcher, TwoGroups) {
   using namespace matchers;
 
-  auto ctx = isl::ctx(isl_ctx_alloc());
+  auto ctx = ScopedCtx();
   auto ps = makeTwoGroupPlaceholderSet(ctx);
   auto umap = isl::union_map(
       ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=42*j and y=i}");
@@ -76,22 +77,18 @@ TEST(AccessMatcher, TwoGroups) {
   // Because p1 and p2 belong to the same group, only the anonymous space can
   // match them (p2 does not match the "A" space).
   EXPECT_EQ(matches.size(), 1);
-
-  isl_ctx_free(ctx.release());
 }
 
 TEST(AccessMatcher, TwoMapsOneMatch) {
   using namespace matchers;
 
-  auto ctx = isl::ctx(isl_ctx_alloc());
+  auto ctx = ScopedCtx();
   auto ps = makePlaceholderSet(ctx);
 
   auto umap = isl::union_map(
       ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=j and y=i}");
   auto matches = match(umap, ps);
   EXPECT_EQ(matches.size(), 1);
-
-  isl_ctx_free(ctx.release());
 }
 
 static matchers::PlaceholderSet
@@ -124,25 +121,21 @@ makeSameGroupSameFoldPlaceholderSet(isl::ctx ctx) {
 TEST(AccessMatcher, FoldDiagonalAccess) {
   using namespace matchers;
 
-  auto ctx = isl::ctx(isl_ctx_alloc());
+  auto ctx = ScopedCtx();
   auto ps = makeSameGroupSameFoldPlaceholderSet(ctx);
   auto umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=i and b=i}");
   auto matches = match(umap, ps);
   EXPECT_EQ(matches.size(), 1);
-
-  isl_ctx_free(ctx.release());
 }
 
 TEST(AccessMatcher, FoldNonDiagonalAccess) {
   using namespace matchers;
 
-  auto ctx = isl::ctx(isl_ctx_alloc());
+  auto ctx = ScopedCtx();
   auto ps = makeSameGroupSameFoldPlaceholderSet(ctx);
   auto umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=i and b=j}");
   auto matches = match(umap, ps);
   EXPECT_EQ(matches.size(), 0);
-
-  isl_ctx_free(ctx.release());
 }
 
 struct NamedPlaceholder {
@@ -235,7 +228,7 @@ static matchers::PlaceholderSet makePS(Args... args) {
 TEST(AccessMatcher, FoldAcrossGroupsSame) {
   using namespace matchers;
 
-  auto ctx = isl::ctx(isl_ctx_alloc());
+  auto ctx = ScopedCtx();
   auto _1 = placeholder(ctx);
   auto _2 = placeholder(ctx);
   auto ps = makePS(access(dim(0, 2 * _2), dim(1, _1)), access(dim(1, _1)));
@@ -244,14 +237,12 @@ TEST(AccessMatcher, FoldAcrossGroupsSame) {
   auto matches = match(umap, ps);
   // Expect to have a match because b=i and y=i are properly folded.
   EXPECT_EQ(matches.size(), 1);
-
-  isl_ctx_free(ctx.release());
 }
 
 TEST(AccessMatcher, FoldAcrossGroupsDifferent) {
   using namespace matchers;
 
-  auto ctx = isl::ctx(isl_ctx_alloc());
+  auto ctx = ScopedCtx();
   auto ps = makeTwoGroupPlaceholderSet(ctx);
   // Rewrite two-group placeholder set to have the same fold for p1 and p3.
   ps.placeholderFolds_[2] = 0;
@@ -261,14 +252,12 @@ TEST(AccessMatcher, FoldAcrossGroupsDifferent) {
   auto matches = match(umap, ps);
   // Expect not to have a match because b=i and y=j are not properly folded.
   EXPECT_EQ(matches.size(), 0);
-
-  isl_ctx_free(ctx.release());
 }
 
 TEST(AccessMatcher, PlaceholderWithConstants) {
   using namespace matchers;
 
-  auto ctx = isl::ctx(isl_ctx_alloc());
+  auto ctx = ScopedCtx();
   auto _1 = placeholder(ctx);
   auto _2 = placeholder(ctx);
   auto umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=2*j+1 and b=i+42}");
@@ -277,27 +266,24 @@ TEST(AccessMatcher, PlaceholderWithConstants) {
   EXPECT_EQ(matches.size(), 1);
   umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=2*j+1 and b=i+43}");
   EXPECT_EQ(match(umap, ps).size(), 0);
-
-  isl_ctx_free(ctx.release());
 }
 
 TEST(AccessMatcher, PlaceholderWithConstantsNoMatch) {
   using namespace matchers;
 
-  auto ctx = isl::ctx(isl_ctx_alloc());
+  auto ctx = ScopedCtx();
   auto _1 = placeholder(ctx);
   auto _2 = placeholder(ctx);
   auto umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=2*j+1 and b=i+42}");
   auto ps = makePS(access(dim(0, 2 * _1 + 1), dim(1, _2)));
   auto matches = match(umap, ps);
   EXPECT_EQ(matches.size(), 0);
-
-  isl_ctx_free(ctx.release());
 }
 
 TEST(AccessMatcher, Stencil) {
   using namespace matchers;
-  auto ctx = isl::ctx(isl_ctx_alloc());
+
+  auto ctx = ScopedCtx();
   auto scop = Parser("inputs/stencil.c").getScop();
   ASSERT_FALSE(scop.schedule.is_null());
 
@@ -316,8 +302,6 @@ TEST(AccessMatcher, Stencil) {
   auto psWrites = makePS(access(dim(0, _1)));
   EXPECT_EQ(match(reads, psReads).size(), 1);
   EXPECT_EQ(match(writes, psWrites).size(), 1);
-
-  isl_ctx_free(ctx.release());
 }
 
 int main(int argc, char **argv) {
