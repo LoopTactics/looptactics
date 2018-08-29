@@ -49,6 +49,17 @@ private:
   static thread_local size_t nextId_;
 };
 
+inline Placeholder operator*(int i, Placeholder p) {
+  p.coefficient_ = p.coefficient_.mul(isl::val(p.coefficient_.get_ctx(), i));
+  return p;
+}
+
+inline Placeholder operator+(Placeholder p, int i) {
+  p.constant_ = p.constant_.add(isl::val(p.constant_.get_ctx(), i));
+  return p;
+}
+
+
 class PlaceholderSet {
 public:
   std::vector<Placeholder> placeholders_;

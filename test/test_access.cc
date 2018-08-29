@@ -12,16 +12,6 @@ static Placeholder dim(int pos, Placeholder p) {
   return p;
 }
 
-Placeholder operator*(int i, Placeholder p) {
-  p.coefficient_ = p.coefficient_.mul(isl::val(p.coefficient_.get_ctx(), i));
-  return p;
-}
-
-Placeholder operator+(Placeholder p, int i) {
-  p.constant_ = p.constant_.add(isl::val(p.constant_.get_ctx(), i));
-  return p;
-}
-
 using PlaceholderList = std::vector<Placeholder>;
 
 template <typename... Args> static PlaceholderList access(Args... args) {
