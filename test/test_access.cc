@@ -5,49 +5,28 @@
 #include "gtest/gtest.h"
 
 using util::ScopedCtx;
+using namespace matchers;
 
-struct NamedPlaceholder {
-  matchers::Placeholder p;
-  std::string name;
-};
-
-NamedPlaceholder placeholder(isl::ctx ctx, const std::string n) {
-  NamedPlaceholder result;
-  result.p.coefficient_ = isl::val::one(ctx);
-  result.p.constant_ = isl::val::zero(ctx);
-  result.p.outDimPos_ = -1;
-  result.name = n;
-  return result;
+static Placeholder dim(int pos, Placeholder p) {
+  p.outDimPos_ = pos;
+  return p;
 }
 
-NamedPlaceholder placeholder(isl::ctx ctx) {
-  static thread_local size_t counter = 0;
-  return placeholder(ctx, std::to_string(counter++));
+Placeholder operator*(int i, Placeholder p) {
+  p.coefficient_ = p.coefficient_.mul(isl::val(p.coefficient_.get_ctx(), i));
+  return p;
 }
 
-static NamedPlaceholder dim(int pos, NamedPlaceholder np) {
-  np.p.outDimPos_ = pos;
-  return np;
+Placeholder operator+(Placeholder p, int i) {
+  p.constant_ = p.constant_.add(isl::val(p.constant_.get_ctx(), i));
+  return p;
 }
 
-NamedPlaceholder operator*(int i, NamedPlaceholder np) {
-  // FIXME: assuming val is always initialized...
-  np.p.coefficient_ =
-      np.p.coefficient_.mul(isl::val(np.p.coefficient_.get_ctx(), i));
-  return np;
-}
+using PlaceholderList = std::vector<Placeholder>;
 
-NamedPlaceholder operator+(NamedPlaceholder np, int i) {
-  // FIXME: assuming val is always initialized...
-  np.p.constant_ = np.p.constant_.add(isl::val(np.p.constant_.get_ctx(), i));
-  return np;
-}
-
-using NamedPlaceholderList = std::vector<NamedPlaceholder>;
-
-template <typename... Args> static NamedPlaceholderList access(Args... args) {
+template <typename... Args> static PlaceholderList access(Args... args) {
   static_assert(std::is_same<typename std::common_type<Args...>::type,
-                             NamedPlaceholder>::value,
+                             Placeholder>::value,
                 "accesses can only be constructed from named placeholders");
 
   return {args...};
@@ -57,31 +36,30 @@ template <typename... Args>
 static matchers::PlaceholderSet makePS(Args... args) {
   static_assert(
       std::is_same<typename std::common_type<Args...>::type,
-                   NamedPlaceholderList>::value,
+                   PlaceholderList>::value,
       "can only make PlaceholderSet from lists of named placeholders");
 
   using namespace matchers;
 
-  std::vector<NamedPlaceholderList> placeholderLists = {args...};
-  std::vector<std::pair<std::string, size_t>> knownNames;
+  std::vector<PlaceholderList> placeholderLists = {args...};
+  std::vector<std::pair<size_t, size_t>> knownIds;
   PlaceholderSet ps;
-  for (const auto &npl : placeholderLists) {
-    if (npl.empty()) {
+  for (const auto &pl : placeholderLists) {
+    if (pl.empty()) {
       continue;
     }
 
     size_t index = ps.placeholders_.size();
     ps.placeholderGroups_.emplace_back();
-    for (const auto &np : npl) {
-      ps.placeholders_.push_back(np.p);
+    for (const auto &p : pl) {
+      ps.placeholders_.push_back(p);
       ps.placeholderGroups_.back().push_back(index);
-      auto namePos =
-          std::find_if(knownNames.begin(), knownNames.end(),
-                       [np](const std::pair<std::string, size_t> &pair) {
-                         return pair.first == np.name;
-                       });
-      if (namePos == knownNames.end()) {
-        knownNames.emplace_back(np.name, index);
+      auto namePos = std::find_if(knownIds.begin(), knownIds.end(),
+                                  [p](const std::pair<size_t, size_t> &pair) {
+                                    return pair.first == p.id_;
+                                  });
+      if (namePos == knownIds.end()) {
+        knownIds.emplace_back(p.id_, index);
         ps.placeholderFolds_.emplace_back(index);
       } else {
         ps.placeholderFolds_.emplace_back(namePos->second);
@@ -96,7 +74,8 @@ static matchers::PlaceholderSet makePS(Args... args) {
 static matchers::PlaceholderSet makePlaceholderSet(isl::ctx ctx) {
   using namespace matchers;
 
-  Placeholder p1, p2;
+  Placeholder p1(ctx);
+  Placeholder p2(ctx);
   p1.coefficient_ = isl::val(ctx, 1);
   p2.coefficient_ = isl::val(ctx, 2);
   p1.constant_ = isl::val::zero(ctx);
@@ -136,7 +115,7 @@ static matchers::PlaceholderSet makeTwoGroupPlaceholderSet(isl::ctx ctx) {
   auto ps = makePlaceholderSet(ctx);
 
   // Make this similar to p1.
-  Placeholder p3;
+  Placeholder p3(ctx);
   p3.coefficient_ = isl::val(ctx, 1);
   p3.constant_ = isl::val::zero(ctx);
   p3.outDimPos_ = 1;
@@ -157,8 +136,8 @@ TEST(AccessMatcher, TwoGroups) {
   auto ps = makeTwoGroupPlaceholderSet(ctx);
   auto umap = isl::union_map(
       ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=42*j and y=i}");
-  auto _1 = placeholder(ctx);
-  auto _2 = placeholder(ctx);
+  auto _1 = Placeholder(ctx);
+  auto _2 = Placeholder(ctx);
   auto matches = match(
       umap, makePS(access(dim(0, 2 * _2), dim(1, _1)), access(dim(1, _1))));
   // Only one match possible: anonymous space to p1,p2, "A" space to p3.
@@ -168,7 +147,7 @@ TEST(AccessMatcher, TwoGroups) {
   // match them (p2 does not match the "A" space).
   EXPECT_EQ(matches.size(), 1);
 
-  auto _3 = placeholder(ctx);
+  auto _3 = Placeholder(ctx);
   matches = match(
       umap, makePS(access(dim(0, 2 * _2), dim(1, _1)), access(dim(1, _3))));
   // No matches possible because _3 cannot be assigned the same candidate as _1.
@@ -191,7 +170,8 @@ static matchers::PlaceholderSet
 makeSameGroupSameFoldPlaceholderSet(isl::ctx ctx) {
   using namespace matchers;
 
-  Placeholder p1, p2;
+  Placeholder p1(ctx);
+  Placeholder p2(ctx);
   p1.coefficient_ = isl::val(ctx, 1);
   p2.coefficient_ = isl::val(ctx, 1);
   p1.constant_ = isl::val::zero(ctx);
@@ -238,8 +218,8 @@ TEST(AccessMatcher, FoldAcrossGroupsSame) {
   using namespace matchers;
 
   auto ctx = ScopedCtx();
-  auto _1 = placeholder(ctx);
-  auto _2 = placeholder(ctx);
+  auto _1 = Placeholder(ctx);
+  auto _2 = Placeholder(ctx);
   auto ps = makePS(access(dim(0, 2 * _2), dim(1, _1)), access(dim(1, _1)));
   auto umap = isl::union_map(
       ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=j and y=i}");
@@ -267,8 +247,8 @@ TEST(AccessMatcher, PlaceholderWithConstants) {
   using namespace matchers;
 
   auto ctx = ScopedCtx();
-  auto _1 = placeholder(ctx);
-  auto _2 = placeholder(ctx);
+  auto _1 = Placeholder(ctx);
+  auto _2 = Placeholder(ctx);
   auto umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=2*j+1 and b=i+42}");
   auto ps = makePS(access(dim(0, 2 * _1 + 1), dim(1, _2 + 42)));
   auto matches = match(umap, ps);
@@ -281,8 +261,8 @@ TEST(AccessMatcher, PlaceholderWithConstantsNoMatch) {
   using namespace matchers;
 
   auto ctx = ScopedCtx();
-  auto _1 = placeholder(ctx);
-  auto _2 = placeholder(ctx);
+  auto _1 = Placeholder(ctx);
+  auto _2 = Placeholder(ctx);
   auto umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=2*j+1 and b=i+42}");
   auto ps = makePS(access(dim(0, 2 * _1 + 1), dim(1, _2)));
   auto matches = match(umap, ps);
@@ -305,7 +285,7 @@ TEST(AccessMatcher, Stencil) {
   auto writes = scop.mustWrites.curry().apply_domain(schedule);
 
   // Note that placeholders are _not_ reused between different calls to makePS.
-  auto _1 = placeholder(ctx);
+  auto _1 = Placeholder(ctx);
   auto psReads = makePS(access(dim(0, _1 + (-1))), access(dim(0, _1)),
                         access(dim(0, _1 + 1)));
   auto psWrites = makePS(access(dim(0, _1)));

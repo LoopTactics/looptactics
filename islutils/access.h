@@ -34,10 +34,19 @@ public:
 
 class Placeholder {
 public:
+  explicit Placeholder(isl::ctx ctx)
+      : coefficient_(isl::val::one(ctx)), constant_(isl::val::zero(ctx)),
+        outDimPos_(-1), candidates_({}), id_(nextId_++) {}
+
   isl::val coefficient_;
   isl::val constant_;
   int outDimPos_;
   std::vector<DimCandidate> candidates_;
+
+  const size_t id_;
+
+private:
+  static thread_local size_t nextId_;
 };
 
 class PlaceholderSet {
