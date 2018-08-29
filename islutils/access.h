@@ -179,15 +179,29 @@ template <typename... Args> PlaceholderSet allOf(Args... args) {
   return ps;
 }
 
-
 class Match {
 public:
-  // Not the same semantic as the set of placeholders.
-  std::vector<std::vector<DimCandidate>> matches_;
+  Match(const PlaceholderSet &ps, const std::vector<DimCandidate> &combination);
+
+  DimCandidate operator[](const UnpositionedPlaceholder &pl) const {
+    auto result =
+        std::find_if(placeholderValues_.begin(), placeholderValues_.end(),
+                     [pl](const std::pair<size_t, DimCandidate> &kvp) {
+                       return kvp.first == pl.id_;
+                     });
+    if (result == placeholderValues_.end()) {
+      ISLUTILS_DIE("no match for the placeholder although matches found");
+    }
+    return result->second;
+  }
+
+private:
+  std::vector<std::pair<size_t, DimCandidate>> placeholderValues_;
 };
 
-std::vector<std::vector<DimCandidate>> match(isl::union_map access,
-                                             PlaceholderSet ps);
+using Matches = std::vector<Match>;
+
+Matches match(isl::union_map access, PlaceholderSet ps);
 
 } // namespace matchers
 

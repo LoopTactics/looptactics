@@ -111,10 +111,22 @@ groupsAreProperlyFormed(const std::vector<DimCandidate> &combination,
   return true;
 }
 
+Match::Match(const PlaceholderSet &ps,
+             const std::vector<DimCandidate> &combination) {
+  if (ps.placeholders_.size() != combination.size()) {
+    ISLUTILS_DIE("expected the same number of placeholders and candidates");
+  }
+
+  size_t idx = 0;
+  for (const auto &candidate : combination) {
+    placeholderValues_.emplace_back(ps.placeholders_[idx++].id_, candidate);
+  }
+}
+
 static void recursivelyCheckCombinations(
     const PlaceholderSet &ps, std::vector<DimCandidate> partialCombination,
     std::function<bool(const std::vector<DimCandidate> &)> filter,
-    std::vector<std::vector<DimCandidate>> &suitableCandidates) {
+    Matches &suitableCandidates) {
   if (!filter(partialCombination)) {
     return;
   }
@@ -122,7 +134,7 @@ static void recursivelyCheckCombinations(
   // At this point, the partialCombination is full and has been checked to pass
   // the filter.
   if (partialCombination.size() == ps.placeholders_.size()) {
-    suitableCandidates.push_back(partialCombination);
+    suitableCandidates.emplace_back(ps, partialCombination);
     return;
   }
 
@@ -135,16 +147,15 @@ static void recursivelyCheckCombinations(
   }
 }
 
-static std::vector<std::vector<DimCandidate>> suitableCombinations(
+static Matches suitableCombinations(
     const PlaceholderSet &ps,
     std::function<bool(const std::vector<DimCandidate> &)> filter) {
-  std::vector<std::vector<DimCandidate>> result;
+  Matches result;
   recursivelyCheckCombinations(ps, {}, filter, result);
   return result;
 }
 
-std::vector<std::vector<DimCandidate>> match(isl::union_map access,
-                                             PlaceholderSet ps) {
+Matches match(isl::union_map access, PlaceholderSet ps) {
   std::vector<isl::map> accesses;
   access.foreach_map([&accesses](isl::map m) { accesses.push_back(m); });
 

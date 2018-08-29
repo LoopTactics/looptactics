@@ -57,6 +57,32 @@ TEST(AccessMatcher, PositionalArguments) {
   EXPECT_EQ(matches.size(), 2);
 }
 
+TEST(AccessMatcher, MatchResults) {
+  using namespace matchers;
+
+  auto ctx = ScopedCtx();
+  auto umap = isl::union_map(ctx, "{[i,j]->A[a,b]: a=i and b=j;"
+                                  " [i,j]->B[a,b]: a=j and b=i;"
+                                  " [i,j]->C[a,b]: a=i and b=j}");
+
+  auto _1 = placeholder(ctx);
+  auto _2 = placeholder(ctx);
+  auto matches = match(umap, allOf(access(_1, _2)));
+  ASSERT_EQ(matches.size(), 3);
+
+  // Check that we can insect the result using placeholder objects.
+  for (const auto &m : matches) {
+    EXPECT_FALSE(isl::union_map(m[_1].candidateMap_).is_empty());
+    EXPECT_TRUE(isl::union_map(m[_1].candidateMap_).is_subset(umap));
+    EXPECT_FALSE(isl::union_map(m[_2].candidateMap_).is_empty());
+    EXPECT_TRUE(isl::union_map(m[_2].candidateMap_).is_subset(umap));
+
+    // Check that we got the matching right.
+    EXPECT_TRUE((m[_1].inputDimPos_ == 0 && m[_2].inputDimPos_ == 1) ^
+                (m[_1].inputDimPos_ == 1 && m[_2].inputDimPos_ == 0));
+  }
+}
+
 static matchers::PlaceholderSet makeTwoGroupPlaceholderSet(isl::ctx ctx) {
   using namespace matchers;
 
