@@ -7,6 +7,7 @@
 #include <functional>
 #include <vector>
 
+#include "islutils/die.h"
 #include "islutils/operators.h"
 
 namespace matchers {
