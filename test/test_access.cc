@@ -9,12 +9,32 @@ using namespace matchers;
 
 using PlaceholderList = std::vector<Placeholder>;
 
-template <typename... Args> static PlaceholderList access(Args... args) {
-  static_assert(std::is_same<typename std::common_type<Args...>::type,
-                             Placeholder>::value,
-                "accesses can only be constructed from placeholders");
+template <typename Arg, typename Arg0, typename... Args>
+struct all_are
+    : public std::integral_constant<bool, std::is_same<Arg, Arg0>::value &&
+                                              all_are<Arg, Args...>::value> {};
 
+template <typename Arg, typename Arg0>
+struct all_are<Arg, Arg0>
+    : public std::integral_constant<bool, std::is_same<Arg, Arg0>::value> {};
+
+template <typename... Args>
+typename std::enable_if<all_are<Placeholder, Args...>::value,
+                        PlaceholderList>::type
+access(Args... args) {
   return {args...};
+}
+
+template <typename... Args>
+typename std::enable_if<all_are<UnpositionedPlaceholder, Args...>::value,
+                        PlaceholderList>::type
+access(Args... args) {
+  PlaceholderList result;
+  int pos = 0;
+  for (const auto &arg : {args...}) {
+    result.emplace_back(arg, pos++);
+  }
+  return result;
 }
 
 template <typename... Args>
@@ -88,6 +108,20 @@ TEST(AccessMatcher, TwoMapsTwoMatches) {
 
   // There are 2 possible matches: the first and the second map of the union.
   auto matches = match(umap, ps);
+  EXPECT_EQ(matches.size(), 2);
+}
+
+TEST(AccessMatcher, PositionalArguments) {
+  using namespace matchers;
+
+  auto ctx = ScopedCtx();
+  auto umap = isl::union_map(
+      ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=2*j and y=i}");
+
+  auto _1 = placeholder(ctx);
+  auto _2 = placeholder(ctx);
+  auto matches = match(umap, makePS(access(2 * _1, _2)));
+  // There are 2 possible matches: the first and the second map of the union.
   EXPECT_EQ(matches.size(), 2);
 }
 
