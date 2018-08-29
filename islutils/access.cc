@@ -78,7 +78,7 @@ hasNoDuplicateAssignments(const std::vector<DimCandidate> &combination,
           continue;
         }
       }
-      if (combination.at(i) == combination.at(j)) {
+      if (combination.at(i).isEqualModuloMap(combination.at(j))) {
         return false;
       }
     }

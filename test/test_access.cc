@@ -6,138 +6,6 @@
 
 using util::ScopedCtx;
 
-static matchers::PlaceholderSet makePlaceholderSet(isl::ctx ctx) {
-  using namespace matchers;
-
-  Placeholder p1, p2;
-  p1.coefficient_ = isl::val(ctx, 1);
-  p2.coefficient_ = isl::val(ctx, 2);
-  p1.constant_ = isl::val::zero(ctx);
-  p2.constant_ = isl::val::zero(ctx);
-  p1.outDimPos_ = 1;
-  p2.outDimPos_ = 0;
-  PlaceholderSet ps;
-  ps.placeholders_.push_back(p1);
-  ps.placeholders_.push_back(p2);
-  ps.placeholderFolds_.push_back(0);
-  ps.placeholderFolds_.push_back(1);
-
-  // Both placeholders must appear in the same relation.
-  ps.placeholderGroups_.emplace_back();
-  ps.placeholderGroups_.back().push_back(0);
-  ps.placeholderGroups_.back().push_back(1);
-
-  return ps;
-}
-
-TEST(AccessMatcher, TwoMapsTwoMatches) {
-  using namespace matchers;
-
-  auto ctx = ScopedCtx();
-  auto ps = makePlaceholderSet(ctx);
-  auto umap = isl::union_map(
-      ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=2*j and y=i}");
-
-  // There are 2 possible matches: the first and the second map of the union.
-  auto matches = match(umap, ps);
-  EXPECT_EQ(matches.size(), 2);
-}
-
-static matchers::PlaceholderSet makeTwoGroupPlaceholderSet(isl::ctx ctx) {
-  using namespace matchers;
-
-  auto ps = makePlaceholderSet(ctx);
-
-  // Make this similar to p1.
-  Placeholder p3;
-  p3.coefficient_ = isl::val(ctx, 1);
-  p3.constant_ = isl::val::zero(ctx);
-  p3.outDimPos_ = 1;
-  ps.placeholders_.push_back(p3);
-  ps.placeholderFolds_.push_back(2);
-
-  // Create a new group for p3.
-  ps.placeholderGroups_.emplace_back();
-  ps.placeholderGroups_.back().push_back(2);
-
-  return ps;
-}
-
-TEST(AccessMatcher, TwoGroups) {
-  using namespace matchers;
-
-  auto ctx = ScopedCtx();
-  auto ps = makeTwoGroupPlaceholderSet(ctx);
-  auto umap = isl::union_map(
-      ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=42*j and y=i}");
-  auto matches = match(umap, ps);
-  // Only one match possible: anonymous space to p1,p2, "A" space to p3.
-  // Because p3 and p1 belong to different groups, they cannot both match the
-  // anonymous space.
-  // Because p1 and p2 belong to the same group, only the anonymous space can
-  // match them (p2 does not match the "A" space).
-  EXPECT_EQ(matches.size(), 1);
-}
-
-TEST(AccessMatcher, TwoMapsOneMatch) {
-  using namespace matchers;
-
-  auto ctx = ScopedCtx();
-  auto ps = makePlaceholderSet(ctx);
-
-  auto umap = isl::union_map(
-      ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=j and y=i}");
-  auto matches = match(umap, ps);
-  EXPECT_EQ(matches.size(), 1);
-}
-
-static matchers::PlaceholderSet
-makeSameGroupSameFoldPlaceholderSet(isl::ctx ctx) {
-  using namespace matchers;
-
-  Placeholder p1, p2;
-  p1.coefficient_ = isl::val(ctx, 1);
-  p2.coefficient_ = isl::val(ctx, 1);
-  p1.constant_ = isl::val::zero(ctx);
-  p2.constant_ = isl::val::zero(ctx);
-  p1.outDimPos_ = 1;
-  p2.outDimPos_ = 0;
-  PlaceholderSet ps;
-  ps.placeholders_.push_back(p1);
-  ps.placeholders_.push_back(p2);
-
-  // Placeholders belong to the same fold.
-  ps.placeholderFolds_.push_back(0);
-  ps.placeholderFolds_.push_back(0);
-
-  // Both placeholders must appear in the same relation.
-  ps.placeholderGroups_.emplace_back();
-  ps.placeholderGroups_.back().push_back(0);
-  ps.placeholderGroups_.back().push_back(1);
-
-  return ps;
-}
-
-TEST(AccessMatcher, FoldDiagonalAccess) {
-  using namespace matchers;
-
-  auto ctx = ScopedCtx();
-  auto ps = makeSameGroupSameFoldPlaceholderSet(ctx);
-  auto umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=i and b=i}");
-  auto matches = match(umap, ps);
-  EXPECT_EQ(matches.size(), 1);
-}
-
-TEST(AccessMatcher, FoldNonDiagonalAccess) {
-  using namespace matchers;
-
-  auto ctx = ScopedCtx();
-  auto ps = makeSameGroupSameFoldPlaceholderSet(ctx);
-  auto umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=i and b=j}");
-  auto matches = match(umap, ps);
-  EXPECT_EQ(matches.size(), 0);
-}
-
 struct NamedPlaceholder {
   matchers::Placeholder p;
   std::string name;
@@ -223,6 +91,147 @@ static matchers::PlaceholderSet makePS(Args... args) {
   }
 
   return ps;
+}
+
+static matchers::PlaceholderSet makePlaceholderSet(isl::ctx ctx) {
+  using namespace matchers;
+
+  Placeholder p1, p2;
+  p1.coefficient_ = isl::val(ctx, 1);
+  p2.coefficient_ = isl::val(ctx, 2);
+  p1.constant_ = isl::val::zero(ctx);
+  p2.constant_ = isl::val::zero(ctx);
+  p1.outDimPos_ = 1;
+  p2.outDimPos_ = 0;
+  PlaceholderSet ps;
+  ps.placeholders_.push_back(p1);
+  ps.placeholders_.push_back(p2);
+  ps.placeholderFolds_.push_back(0);
+  ps.placeholderFolds_.push_back(1);
+
+  // Both placeholders must appear in the same relation.
+  ps.placeholderGroups_.emplace_back();
+  ps.placeholderGroups_.back().push_back(0);
+  ps.placeholderGroups_.back().push_back(1);
+
+  return ps;
+}
+
+TEST(AccessMatcher, TwoMapsTwoMatches) {
+  using namespace matchers;
+
+  auto ctx = ScopedCtx();
+  auto ps = makePlaceholderSet(ctx);
+  auto umap = isl::union_map(
+      ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=2*j and y=i}");
+
+  // There are 2 possible matches: the first and the second map of the union.
+  auto matches = match(umap, ps);
+  EXPECT_EQ(matches.size(), 2);
+}
+
+static matchers::PlaceholderSet makeTwoGroupPlaceholderSet(isl::ctx ctx) {
+  using namespace matchers;
+
+  auto ps = makePlaceholderSet(ctx);
+
+  // Make this similar to p1.
+  Placeholder p3;
+  p3.coefficient_ = isl::val(ctx, 1);
+  p3.constant_ = isl::val::zero(ctx);
+  p3.outDimPos_ = 1;
+  ps.placeholders_.push_back(p3);
+  ps.placeholderFolds_.push_back(2);
+
+  // Create a new group for p3.
+  ps.placeholderGroups_.emplace_back();
+  ps.placeholderGroups_.back().push_back(2);
+
+  return ps;
+}
+
+TEST(AccessMatcher, TwoGroups) {
+  using namespace matchers;
+
+  auto ctx = ScopedCtx();
+  auto ps = makeTwoGroupPlaceholderSet(ctx);
+  auto umap = isl::union_map(
+      ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=42*j and y=i}");
+  auto _1 = placeholder(ctx);
+  auto _2 = placeholder(ctx);
+  auto matches = match(
+      umap, makePS(access(dim(0, 2 * _2), dim(1, _1)), access(dim(1, _1))));
+  // Only one match possible: anonymous space to p1,p2, "A" space to p3.
+  // Because p3 and p1 belong to different groups, they cannot both match the
+  // anonymous space.
+  // Because p1 and p2 belong to the same group, only the anonymous space can
+  // match them (p2 does not match the "A" space).
+  EXPECT_EQ(matches.size(), 1);
+
+  auto _3 = placeholder(ctx);
+  matches = match(
+      umap, makePS(access(dim(0, 2 * _2), dim(1, _1)), access(dim(1, _3))));
+  // No matches possible because _3 cannot be assigned the same candidate as _1.
+  EXPECT_EQ(matches.size(), 0);
+}
+
+TEST(AccessMatcher, TwoMapsOneMatch) {
+  using namespace matchers;
+
+  auto ctx = ScopedCtx();
+  auto ps = makePlaceholderSet(ctx);
+
+  auto umap = isl::union_map(
+      ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=j and y=i}");
+  auto matches = match(umap, ps);
+  EXPECT_EQ(matches.size(), 1);
+}
+
+static matchers::PlaceholderSet
+makeSameGroupSameFoldPlaceholderSet(isl::ctx ctx) {
+  using namespace matchers;
+
+  Placeholder p1, p2;
+  p1.coefficient_ = isl::val(ctx, 1);
+  p2.coefficient_ = isl::val(ctx, 1);
+  p1.constant_ = isl::val::zero(ctx);
+  p2.constant_ = isl::val::zero(ctx);
+  p1.outDimPos_ = 1;
+  p2.outDimPos_ = 0;
+  PlaceholderSet ps;
+  ps.placeholders_.push_back(p1);
+  ps.placeholders_.push_back(p2);
+
+  // Placeholders belong to the same fold.
+  ps.placeholderFolds_.push_back(0);
+  ps.placeholderFolds_.push_back(0);
+
+  // Both placeholders must appear in the same relation.
+  ps.placeholderGroups_.emplace_back();
+  ps.placeholderGroups_.back().push_back(0);
+  ps.placeholderGroups_.back().push_back(1);
+
+  return ps;
+}
+
+TEST(AccessMatcher, FoldDiagonalAccess) {
+  using namespace matchers;
+
+  auto ctx = ScopedCtx();
+  auto ps = makeSameGroupSameFoldPlaceholderSet(ctx);
+  auto umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=i and b=i}");
+  auto matches = match(umap, ps);
+  EXPECT_EQ(matches.size(), 1);
+}
+
+TEST(AccessMatcher, FoldNonDiagonalAccess) {
+  using namespace matchers;
+
+  auto ctx = ScopedCtx();
+  auto ps = makeSameGroupSameFoldPlaceholderSet(ctx);
+  auto umap = isl::union_map(ctx, "{[i,j]->[a,b]: a=i and b=j}");
+  auto matches = match(umap, ps);
+  EXPECT_EQ(matches.size(), 0);
 }
 
 TEST(AccessMatcher, FoldAcrossGroupsSame) {
