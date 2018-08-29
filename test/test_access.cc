@@ -1,5 +1,6 @@
 #include "islutils/access.h"
 #include "islutils/ctx.h"
+#include "islutils/locus.h"
 #include "islutils/parser.h"
 
 #include "gtest/gtest.h"
@@ -262,6 +263,198 @@ TEST(AccessMatcher, Stencil) {
   auto psWrites = allOf(access(dim(0, _1)));
   EXPECT_EQ(match(reads, psReads).size(), 1);
   EXPECT_EQ(match(writes, psWrites).size(), 1);
+}
+
+struct Replacement {
+  Replacement(PlaceholderList &&pattern_, PlaceholderList &&replacement_)
+      : pattern(pattern_), replacement(replacement_) {}
+
+  PlaceholderList pattern;
+  PlaceholderList replacement;
+};
+
+Replacement replace(PlaceholderList &&pattern, PlaceholderList &&replacement) {
+  return {std::move(pattern), std::move(replacement)};
+}
+
+// Calls like this do not fully make sense: different replacements for
+// essentially the same pattern.
+// makePSR(replace(access(_1, _2), access(_2, _1)),
+//         replace(access(_3, _4), access(_3, _4)))
+// They could become useful if access is further constrained to specific arrays
+// or statements/schedule points.
+//
+// Calls like this contain redundant information and should be disallowed.
+// makePSR(replace(access(_1, _2), access(_2, _1)),
+//         replace(access(_1, _2), access(_2, _1)))
+//
+// Generally, we should disallow such transformations that affect the same
+// relation more than once during the same call to transform.
+// For example, access(_1, *), access(_1, _2).
+//
+// As the first approximation, marking this as undefined behavior and ignoring.
+
+static std::vector<isl::map> listOf1DMaps(isl::map map) {
+  std::vector<isl::map> result;
+  for (int dim = map.dim(isl::dim::out); dim > 0; --dim) {
+    result.push_back(map.project_out(isl::dim::out, 1, dim - 1));
+    map = map.project_out(isl::dim::out, 0, 1);
+  }
+  return result;
+}
+
+static inline isl::space addEmptyRange(isl::space space) {
+  return space.product(space.params().set_from_params()).unwrap();
+}
+
+static isl::map mapFrom1DMaps(isl::space space,
+                              const std::vector<isl::map> &list) {
+  auto zeroSpace = addEmptyRange(space.domain());
+  auto result = isl::map::universe(zeroSpace);
+  for (const auto &m : list) {
+    result = result.flat_range_product(m);
+  }
+  result =
+      result.set_tuple_id(isl::dim::out, space.get_tuple_id(isl::dim::out));
+  return result;
+}
+
+static isl::map make1DMap(const DimCandidate &dimCandidate,
+                          const UnpositionedPlaceholder &placeholder,
+                          isl::space space) {
+  auto lhs = isl::aff::var_on_domain(isl::local_space(space.domain()),
+                                     isl::dim::set, dimCandidate.inputDimPos_);
+  lhs = lhs.scale(placeholder.coefficient_)
+            .add_constant_val(placeholder.constant_);
+  auto rhs = isl::aff::var_on_domain(isl::local_space(space.range()),
+                                     isl::dim::set, 0);
+  using map_maker::operator==;
+  return lhs == rhs;
+}
+
+template <typename... Args>
+static isl::map transformOneMap(isl::map map, const Match &oneMatch,
+                                Args... args) {
+  static_assert(std::is_same<typename std::common_type<Args...>::type,
+                             Replacement>::value,
+                "");
+
+  isl::map result;
+  for (const auto &rep : {args...}) {
+    // separability of matches is important!
+    // if we match here something that we would not have matched with the whole
+    // set, it's bad!  But here we know that the map has already matched with
+    // one of the groups in the set, we just don't know which one.  If it
+    // matches two groups, this means the transformation would happen twice,
+    // which we expicitly disallow.
+    if (match(isl::union_map(map), allOf(rep.pattern)).empty()) {
+      continue;
+    }
+    if (!result.is_null()) {
+      ISLUTILS_DIE("one relation matched multiple patterns\n"
+                   "the transformation is undefined");
+    }
+    // Actual transformation.
+    if (map.dim(isl::dim::out) == 0) {
+      result = map;
+      continue;
+    }
+    auto list = listOf1DMaps(map);
+    auto space1D =
+        addEmptyRange(map.get_space().domain()).add_dims(isl::dim::out, 1);
+    for (const auto &plh : rep.replacement) {
+      list[plh.outDimPos_] = make1DMap(oneMatch[plh], plh, space1D);
+    }
+    result = mapFrom1DMaps(map.get_space(), list);
+  }
+  return result;
+}
+
+template <typename... Args>
+isl::union_map findAndReplace(isl::union_map umap, Args... args) {
+  static_assert(std::is_same<typename std::common_type<Args...>::type,
+                             Replacement>::value,
+                "");
+
+  // make a vector of maps
+  // for each match,
+  //   find all corresponding maps,
+  //     if not found, the map was deleted already meaning there was an attempt
+  //     of double transformation
+  //   remove them from vector,
+  //   transform them and
+  //   add them to the resulting vector
+  // finally, copy all the remaining original maps as is into result
+
+  std::vector<isl::map> originalMaps, transformedMaps;
+  umap.foreach_map([&originalMaps](isl::map m) { originalMaps.push_back(m); });
+
+  auto getPattern = [](const Replacement &replacement) {
+    return replacement.pattern;
+  };
+
+  auto ps = allOf(getPattern(args)...);
+  auto matches = match(umap, ps);
+
+  for (const auto &m : matches) {
+    std::vector<isl::map> toTransform;
+    for (const auto &plh : ps.placeholders_) {
+      auto candidate = m[plh].candidateMap_;
+      auto found = std::find_if(
+          toTransform.begin(), toTransform.end(),
+          [candidate](isl::map map) { return map.is_equal(candidate); });
+      if (found != toTransform.end()) {
+        continue;
+      }
+      toTransform.push_back(candidate);
+    }
+
+    for (const auto &candidate : toTransform) {
+      auto found = std::find_if(
+          originalMaps.begin(), originalMaps.end(),
+          [candidate](isl::map map) { return map.is_equal(candidate); });
+      if (found == originalMaps.end()) {
+        ISLUTILS_DIE("could not find the matched map\n"
+                     "this typically means a map was matched more than once\n"
+                     "in which case the transformation is undefined");
+        continue;
+      }
+      originalMaps.erase(found);
+
+      auto r = transformOneMap(candidate, m, args...);
+      transformedMaps.push_back(r);
+    }
+  }
+
+  for (const auto &map : originalMaps) {
+    transformedMaps.push_back(map);
+  }
+
+  if (transformedMaps.empty()) {
+    return isl::union_map::empty(umap.get_space());
+  }
+  auto result = isl::union_map(transformedMaps.front());
+  for (const auto &map : transformedMaps) {
+    result = result.unite(isl::union_map(map));
+  }
+  return result;
+}
+
+TEST(AccessMatcher, ThreeIdentical) {
+  using namespace matchers;
+
+  auto ctx = ScopedCtx();
+  auto umap = isl::union_map(ctx, "{[i,j]->A[a,b]: a=i and b=j;"
+                                  " [i,j]->B[a,b]: a=j and b=i;"
+                                  " [i,j]->C[a,b]: a=i and b=j}");
+
+  auto _1 = placeholder(ctx);
+  auto _2 = placeholder(ctx);
+  auto result = findAndReplace(umap, replace(access(_1, _2), access(_2, _1)));
+  auto expected = isl::union_map(ctx, "{[i,j]->A[a,b]: a=j and b=i;"
+                                      " [i,j]->B[a,b]: a=i and b=j;"
+                                      " [i,j]->C[a,b]: a=j and b=i}");
+  EXPECT_TRUE(result.is_equal(expected));
 }
 
 int main(int argc, char **argv) {
