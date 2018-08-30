@@ -7,17 +7,17 @@
 using util::ScopedCtx;
 using namespace matchers;
 
-static matchers::PlaceholderSet<SingleInputDim>
+static matchers::PlaceholderSet<SingleInputDim, SimpleAff>
 makePlaceholderSet(isl::ctx ctx) {
   using namespace matchers;
 
-  Placeholder<SingleInputDim> p1(ctx, 1);
-  Placeholder<SingleInputDim> p2(ctx, 0);
-  p1.coefficient_ = isl::val(ctx, 1);
-  p2.coefficient_ = isl::val(ctx, 2);
-  p1.constant_ = isl::val::zero(ctx);
-  p2.constant_ = isl::val::zero(ctx);
-  PlaceholderSet<SingleInputDim> ps;
+  Placeholder<SingleInputDim, SimpleAff> p1(SimpleAff(ctx), 1);
+  Placeholder<SingleInputDim, SimpleAff> p2(SimpleAff(ctx), 0);
+  p1.pattern_.coefficient_ = isl::val(ctx, 1);
+  p2.pattern_.coefficient_ = isl::val(ctx, 2);
+  p1.pattern_.constant_ = isl::val::zero(ctx);
+  p2.pattern_.constant_ = isl::val::zero(ctx);
+  PlaceholderSet<SingleInputDim, SimpleAff> ps;
   ps.placeholders_.push_back(p1);
   ps.placeholders_.push_back(p2);
   ps.placeholderFolds_.push_back(0);
@@ -85,16 +85,16 @@ TEST(AccessMatcher, MatchResults) {
   }
 }
 
-static matchers::PlaceholderSet<SingleInputDim>
+static matchers::PlaceholderSet<SingleInputDim, SimpleAff>
 makeTwoGroupPlaceholderSet(isl::ctx ctx) {
   using namespace matchers;
 
   auto ps = makePlaceholderSet(ctx);
 
   // Make this similar to p1.
-  Placeholder<SingleInputDim> p3(ctx, 1);
-  p3.coefficient_ = isl::val(ctx, 1);
-  p3.constant_ = isl::val::zero(ctx);
+  Placeholder<SingleInputDim, SimpleAff> p3(SimpleAff(ctx), 1);
+  p3.pattern_.coefficient_ = isl::val(ctx, 1);
+  p3.pattern_.constant_ = isl::val::zero(ctx);
   ps.placeholders_.push_back(p3);
   ps.placeholderFolds_.push_back(2);
 
@@ -142,17 +142,17 @@ TEST(AccessMatcher, TwoMapsOneMatch) {
   EXPECT_EQ(matches.size(), 1);
 }
 
-static matchers::PlaceholderSet<SingleInputDim>
+static matchers::PlaceholderSet<SingleInputDim, SimpleAff>
 makeSameGroupSameFoldPlaceholderSet(isl::ctx ctx) {
   using namespace matchers;
 
-  Placeholder<SingleInputDim> p1(ctx, 1);
-  Placeholder<SingleInputDim> p2(ctx, 0);
-  p1.coefficient_ = isl::val(ctx, 1);
-  p2.coefficient_ = isl::val(ctx, 1);
-  p1.constant_ = isl::val::zero(ctx);
-  p2.constant_ = isl::val::zero(ctx);
-  PlaceholderSet<SingleInputDim> ps;
+  Placeholder<SingleInputDim, SimpleAff> p1(SimpleAff(ctx), 1);
+  Placeholder<SingleInputDim, SimpleAff> p2(SimpleAff(ctx), 0);
+  p1.pattern_.coefficient_ = isl::val(ctx, 1);
+  p2.pattern_.coefficient_ = isl::val(ctx, 1);
+  p1.pattern_.constant_ = isl::val::zero(ctx);
+  p2.pattern_.constant_ = isl::val::zero(ctx);
+  PlaceholderSet<SingleInputDim, SimpleAff> ps;
   ps.placeholders_.push_back(p1);
   ps.placeholders_.push_back(p2);
 

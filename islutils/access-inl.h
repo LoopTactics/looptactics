@@ -10,7 +10,7 @@ namespace matchers {
 
 void SingleInputDim::appendToCandidateList(
     isl::map singleOutDimMap, isl::map fullMap,
-    Placeholder<SingleInputDim> &placeholder) {
+    Placeholder<SingleInputDim, SimpleAff> &placeholder) {
   singleOutDimMap = singleOutDimMap.coalesce();
   if (!singleOutDimMap.is_single_valued()) {
     return;
@@ -35,8 +35,9 @@ void SingleInputDim::appendToCandidateList(
   auto lspace = isl::local_space(space.domain());
   for (int i = 0; i < dim; ++i) {
     auto candidateAff = isl::aff::var_on_domain(lspace, isl::dim::set, i);
-    candidateAff = candidateAff.scale(placeholder.coefficient_);
-    candidateAff = candidateAff.add_constant_val(placeholder.constant_);
+    candidateAff = candidateAff.scale(placeholder.pattern_.coefficient_);
+    candidateAff =
+        candidateAff.add_constant_val(placeholder.pattern_.constant_);
     auto candidatePwAff =
         isl::pw_aff(candidateAff).intersect_domain(pa.domain());
     if (pa.is_equal(candidatePwAff)) {
@@ -45,19 +46,20 @@ void SingleInputDim::appendToCandidateList(
   }
 }
 
-template <typename CandidatePayload>
-void appendToCandidateList(isl::map singleOutDimMap, isl::map fullMap,
-                           Placeholder<CandidatePayload> &placeholder) {
+template <typename CandidatePayload, typename PatternPayload>
+void appendToCandidateList(
+    isl::map singleOutDimMap, isl::map fullMap,
+    Placeholder<CandidatePayload, PatternPayload> &placeholder) {
   CandidatePayload::appendToCandidateList(singleOutDimMap, fullMap,
                                           placeholder);
 }
 
 // All placeholders should get different assignments, except those that belong
 // to the same fold which should get equal assignments modulo matched map.
-template <typename CandidatePayload>
+template <typename CandidatePayload, typename PatternPayload>
 bool hasNoDuplicateAssignments(
     const std::vector<DimCandidate<CandidatePayload>> &combination,
-    const PlaceholderSet<CandidatePayload> &ps) {
+    const PlaceholderSet<CandidatePayload, PatternPayload> &ps) {
   // Algorithmically not the most efficient way of finding duplicates, but
   // removes the need to include hash-tables and/or perform additional
   // allocations.
@@ -85,10 +87,10 @@ bool hasNoDuplicateAssignments(
 
 // All placeholders in a group are either not yet matched, or matched the same
 // map.  A map matched in the group is not matched in any previous group.
-template <typename CandidatePayload>
+template <typename CandidatePayload, typename PatternPayload>
 bool groupsAreProperlyFormed(
     const std::vector<DimCandidate<CandidatePayload>> &combination,
-    const PlaceholderSet<CandidatePayload> &ps) {
+    const PlaceholderSet<CandidatePayload, PatternPayload> &ps) {
   std::vector<isl::map> previouslyMatchedMaps;
   for (const auto &group : ps.placeholderGroups_) {
     isl::map matchedMap;
@@ -119,9 +121,9 @@ bool groupsAreProperlyFormed(
   return true;
 }
 
-template <typename CandidatePayload>
-Match<CandidatePayload>::Match(
-    const PlaceholderSet<CandidatePayload> &ps,
+template <typename CandidatePayload, typename PatternPayload>
+Match<CandidatePayload, PatternPayload>::Match(
+    const PlaceholderSet<CandidatePayload, PatternPayload> &ps,
     const std::vector<DimCandidate<CandidatePayload>> &combination) {
   if (ps.placeholders_.size() != combination.size()) {
     ISLUTILS_DIE("expected the same number of placeholders and candidates");
@@ -133,11 +135,12 @@ Match<CandidatePayload>::Match(
   }
 }
 
-template <typename CandidatePayload, typename FilterTy>
+template <typename CandidatePayload, typename PatternPayload, typename FilterTy>
 void recursivelyCheckCombinations(
-    const PlaceholderSet<CandidatePayload> &ps,
+    const PlaceholderSet<CandidatePayload, PatternPayload> &ps,
     std::vector<DimCandidate<CandidatePayload>> partialCombination,
-    FilterTy filter, Matches<CandidatePayload> &suitableCandidates) {
+    FilterTy filter,
+    Matches<CandidatePayload, PatternPayload> &suitableCandidates) {
   static_assert(
       std::is_same<
           decltype(filter(
@@ -165,25 +168,26 @@ void recursivelyCheckCombinations(
   }
 }
 
-template <typename CandidatePayload, typename FilterTy>
-Matches<CandidatePayload>
-suitableCombinations(const PlaceholderSet<CandidatePayload> &ps,
+template <typename CandidatePayload, typename PatternPayload, typename FilterTy>
+Matches<CandidatePayload, PatternPayload>
+suitableCombinations(const PlaceholderSet<CandidatePayload, PatternPayload> &ps,
                      FilterTy filter) {
-  Matches<CandidatePayload> result;
+  Matches<CandidatePayload, PatternPayload> result;
   recursivelyCheckCombinations(ps, {}, filter, result);
   return result;
 }
 
-template <typename CandidatePayload>
-Matches<CandidatePayload> match(isl::union_map access,
-                                PlaceholderSet<CandidatePayload> ps) {
+template <typename CandidatePayload, typename PatternPayload>
+Matches<CandidatePayload, PatternPayload>
+match(isl::union_map access,
+      PlaceholderSet<CandidatePayload, PatternPayload> ps) {
   std::vector<isl::map> accesses;
   access.foreach_map([&accesses](isl::map m) { accesses.push_back(m); });
 
   // TODO: how do we separate maps?  ref ids?
 
-  std::vector<
-      std::vector<std::reference_wrapper<Placeholder<CandidatePayload>>>>
+  std::vector<std::vector<
+      std::reference_wrapper<Placeholder<CandidatePayload, PatternPayload>>>>
       outDimPlaceholders;
   for (auto &ph : ps.placeholders_) {
     if (static_cast<size_t>(ph.outDimPos_) >= outDimPlaceholders.size()) {
@@ -235,7 +239,7 @@ Matches<CandidatePayload> match(isl::union_map access,
   // the N-element list if we know that elements of (N-1) array are unique.
   // This algorithmic optimization requires some API changes and is left for
   // future work.
-  return suitableCombinations<CandidatePayload>(
+  return suitableCombinations<CandidatePayload, PatternPayload>(
       ps, [ps](const std::vector<DimCandidate<CandidatePayload>> &candidate) {
         return hasNoDuplicateAssignments(candidate, ps) &&
                groupsAreProperlyFormed(candidate, ps);
@@ -269,34 +273,37 @@ static inline isl::map mapFrom1DMaps(isl::space space,
 
 isl::map SingleInputDim::make1DMap(
     const DimCandidate<SingleInputDim> &dimCandidate,
-    const UnpositionedPlaceholder<SingleInputDim> &placeholder,
+    const UnpositionedPlaceholder<SingleInputDim, SimpleAff> &placeholder,
     isl::space space) {
   auto lhs =
       isl::aff::var_on_domain(isl::local_space(space.domain()), isl::dim::set,
                               dimCandidate.payload_.inputDimPos_);
-  lhs = lhs.scale(placeholder.coefficient_)
-            .add_constant_val(placeholder.constant_);
+  lhs = lhs.scale(placeholder.pattern_.coefficient_)
+            .add_constant_val(placeholder.pattern_.constant_);
   auto rhs = isl::aff::var_on_domain(isl::local_space(space.range()),
                                      isl::dim::set, 0);
   using map_maker::operator==;
   return lhs == rhs;
 }
 
-template <typename CandidatePayload>
+template <typename CandidatePayload, typename PatternPayload>
 inline isl::map
 make1DMap(const DimCandidate<CandidatePayload> &dimCandidate,
-          const UnpositionedPlaceholder<CandidatePayload> &placeholder,
+          const UnpositionedPlaceholder<CandidatePayload, PatternPayload>
+              &placeholder,
           isl::space space) {
   return CandidatePayload::make1DMap(dimCandidate, placeholder, space);
 }
 
-template <typename CandidatePayload, typename... Args>
-isl::map transformOneMap(isl::map map, const Match<CandidatePayload> &oneMatch,
-                         Replacement<CandidatePayload> arg, Args... args) {
+template <typename CandidatePayload, typename PatternPayload, typename... Args>
+isl::map transformOneMap(
+    isl::map map, const Match<CandidatePayload, PatternPayload> &oneMatch,
+    Replacement<CandidatePayload, PatternPayload> arg, Args... args) {
   static_assert(
-      std::is_same<typename std::common_type<Replacement<CandidatePayload>,
-                                             Args...>::type,
-                   Replacement<CandidatePayload>>::value,
+      std::is_same<
+          typename std::common_type<
+              Replacement<CandidatePayload, PatternPayload>, Args...>::type,
+          Replacement<CandidatePayload, PatternPayload>>::value,
       "");
 
   isl::map result;
@@ -330,13 +337,15 @@ isl::map transformOneMap(isl::map map, const Match<CandidatePayload> &oneMatch,
   return result;
 }
 
-template <typename CandidatePayload, typename... Args>
+template <typename CandidatePayload, typename PatternPayload, typename... Args>
 isl::union_map findAndReplace(isl::union_map umap,
-                              Replacement<CandidatePayload> arg, Args... args) {
+                              Replacement<CandidatePayload, PatternPayload> arg,
+                              Args... args) {
   static_assert(
-      std::is_same<typename std::common_type<Replacement<CandidatePayload>,
-                                             Args...>::type,
-                   Replacement<CandidatePayload>>::value,
+      std::is_same<
+          typename std::common_type<
+              Replacement<CandidatePayload, PatternPayload>, Args...>::type,
+          Replacement<CandidatePayload, PatternPayload>>::value,
       "");
 
   // make a vector of maps
@@ -352,9 +361,10 @@ isl::union_map findAndReplace(isl::union_map umap,
   std::vector<isl::map> originalMaps, transformedMaps;
   umap.foreach_map([&originalMaps](isl::map m) { originalMaps.push_back(m); });
 
-  auto getPattern = [](const Replacement<CandidatePayload> &replacement) {
-    return replacement.pattern;
-  };
+  auto getPattern =
+      [](const Replacement<CandidatePayload, PatternPayload> &replacement) {
+        return replacement.pattern;
+      };
 
   auto ps = allOf(getPattern(arg), getPattern(args)...);
   auto matches = match(umap, ps);
@@ -384,7 +394,8 @@ isl::union_map findAndReplace(isl::union_map umap,
       }
       originalMaps.erase(found);
 
-      auto r = transformOneMap<CandidatePayload>(candidate, m, arg, args...);
+      auto r = transformOneMap<CandidatePayload, PatternPayload>(candidate, m,
+                                                                 arg, args...);
       transformedMaps.push_back(r);
     }
   }
