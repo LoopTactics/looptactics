@@ -284,6 +284,27 @@ TEST(AccessMatcher, ThreeIdentical) {
   EXPECT_TRUE(result.is_equal(expected));
 }
 
+TEST(AccessMatcher, Strides) {
+  auto ctx = ScopedCtx();
+  auto umap = isl::union_map(ctx, "{[i,j]->A[a,b]: a=42*i and b=j;"
+                                  " [i,j]->B[a,b]: a=42*i and b=2*j}");
+  EXPECT_EQ(match(umap, allOf(access(dim(1, stride(ctx, 1))))).size(), 1);
+  EXPECT_EQ(match(umap, allOf(access(dim(1, stride(ctx, 2))))).size(), 1);
+  // Stride is only implemented for the last input dim, here "j", so "a" in
+  // outputs does not change with "j" and thus has stride 0.  Therefore, no
+  // match is expected.
+  EXPECT_EQ(match(umap, allOf(access(dim(0, stride(ctx, 42))))).size(), 0);
+
+  // Here, on the contrary, "i" is the last input dimension that changes and
+  // therefore both maps are expected to match.
+  umap = isl::union_map(ctx, "{[j,i]->A[a,b]: a=42*i and b=j;"
+                             " [j,i]->B[a,b]: a=42*i and b=2*j}");
+  EXPECT_EQ(match(umap, allOf(access(dim(0, stride(ctx, 42))))).size(), 2);
+
+  umap = isl::union_map(ctx, "[N,M] -> {[i,j,k]->A[a]: a=42*i+3*j+k+N}");
+  EXPECT_EQ(match(umap, allOf(access(dim(0, stride(ctx, 1))))).size(), 1);
+}
+
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

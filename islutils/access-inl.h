@@ -46,6 +46,49 @@ void SingleInputDim::appendToCandidateList(
   }
 }
 
+isl::map mapToNext(isl::space space) {
+  using map_maker::operator==;
+  int dim = space.dim(isl::dim::set);
+
+  auto result = isl::map::universe(space.map_from_set());
+  if (dim == 0) {
+    return result;
+  }
+
+  for (int i = 0; i < dim - 1; ++i) {
+    auto aff =
+        isl::aff::var_on_domain(isl::local_space(space), isl::dim::set, i);
+    result = result.intersect(aff == aff);
+  }
+  auto aff =
+      isl::aff::var_on_domain(isl::local_space(space), isl::dim::set, dim - 1);
+  auto next = aff.add_constant_si(1);
+  return result.intersect(next == aff);
+}
+
+void StrideCandidate::appendToCandidateList(
+    isl::map singleOutDimMap, isl::map fullMap,
+    UnpositionedPlaceholder<StrideCandidate, StridePattern> &placeholder) {
+  singleOutDimMap = singleOutDimMap.coalesce();
+  if (!singleOutDimMap.is_single_valued()) {
+    return;
+  }
+
+  auto map = mapToNext(singleOutDimMap.get_space().domain());
+  auto delta =
+      map.apply_domain(singleOutDimMap).apply_range(singleOutDimMap).deltas();
+  // TODO: also match parametric strides
+  auto strideAff = isl::aff(isl::local_space(delta.get_space()),
+                            placeholder.pattern_.stride);
+  auto varAff = isl::aff::var_on_domain(isl::local_space(delta.get_space()),
+                                        isl::dim::set, 0);
+  using set_maker::operator==;
+
+  if (delta.is_subset(strideAff == varAff)) {
+    placeholder.candidates_.emplace_back(StrideCandidate{}, fullMap);
+  }
+}
+
 template <typename CandidatePayload, typename PatternPayload>
 void appendToCandidateList(
     isl::map singleOutDimMap, isl::map fullMap,

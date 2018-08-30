@@ -43,7 +43,7 @@ public:
 // they actually need.
 class SingleInputDim {
 public:
-  static inline void
+  static void
   appendToCandidateList(isl::map singleOutDimMap, isl::map fullMap,
                         Placeholder<SingleInputDim, SimpleAff> &placeholder);
   static inline isl::map make1DMap(
@@ -57,6 +57,27 @@ public:
 bool operator==(const SingleInputDim &left, const SingleInputDim &right) {
   return left.inputDimPos_ == right.inputDimPos_;
 }
+
+class StridePattern {
+public:
+  explicit StridePattern(isl::ctx ctx) : stride(isl::val::one(ctx)) {}
+
+  isl::val stride;
+};
+
+class StrideCandidate {
+public:
+  static inline void appendToCandidateList(
+      isl::map singleOutDimMap, isl::map fullMap,
+      UnpositionedPlaceholder<StrideCandidate, StridePattern> &placeholder);
+
+  static inline isl::map
+  make1DMap(const DimCandidate<StrideCandidate> &dimCandidate,
+            const UnpositionedPlaceholder<StrideCandidate, StridePattern>
+                &placeholder);
+
+  bool operator==(const StrideCandidate &) const { return true; }
+};
 
 // Candidates are parameterized by the type of Payload they carry.  Only one
 // type of payload is allowed within a PlaceholderSet.
@@ -123,9 +144,10 @@ placeholder(isl::ctx ctx) {
   return UnpositionedPlaceholder<SingleInputDim, SimpleAff>(SimpleAff(ctx));
 }
 
-inline Placeholder<SingleInputDim, SimpleAff>
-dim(int pos, UnpositionedPlaceholder<SingleInputDim, SimpleAff> ph) {
-  return Placeholder<SingleInputDim, SimpleAff>(ph, pos);
+template <typename CandidatePayload, typename PatternPayload>
+inline Placeholder<CandidatePayload, PatternPayload>
+dim(int pos, UnpositionedPlaceholder<CandidatePayload, PatternPayload> ph) {
+  return Placeholder<CandidatePayload, PatternPayload>(ph, pos);
 }
 
 inline UnpositionedPlaceholder<SingleInputDim, SimpleAff>
@@ -140,6 +162,16 @@ operator+(UnpositionedPlaceholder<SingleInputDim, SimpleAff> p, int i) {
   p.pattern_.constant_ =
       p.pattern_.constant_.add(isl::val(p.pattern_.constant_.get_ctx(), i));
   return p;
+}
+
+inline UnpositionedPlaceholder<StrideCandidate, StridePattern>
+stride(isl::ctx ctx, int s) {
+  StridePattern pattern(ctx);
+  pattern.stride = pattern.stride.mul_ui(std::abs(s));
+  if (s < 0) {
+    pattern.stride = pattern.stride.neg();
+  }
+  return UnpositionedPlaceholder<StrideCandidate, StridePattern>(pattern);
 }
 
 template <typename CandidatePayload, typename PatternPayload>
