@@ -12,29 +12,45 @@
 
 namespace matchers {
 
-class DimCandidate {
+// Assuming the input space of all candidates is the same (e.g., schedule
+// space), we only need to keep the position in this space.
+// TODO: we may want to bring coefficient_, constant_ and even space_ here,
+// even though they are shared across all candidates.  Optionally, we may want
+// to separate the "pattern payload" from "match payload".
+class SingleInputDim {
 public:
-  DimCandidate(int inputDimPos, isl::map candidateMap)
-      : inputDimPos_(inputDimPos), candidateMap_(candidateMap) {}
+  int inputDimPos_;
+};
+
+bool operator==(const SingleInputDim &left, const SingleInputDim &right) {
+  return left.inputDimPos_ == right.inputDimPos_;
+}
+
+// Candidates are parameterized by the type of Payload they carry.  Only one
+// type of payload is allowed within a PlaceholderSet.
+// Instances of payload must be comparable to each other.
+// TODO: provide functions to extract the payload from the access relation
+// projected onto a single output dimension.
+template <typename Payload> class DimCandidate {
+public:
+  DimCandidate(const Payload &payload, isl::map candidateMap)
+      : payload_(payload), candidateMap_(candidateMap) {}
 
   bool isEqualModuloMap(const DimCandidate &other) const {
-    return inputDimPos_ == other.inputDimPos_;
+    return payload_ == other.payload_;
   }
 
   bool operator==(const DimCandidate &other) const {
     return isEqualModuloMap(other) && candidateMap_ == other.candidateMap_;
   }
 
-  // Assuming the input space of all candidates is the same (e.g., schedule
-  // space), we only need to keep the position in this space.
-  // TODO: We may want to abstract away the candidate description together with
-  // the candidate-filling function and comparison operators.
-  int inputDimPos_;
+  Payload payload_;
 
+  // TODO: Not sure we need the entire map, or the space would suffice.
   isl::map candidateMap_;
 };
 
-class UnpositionedPlaceholder {
+template <typename CandidatePayload> class UnpositionedPlaceholder {
 public:
   explicit UnpositionedPlaceholder(isl::ctx ctx)
       : coefficient_(isl::val::one(ctx)), constant_(isl::val::zero(ctx)),
@@ -43,7 +59,7 @@ public:
 
   isl::val coefficient_;
   isl::val constant_;
-  std::vector<DimCandidate> candidates_;
+  std::vector<DimCandidate<CandidatePayload>> candidates_;
 
   const size_t id_;
 
@@ -51,35 +67,44 @@ private:
   static thread_local size_t nextId_;
 };
 
-class Placeholder : public UnpositionedPlaceholder {
+template <typename CandidatePayload>
+thread_local size_t UnpositionedPlaceholder<CandidatePayload>::nextId_ = 0;
+
+template <typename CandidatePayload>
+class Placeholder : public UnpositionedPlaceholder<CandidatePayload> {
 public:
   explicit Placeholder(isl::ctx ctx, int pos)
-      : UnpositionedPlaceholder(ctx), outDimPos_(pos) {}
-  explicit Placeholder(const UnpositionedPlaceholder &other, int pos)
-      : UnpositionedPlaceholder(other), outDimPos_(pos) {}
+      : UnpositionedPlaceholder<CandidatePayload>(ctx), outDimPos_(pos) {}
+  explicit Placeholder(const UnpositionedPlaceholder<CandidatePayload> &other,
+                       int pos)
+      : UnpositionedPlaceholder<CandidatePayload>(other), outDimPos_(pos) {}
 
   int outDimPos_;
 };
 
-inline UnpositionedPlaceholder placeholder(isl::ctx ctx) {
-  return UnpositionedPlaceholder(ctx);
+inline UnpositionedPlaceholder<SingleInputDim> placeholder(isl::ctx ctx) {
+  return UnpositionedPlaceholder<SingleInputDim>(ctx);
 }
 
-inline Placeholder dim(int pos, UnpositionedPlaceholder ph) {
-  return Placeholder(ph, pos);
+inline Placeholder<SingleInputDim>
+dim(int pos, UnpositionedPlaceholder<SingleInputDim> ph) {
+  return Placeholder<SingleInputDim>(ph, pos);
 }
 
-inline UnpositionedPlaceholder operator*(int i, UnpositionedPlaceholder p) {
+inline UnpositionedPlaceholder<SingleInputDim>
+operator*(int i, UnpositionedPlaceholder<SingleInputDim> p) {
   p.coefficient_ = p.coefficient_.mul(isl::val(p.coefficient_.get_ctx(), i));
   return p;
 }
 
-inline UnpositionedPlaceholder operator+(UnpositionedPlaceholder p, int i) {
+inline UnpositionedPlaceholder<SingleInputDim>
+operator+(UnpositionedPlaceholder<SingleInputDim> p, int i) {
   p.constant_ = p.constant_.add(isl::val(p.constant_.get_ctx(), i));
   return p;
 }
 
-using PlaceholderList = std::vector<Placeholder>;
+template <typename CandidatePayload>
+using PlaceholderList = std::vector<Placeholder<CandidatePayload>>;
 
 template <typename Arg, typename Arg0, typename... Args>
 struct all_are
@@ -90,34 +115,42 @@ template <typename Arg, typename Arg0>
 struct all_are<Arg, Arg0>
     : public std::integral_constant<bool, std::is_same<Arg, Arg0>::value> {};
 
-template <typename... Args>
-typename std::enable_if<all_are<Placeholder, Args...>::value,
-                        PlaceholderList>::type
-access(Args... args) {
-  return {args...};
+// Placeholder<CandidatePayload> is used twice in all_are to properly handle
+// the case of sizeof...(Args) == 0 (all_are is not defined for 1 argument).
+template <typename CandidatePayload, typename... Args>
+typename std::enable_if<all_are<Placeholder<CandidatePayload>,
+                                Placeholder<CandidatePayload>, Args...>::value,
+                        PlaceholderList<CandidatePayload>>::type
+access(Placeholder<CandidatePayload> arg, Args... args) {
+  return {arg, args...};
 }
 
-template <typename... Args>
-typename std::enable_if<all_are<UnpositionedPlaceholder, Args...>::value,
-                        PlaceholderList>::type
-access(Args... args) {
-  PlaceholderList result;
+template <typename CandidatePayload, typename... Args>
+typename std::enable_if<
+    all_are<UnpositionedPlaceholder<CandidatePayload>,
+            UnpositionedPlaceholder<CandidatePayload>, Args...>::value,
+    PlaceholderList<CandidatePayload>>::type
+access(UnpositionedPlaceholder<CandidatePayload> arg, Args... args) {
+  PlaceholderList<CandidatePayload> result;
   int pos = 0;
-  for (const auto &arg : {args...}) {
-    result.emplace_back(arg, pos++);
+  for (const auto &a : {arg, args...}) {
+    result.emplace_back(a, pos++);
   }
   return result;
 }
 
-class PlaceholderSet;
+template <typename CandidatePayload> class PlaceholderSet;
 
-template <typename... Args> PlaceholderSet allOf(Args... args);
+template <typename CandidatePayload, typename... Args>
+PlaceholderSet<CandidatePayload> allOf(Args... args);
 
-class PlaceholderSet {
-  template <typename... Args> friend PlaceholderSet allOf(Args... args);
+template <typename CandidatePayload> class PlaceholderSet {
+  // TODO: Check if we can friend a partial specialization
+  template <typename CPayload, typename... Args>
+  friend PlaceholderSet allOf(Args... args);
 
 public:
-  std::vector<Placeholder> placeholders_;
+  std::vector<Placeholder<CandidatePayload>> placeholders_;
 
   // Each inner vector has a set of indices of placeholders that should appear
   // together in a relation.  Different groups must correspond to different
@@ -144,14 +177,18 @@ public:
 
 /// Build an object used to match all of the access patterns provided as
 /// arguments. Individual patterns can be constructed by calling "access(...)".
-template <typename... Args> PlaceholderSet allOf(Args... args) {
-  static_assert(std::is_same<typename std::common_type<Args...>::type,
-                             PlaceholderList>::value,
-                "can only make PlaceholderSet from lists of placeholders");
+template <typename CandidatePayload, typename... Args>
+PlaceholderSet<CandidatePayload> allOf(PlaceholderList<CandidatePayload> arg,
+                                       Args... args) {
+  static_assert(all_are<PlaceholderList<CandidatePayload>,
+                        PlaceholderList<CandidatePayload>, Args...>::value,
+                "can only make PlaceholderSet from PlaceholderLists "
+                "with the same payload types");
 
-  std::vector<PlaceholderList> placeholderLists = {args...};
+  std::vector<PlaceholderList<CandidatePayload>> placeholderLists = {arg,
+                                                                     args...};
   std::vector<std::pair<size_t, size_t>> knownIds;
-  PlaceholderSet ps;
+  PlaceholderSet<CandidatePayload> ps;
   for (const auto &pl : placeholderLists) {
     if (pl.empty()) {
       continue;
@@ -179,16 +216,18 @@ template <typename... Args> PlaceholderSet allOf(Args... args) {
   return ps;
 }
 
-class Match {
+template <typename CandidatePayload> class Match {
 public:
-  Match(const PlaceholderSet &ps, const std::vector<DimCandidate> &combination);
+  Match(const PlaceholderSet<CandidatePayload> &ps,
+        const std::vector<DimCandidate<CandidatePayload>> &combination);
 
-  DimCandidate operator[](const UnpositionedPlaceholder &pl) const {
-    auto result =
-        std::find_if(placeholderValues_.begin(), placeholderValues_.end(),
-                     [pl](const std::pair<size_t, DimCandidate> &kvp) {
-                       return kvp.first == pl.id_;
-                     });
+  DimCandidate<CandidatePayload>
+  operator[](const UnpositionedPlaceholder<CandidatePayload> &pl) const {
+    auto result = std::find_if(
+        placeholderValues_.begin(), placeholderValues_.end(),
+        [pl](const std::pair<size_t, DimCandidate<CandidatePayload>> &kvp) {
+          return kvp.first == pl.id_;
+        });
     if (result == placeholderValues_.end()) {
       ISLUTILS_DIE("no match for the placeholder although matches found");
     }
@@ -196,13 +235,19 @@ public:
   }
 
 private:
-  std::vector<std::pair<size_t, DimCandidate>> placeholderValues_;
+  std::vector<std::pair<size_t, DimCandidate<CandidatePayload>>>
+      placeholderValues_;
 };
 
-using Matches = std::vector<Match>;
+template <typename CandidatePayload>
+using Matches = std::vector<Match<CandidatePayload>>;
 
-Matches match(isl::union_map access, PlaceholderSet ps);
+template <typename CandidatePayload>
+Matches<CandidatePayload> match(isl::union_map access,
+                                PlaceholderSet<CandidatePayload> ps);
 
 } // namespace matchers
+
+#include "access-inl.h"
 
 #endif // ACCESS_H

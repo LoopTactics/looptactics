@@ -8,16 +8,17 @@
 using util::ScopedCtx;
 using namespace matchers;
 
-static matchers::PlaceholderSet makePlaceholderSet(isl::ctx ctx) {
+static matchers::PlaceholderSet<SingleInputDim>
+makePlaceholderSet(isl::ctx ctx) {
   using namespace matchers;
 
-  Placeholder p1(ctx, 1);
-  Placeholder p2(ctx, 0);
+  Placeholder<SingleInputDim> p1(ctx, 1);
+  Placeholder<SingleInputDim> p2(ctx, 0);
   p1.coefficient_ = isl::val(ctx, 1);
   p2.coefficient_ = isl::val(ctx, 2);
   p1.constant_ = isl::val::zero(ctx);
   p2.constant_ = isl::val::zero(ctx);
-  PlaceholderSet ps;
+  PlaceholderSet<SingleInputDim> ps;
   ps.placeholders_.push_back(p1);
   ps.placeholders_.push_back(p2);
   ps.placeholderFolds_.push_back(0);
@@ -79,18 +80,20 @@ TEST(AccessMatcher, MatchResults) {
     EXPECT_TRUE(isl::union_map(m[_2].candidateMap_).is_subset(umap));
 
     // Check that we got the matching right.
-    EXPECT_TRUE((m[_1].inputDimPos_ == 0 && m[_2].inputDimPos_ == 1) ^
-                (m[_1].inputDimPos_ == 1 && m[_2].inputDimPos_ == 0));
+    EXPECT_TRUE(
+        (m[_1].payload_.inputDimPos_ == 0 && m[_2].payload_.inputDimPos_ == 1) ^
+        (m[_1].payload_.inputDimPos_ == 1 && m[_2].payload_.inputDimPos_ == 0));
   }
 }
 
-static matchers::PlaceholderSet makeTwoGroupPlaceholderSet(isl::ctx ctx) {
+static matchers::PlaceholderSet<SingleInputDim>
+makeTwoGroupPlaceholderSet(isl::ctx ctx) {
   using namespace matchers;
 
   auto ps = makePlaceholderSet(ctx);
 
   // Make this similar to p1.
-  Placeholder p3(ctx, 1);
+  Placeholder<SingleInputDim> p3(ctx, 1);
   p3.coefficient_ = isl::val(ctx, 1);
   p3.constant_ = isl::val::zero(ctx);
   ps.placeholders_.push_back(p3);
@@ -140,17 +143,17 @@ TEST(AccessMatcher, TwoMapsOneMatch) {
   EXPECT_EQ(matches.size(), 1);
 }
 
-static matchers::PlaceholderSet
+static matchers::PlaceholderSet<SingleInputDim>
 makeSameGroupSameFoldPlaceholderSet(isl::ctx ctx) {
   using namespace matchers;
 
-  Placeholder p1(ctx, 1);
-  Placeholder p2(ctx, 0);
+  Placeholder<SingleInputDim> p1(ctx, 1);
+  Placeholder<SingleInputDim> p2(ctx, 0);
   p1.coefficient_ = isl::val(ctx, 1);
   p2.coefficient_ = isl::val(ctx, 1);
   p1.constant_ = isl::val::zero(ctx);
   p2.constant_ = isl::val::zero(ctx);
-  PlaceholderSet ps;
+  PlaceholderSet<SingleInputDim> ps;
   ps.placeholders_.push_back(p1);
   ps.placeholders_.push_back(p2);
 
@@ -265,15 +268,19 @@ TEST(AccessMatcher, Stencil) {
   EXPECT_EQ(match(writes, psWrites).size(), 1);
 }
 
-struct Replacement {
-  Replacement(PlaceholderList &&pattern_, PlaceholderList &&replacement_)
+template <typename CandidatePayload> struct Replacement {
+  Replacement(PlaceholderList<CandidatePayload> &&pattern_,
+              PlaceholderList<CandidatePayload> &&replacement_)
       : pattern(pattern_), replacement(replacement_) {}
 
-  PlaceholderList pattern;
-  PlaceholderList replacement;
+  PlaceholderList<CandidatePayload> pattern;
+  PlaceholderList<CandidatePayload> replacement;
 };
 
-Replacement replace(PlaceholderList &&pattern, PlaceholderList &&replacement) {
+template <typename CandidatePayload>
+Replacement<CandidatePayload>
+replace(PlaceholderList<CandidatePayload> &&pattern,
+        PlaceholderList<CandidatePayload> &&replacement) {
   return {std::move(pattern), std::move(replacement)};
 }
 
@@ -319,11 +326,13 @@ static isl::map mapFrom1DMaps(isl::space space,
   return result;
 }
 
-static isl::map make1DMap(const DimCandidate &dimCandidate,
-                          const UnpositionedPlaceholder &placeholder,
-                          isl::space space) {
-  auto lhs = isl::aff::var_on_domain(isl::local_space(space.domain()),
-                                     isl::dim::set, dimCandidate.inputDimPos_);
+static isl::map
+make1DMap(const DimCandidate<SingleInputDim> &dimCandidate,
+          const UnpositionedPlaceholder<SingleInputDim> &placeholder,
+          isl::space space) {
+  auto lhs =
+      isl::aff::var_on_domain(isl::local_space(space.domain()), isl::dim::set,
+                              dimCandidate.payload_.inputDimPos_);
   lhs = lhs.scale(placeholder.coefficient_)
             .add_constant_val(placeholder.constant_);
   auto rhs = isl::aff::var_on_domain(isl::local_space(space.range()),
@@ -332,15 +341,18 @@ static isl::map make1DMap(const DimCandidate &dimCandidate,
   return lhs == rhs;
 }
 
-template <typename... Args>
-static isl::map transformOneMap(isl::map map, const Match &oneMatch,
-                                Args... args) {
-  static_assert(std::is_same<typename std::common_type<Args...>::type,
-                             Replacement>::value,
-                "");
+template <typename CandidatePayload, typename... Args>
+static isl::map
+transformOneMap(isl::map map, const Match<CandidatePayload> &oneMatch,
+                Replacement<CandidatePayload> arg, Args... args) {
+  static_assert(
+      std::is_same<typename std::common_type<Replacement<CandidatePayload>,
+                                             Args...>::type,
+                   Replacement<CandidatePayload>>::value,
+      "");
 
   isl::map result;
-  for (const auto &rep : {args...}) {
+  for (const auto &rep : {arg, args...}) {
     // separability of matches is important!
     // if we match here something that we would not have matched with the whole
     // set, it's bad!  But here we know that the map has already matched with
@@ -370,11 +382,14 @@ static isl::map transformOneMap(isl::map map, const Match &oneMatch,
   return result;
 }
 
-template <typename... Args>
-isl::union_map findAndReplace(isl::union_map umap, Args... args) {
-  static_assert(std::is_same<typename std::common_type<Args...>::type,
-                             Replacement>::value,
-                "");
+template <typename CandidatePayload, typename... Args>
+isl::union_map findAndReplace(isl::union_map umap,
+                              Replacement<CandidatePayload> arg, Args... args) {
+  static_assert(
+      std::is_same<typename std::common_type<Replacement<CandidatePayload>,
+                                             Args...>::type,
+                   Replacement<CandidatePayload>>::value,
+      "");
 
   // make a vector of maps
   // for each match,
@@ -389,11 +404,11 @@ isl::union_map findAndReplace(isl::union_map umap, Args... args) {
   std::vector<isl::map> originalMaps, transformedMaps;
   umap.foreach_map([&originalMaps](isl::map m) { originalMaps.push_back(m); });
 
-  auto getPattern = [](const Replacement &replacement) {
+  auto getPattern = [](const Replacement<CandidatePayload> &replacement) {
     return replacement.pattern;
   };
 
-  auto ps = allOf(getPattern(args)...);
+  auto ps = allOf(getPattern(arg), getPattern(args)...);
   auto matches = match(umap, ps);
 
   for (const auto &m : matches) {
@@ -421,7 +436,7 @@ isl::union_map findAndReplace(isl::union_map umap, Args... args) {
       }
       originalMaps.erase(found);
 
-      auto r = transformOneMap(candidate, m, args...);
+      auto r = transformOneMap<CandidatePayload>(candidate, m, arg, args...);
       transformedMaps.push_back(r);
     }
   }

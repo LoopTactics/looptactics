@@ -4,14 +4,10 @@
 #include <functional>
 #include <vector>
 
-#include "islutils/access.h"
-
 namespace matchers {
 
-thread_local size_t UnpositionedPlaceholder::nextId_ = 0;
-
 static void appendToCandidateList(isl::map singleOutDimMap, isl::map fullMap,
-                                  Placeholder &placeholder) {
+                                  Placeholder<SingleInputDim> &placeholder) {
   singleOutDimMap = singleOutDimMap.coalesce();
   if (!singleOutDimMap.is_single_valued()) {
     return;
@@ -41,16 +37,17 @@ static void appendToCandidateList(isl::map singleOutDimMap, isl::map fullMap,
     auto candidatePwAff =
         isl::pw_aff(candidateAff).intersect_domain(pa.domain());
     if (pa.is_equal(candidatePwAff)) {
-      placeholder.candidates_.emplace_back(i, fullMap);
+      placeholder.candidates_.emplace_back(SingleInputDim{i}, fullMap);
     }
   }
 }
 
 // All placeholders should get different assignments, except those that belong
 // to the same fold which should get equal assignments modulo matched map.
-static bool
-hasNoDuplicateAssignments(const std::vector<DimCandidate> &combination,
-                          const PlaceholderSet &ps) {
+template <typename CandidatePayload>
+bool hasNoDuplicateAssignments(
+    const std::vector<DimCandidate<CandidatePayload>> &combination,
+    const PlaceholderSet<CandidatePayload> &ps) {
   // Algorithmically not the most efficient way of finding duplicates, but
   // removes the need to include hash-tables and/or perform additional
   // allocations.
@@ -78,9 +75,10 @@ hasNoDuplicateAssignments(const std::vector<DimCandidate> &combination,
 
 // All placeholders in a group are either not yet matched, or matched the same
 // map.  A map matched in the group is not matched in any previous group.
-static bool
-groupsAreProperlyFormed(const std::vector<DimCandidate> &combination,
-                        const PlaceholderSet &ps) {
+template <typename CandidatePayload>
+bool groupsAreProperlyFormed(
+    const std::vector<DimCandidate<CandidatePayload>> &combination,
+    const PlaceholderSet<CandidatePayload> &ps) {
   std::vector<isl::map> previouslyMatchedMaps;
   for (const auto &group : ps.placeholderGroups_) {
     isl::map matchedMap;
@@ -111,8 +109,10 @@ groupsAreProperlyFormed(const std::vector<DimCandidate> &combination,
   return true;
 }
 
-Match::Match(const PlaceholderSet &ps,
-             const std::vector<DimCandidate> &combination) {
+template <typename CandidatePayload>
+Match<CandidatePayload>::Match(
+    const PlaceholderSet<CandidatePayload> &ps,
+    const std::vector<DimCandidate<CandidatePayload>> &combination) {
   if (ps.placeholders_.size() != combination.size()) {
     ISLUTILS_DIE("expected the same number of placeholders and candidates");
   }
@@ -123,10 +123,18 @@ Match::Match(const PlaceholderSet &ps,
   }
 }
 
-static void recursivelyCheckCombinations(
-    const PlaceholderSet &ps, std::vector<DimCandidate> partialCombination,
-    std::function<bool(const std::vector<DimCandidate> &)> filter,
-    Matches &suitableCandidates) {
+template <typename CandidatePayload, typename FilterTy>
+void recursivelyCheckCombinations(
+    const PlaceholderSet<CandidatePayload> &ps,
+    std::vector<DimCandidate<CandidatePayload>> partialCombination,
+    FilterTy filter, Matches<CandidatePayload> &suitableCandidates) {
+  static_assert(
+      std::is_same<
+          decltype(filter(
+              std::declval<std::vector<DimCandidate<CandidatePayload>>>())),
+          bool>::value,
+      "unexpected type of the callable filter");
+
   if (!filter(partialCombination)) {
     return;
   }
@@ -147,21 +155,25 @@ static void recursivelyCheckCombinations(
   }
 }
 
-static Matches suitableCombinations(
-    const PlaceholderSet &ps,
-    std::function<bool(const std::vector<DimCandidate> &)> filter) {
-  Matches result;
+template <typename CandidatePayload, typename FilterTy>
+Matches<CandidatePayload>
+suitableCombinations(const PlaceholderSet<CandidatePayload> &ps,
+                     FilterTy filter) {
+  Matches<CandidatePayload> result;
   recursivelyCheckCombinations(ps, {}, filter, result);
   return result;
 }
 
-Matches match(isl::union_map access, PlaceholderSet ps) {
+template <typename CandidatePayload>
+Matches<CandidatePayload> match(isl::union_map access,
+                                PlaceholderSet<CandidatePayload> ps) {
   std::vector<isl::map> accesses;
   access.foreach_map([&accesses](isl::map m) { accesses.push_back(m); });
 
   // TODO: how do we separate maps?  ref ids?
 
-  std::vector<std::vector<std::reference_wrapper<Placeholder>>>
+  std::vector<
+      std::vector<std::reference_wrapper<Placeholder<CandidatePayload>>>>
       outDimPlaceholders;
   for (auto &ph : ps.placeholders_) {
     if (static_cast<size_t>(ph.outDimPos_) >= outDimPlaceholders.size()) {
@@ -214,8 +226,8 @@ Matches match(isl::union_map access, PlaceholderSet ps) {
   // the N-element list if we know that elements of (N-1) array are unique.
   // This algorithmic optimization requires some API changes and is left for
   // future work.
-  return suitableCombinations(
-      ps, [ps](const std::vector<DimCandidate> &candidate) {
+  return suitableCombinations<CandidatePayload>(
+      ps, [ps](const std::vector<DimCandidate<CandidatePayload>> &candidate) {
         return hasNoDuplicateAssignments(candidate, ps) &&
                groupsAreProperlyFormed(candidate, ps);
       });
