@@ -12,13 +12,34 @@
 
 namespace matchers {
 
+template <typename CandidatePayload> class UnpositionedPlaceholder;
+template <typename CandidatePayload> class Placeholder;
+template <typename CandidatePayload> class DimCandidate;
+
 // Assuming the input space of all candidates is the same (e.g., schedule
 // space), we only need to keep the position in this space.
+//
+// This is an example class for payloads.  Static member functions
+// appendToCandidateList and make1DMap must be implemented for the matchers and
+// the transformers, respectively, to work.
+//
 // TODO: we may want to bring coefficient_, constant_ and even space_ here,
 // even though they are shared across all candidates.  Optionally, we may want
 // to separate the "pattern payload" from "match payload".
+// When "pattern payload" is implemented, change the signatures of
+// appendToCandidateList and make1DMap so that they become independent of
+// Placeholder implementation but connected to the pattern payload class that
+// they actually need.
 class SingleInputDim {
 public:
+  static inline void
+  appendToCandidateList(isl::map singleOutDimMap, isl::map fullMap,
+                        Placeholder<SingleInputDim> &placeholder);
+  static inline isl::map
+  make1DMap(const DimCandidate<SingleInputDim> &dimCandidate,
+            const UnpositionedPlaceholder<SingleInputDim> &placeholder,
+            isl::space space);
+
   int inputDimPos_;
 };
 

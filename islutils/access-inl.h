@@ -8,8 +8,9 @@
 
 namespace matchers {
 
-static void appendToCandidateList(isl::map singleOutDimMap, isl::map fullMap,
-                                  Placeholder<SingleInputDim> &placeholder) {
+void SingleInputDim::appendToCandidateList(
+    isl::map singleOutDimMap, isl::map fullMap,
+    Placeholder<SingleInputDim> &placeholder) {
   singleOutDimMap = singleOutDimMap.coalesce();
   if (!singleOutDimMap.is_single_valued()) {
     return;
@@ -42,6 +43,13 @@ static void appendToCandidateList(isl::map singleOutDimMap, isl::map fullMap,
       placeholder.candidates_.emplace_back(SingleInputDim{i}, fullMap);
     }
   }
+}
+
+template <typename CandidatePayload>
+void appendToCandidateList(isl::map singleOutDimMap, isl::map fullMap,
+                           Placeholder<CandidatePayload> &placeholder) {
+  CandidatePayload::appendToCandidateList(singleOutDimMap, fullMap,
+                                          placeholder);
 }
 
 // All placeholders should get different assignments, except those that belong
@@ -187,7 +195,6 @@ Matches<CandidatePayload> match(isl::union_map access,
   // Stage 1: collect candidate values for each placeholder.
   // This is a compact way of stroing a cross-product of all combinations of
   // values replacing the placeholders.
-  // TODO: customize the filter for acceptable individual candidates.
   for (auto acc : accesses) {
     for (size_t i = 0, ei = outDimPlaceholders.size(); i < ei; ++i) {
       const auto &dimPlaceholders = outDimPlaceholders[i];
@@ -260,10 +267,10 @@ static inline isl::map mapFrom1DMaps(isl::space space,
   return result;
 }
 
-static inline isl::map
-make1DMap(const DimCandidate<SingleInputDim> &dimCandidate,
-          const UnpositionedPlaceholder<SingleInputDim> &placeholder,
-          isl::space space) {
+isl::map SingleInputDim::make1DMap(
+    const DimCandidate<SingleInputDim> &dimCandidate,
+    const UnpositionedPlaceholder<SingleInputDim> &placeholder,
+    isl::space space) {
   auto lhs =
       isl::aff::var_on_domain(isl::local_space(space.domain()), isl::dim::set,
                               dimCandidate.payload_.inputDimPos_);
@@ -273,6 +280,14 @@ make1DMap(const DimCandidate<SingleInputDim> &dimCandidate,
                                      isl::dim::set, 0);
   using map_maker::operator==;
   return lhs == rhs;
+}
+
+template <typename CandidatePayload>
+inline isl::map
+make1DMap(const DimCandidate<CandidatePayload> &dimCandidate,
+          const UnpositionedPlaceholder<CandidatePayload> &placeholder,
+          isl::space space) {
+  return CandidatePayload::make1DMap(dimCandidate, placeholder, space);
 }
 
 template <typename CandidatePayload, typename... Args>
