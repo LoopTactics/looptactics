@@ -4,6 +4,8 @@
 #include <functional>
 #include <vector>
 
+#include "islutils/locus.h"
+
 namespace matchers {
 
 static void appendToCandidateList(isl::map singleOutDimMap, isl::map fullMap,
@@ -231,6 +233,159 @@ Matches<CandidatePayload> match(isl::union_map access,
         return hasNoDuplicateAssignments(candidate, ps) &&
                groupsAreProperlyFormed(candidate, ps);
       });
+}
+
+static inline std::vector<isl::map> listOf1DMaps(isl::map map) {
+  std::vector<isl::map> result;
+  for (int dim = map.dim(isl::dim::out); dim > 0; --dim) {
+    result.push_back(map.project_out(isl::dim::out, 1, dim - 1));
+    map = map.project_out(isl::dim::out, 0, 1);
+  }
+  return result;
+}
+
+static inline isl::space addEmptyRange(isl::space space) {
+  return space.product(space.params().set_from_params()).unwrap();
+}
+
+static inline isl::map mapFrom1DMaps(isl::space space,
+                                     const std::vector<isl::map> &list) {
+  auto zeroSpace = addEmptyRange(space.domain());
+  auto result = isl::map::universe(zeroSpace);
+  for (const auto &m : list) {
+    result = result.flat_range_product(m);
+  }
+  result =
+      result.set_tuple_id(isl::dim::out, space.get_tuple_id(isl::dim::out));
+  return result;
+}
+
+static inline isl::map
+make1DMap(const DimCandidate<SingleInputDim> &dimCandidate,
+          const UnpositionedPlaceholder<SingleInputDim> &placeholder,
+          isl::space space) {
+  auto lhs =
+      isl::aff::var_on_domain(isl::local_space(space.domain()), isl::dim::set,
+                              dimCandidate.payload_.inputDimPos_);
+  lhs = lhs.scale(placeholder.coefficient_)
+            .add_constant_val(placeholder.constant_);
+  auto rhs = isl::aff::var_on_domain(isl::local_space(space.range()),
+                                     isl::dim::set, 0);
+  using map_maker::operator==;
+  return lhs == rhs;
+}
+
+template <typename CandidatePayload, typename... Args>
+isl::map transformOneMap(isl::map map, const Match<CandidatePayload> &oneMatch,
+                         Replacement<CandidatePayload> arg, Args... args) {
+  static_assert(
+      std::is_same<typename std::common_type<Replacement<CandidatePayload>,
+                                             Args...>::type,
+                   Replacement<CandidatePayload>>::value,
+      "");
+
+  isl::map result;
+  for (const auto &rep : {arg, args...}) {
+    // separability of matches is important!
+    // if we match here something that we would not have matched with the whole
+    // set, it's bad!  But here we know that the map has already matched with
+    // one of the groups in the set, we just don't know which one.  If it
+    // matches two groups, this means the transformation would happen twice,
+    // which we expicitly disallow.
+    if (match(isl::union_map(map), allOf(rep.pattern)).empty()) {
+      continue;
+    }
+    if (!result.is_null()) {
+      ISLUTILS_DIE("one relation matched multiple patterns\n"
+                   "the transformation is undefined");
+    }
+    // Actual transformation.
+    if (map.dim(isl::dim::out) == 0) {
+      result = map;
+      continue;
+    }
+    auto list = listOf1DMaps(map);
+    auto space1D =
+        addEmptyRange(map.get_space().domain()).add_dims(isl::dim::out, 1);
+    for (const auto &plh : rep.replacement) {
+      list[plh.outDimPos_] = make1DMap(oneMatch[plh], plh, space1D);
+    }
+    result = mapFrom1DMaps(map.get_space(), list);
+  }
+  return result;
+}
+
+template <typename CandidatePayload, typename... Args>
+isl::union_map findAndReplace(isl::union_map umap,
+                              Replacement<CandidatePayload> arg, Args... args) {
+  static_assert(
+      std::is_same<typename std::common_type<Replacement<CandidatePayload>,
+                                             Args...>::type,
+                   Replacement<CandidatePayload>>::value,
+      "");
+
+  // make a vector of maps
+  // for each match,
+  //   find all corresponding maps,
+  //     if not found, the map was deleted already meaning there was an attempt
+  //     of double transformation
+  //   remove them from vector,
+  //   transform them and
+  //   add them to the resulting vector
+  // finally, copy all the remaining original maps as is into result
+
+  std::vector<isl::map> originalMaps, transformedMaps;
+  umap.foreach_map([&originalMaps](isl::map m) { originalMaps.push_back(m); });
+
+  auto getPattern = [](const Replacement<CandidatePayload> &replacement) {
+    return replacement.pattern;
+  };
+
+  auto ps = allOf(getPattern(arg), getPattern(args)...);
+  auto matches = match(umap, ps);
+
+  for (const auto &m : matches) {
+    std::vector<isl::map> toTransform;
+    for (const auto &plh : ps.placeholders_) {
+      auto candidate = m[plh].candidateMap_;
+      auto found = std::find_if(
+          toTransform.begin(), toTransform.end(),
+          [candidate](isl::map map) { return map.is_equal(candidate); });
+      if (found != toTransform.end()) {
+        continue;
+      }
+      toTransform.push_back(candidate);
+    }
+
+    for (const auto &candidate : toTransform) {
+      auto found = std::find_if(
+          originalMaps.begin(), originalMaps.end(),
+          [candidate](isl::map map) { return map.is_equal(candidate); });
+      if (found == originalMaps.end()) {
+        ISLUTILS_DIE("could not find the matched map\n"
+                     "this typically means a map was matched more than once\n"
+                     "in which case the transformation is undefined");
+        continue;
+      }
+      originalMaps.erase(found);
+
+      auto r = transformOneMap<CandidatePayload>(candidate, m, arg, args...);
+      transformedMaps.push_back(r);
+    }
+  }
+
+  for (const auto &map : originalMaps) {
+    transformedMaps.push_back(map);
+  }
+
+  if (transformedMaps.empty()) {
+    return isl::union_map::empty(umap.get_space());
+  }
+  auto result = isl::union_map(transformedMaps.front());
+  for (const auto &map : transformedMaps) {
+    result = result.unite(isl::union_map(map));
+  }
+  return result;
 }
 
 //-----------------//

@@ -246,6 +246,43 @@ template <typename CandidatePayload>
 Matches<CandidatePayload> match(isl::union_map access,
                                 PlaceholderSet<CandidatePayload> ps);
 
+template <typename CandidatePayload> struct Replacement {
+  Replacement(PlaceholderList<CandidatePayload> &&pattern_,
+              PlaceholderList<CandidatePayload> &&replacement_)
+      : pattern(pattern_), replacement(replacement_) {}
+
+  PlaceholderList<CandidatePayload> pattern;
+  PlaceholderList<CandidatePayload> replacement;
+};
+
+template <typename CandidatePayload>
+Replacement<CandidatePayload>
+replace(PlaceholderList<CandidatePayload> &&pattern,
+        PlaceholderList<CandidatePayload> &&replacement) {
+  return {std::move(pattern), std::move(replacement)};
+}
+
+// Calls like this do not fully make sense: different replacements for
+// essentially the same pattern.
+// makePSR(replace(access(_1, _2), access(_2, _1)),
+//         replace(access(_3, _4), access(_3, _4)))
+// They could become useful if access is further constrained to specific arrays
+// or statements/schedule points.
+//
+// Calls like this contain redundant information and should be disallowed.
+// makePSR(replace(access(_1, _2), access(_2, _1)),
+//         replace(access(_1, _2), access(_2, _1)))
+//
+// Generally, we should disallow such transformations that affect the same
+// relation more than once during the same call to transform.
+// For example, access(_1, *), access(_1, _2).
+//
+// As the first approximation, marking this as undefined behavior and ignoring.
+
+template <typename CandidatePayload, typename... Args>
+isl::union_map findAndReplace(isl::union_map umap,
+                              Replacement<CandidatePayload> arg, Args... args);
+
 } // namespace matchers
 
 #include "access-inl.h"
