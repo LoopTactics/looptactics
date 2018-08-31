@@ -14,7 +14,7 @@ void appendToCandidateList(
     UnpositionedPlaceholder<CandidatePayload, PatternPayload> &placeholder) {
   for (auto &&candidate : CandidatePayload::candidates(singleOutDimMap, fullMap,
                                                        placeholder.pattern_)) {
-    placeholder.candidates_.emplace_back(candidate, fullMap);
+    placeholder.candidates_.emplace_back(candidate, fullMap.get_space());
   }
 }
 
@@ -55,30 +55,30 @@ template <typename CandidatePayload, typename PatternPayload>
 bool groupsAreProperlyFormed(
     const std::vector<DimCandidate<CandidatePayload>> &combination,
     const PlaceholderSet<CandidatePayload, PatternPayload> &ps) {
-  std::vector<isl::map> previouslyMatchedMaps;
+  std::vector<isl::space> previouslyMatchedSpaces;
   for (const auto &group : ps.placeholderGroups_) {
-    isl::map matchedMap;
+    isl::space matchedSpace;
     // Ignore parts that are not yet matched.
     for (size_t pos : group) {
       if (pos >= combination.size()) {
         continue;
       }
-      auto candidateMap = combination.at(pos).candidateMap_;
-      if (matchedMap) { // A group has already matched a map.
+      auto candidateSpace = combination.at(pos).candidateMapSpace_;
+      if (matchedSpace) { // A group has already matched a map.
         // If matched a different map, groups are not a match.
-        if (matchedMap != candidateMap) {
+        if (!matchedSpace.is_equal(candidateSpace)) {
           return false;
         }
       } else { // First time a map is matched in the group.
-        matchedMap = candidateMap;
-        auto it = std::find(previouslyMatchedMaps.begin(),
-                            previouslyMatchedMaps.end(), matchedMap);
+        matchedSpace = candidateSpace;
+        auto it = std::find(previouslyMatchedSpaces.begin(),
+                            previouslyMatchedSpaces.end(), matchedSpace);
         // If the same map as one of the previously considered groups, groups
         // are not a match.
-        if (it != previouslyMatchedMaps.end()) {
+        if (it != previouslyMatchedSpaces.end()) {
           return false;
         }
-        previouslyMatchedMaps.push_back(matchedMap);
+        previouslyMatchedSpaces.push_back(matchedSpace);
       }
     }
   }
@@ -322,14 +322,14 @@ isl::union_map findAndReplace(isl::union_map umap,
   for (const auto &m : matches) {
     std::vector<isl::map> toTransform;
     for (const auto &plh : ps.placeholders_) {
-      auto candidate = m[plh].candidateMap_;
+      auto candidate = m[plh].candidateMapSpace_;
       auto found = std::find_if(
           toTransform.begin(), toTransform.end(),
-          [candidate](isl::map map) { return map.is_equal(candidate); });
+          [candidate](isl::map map) { return map.get_space().is_equal(candidate); });
       if (found != toTransform.end()) {
         continue;
       }
-      toTransform.push_back(candidate);
+      toTransform.push_back(umap.extract_map(candidate));
     }
 
     for (const auto &candidate : toTransform) {

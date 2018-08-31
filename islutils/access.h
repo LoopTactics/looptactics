@@ -17,21 +17,18 @@ namespace matchers {
 // Instances of payload must be comparable to each other.
 template <typename Payload> class DimCandidate {
 public:
-  DimCandidate(const Payload &payload, isl::map candidateMap)
-      : payload_(payload), candidateMap_(candidateMap) {}
+  DimCandidate(const Payload &payload, isl::space candidateMapSpace)
+      : payload_(payload), candidateMapSpace_(candidateMapSpace) {}
 
   bool isEqualModuloMap(const DimCandidate &other) const {
     return payload_ == other.payload_;
   }
 
-  bool operator==(const DimCandidate &other) const {
-    return isEqualModuloMap(other) && candidateMap_ == other.candidateMap_;
-  }
-
   Payload payload_;
 
-  // TODO: Not sure we need the entire map, or the space would suffice.
-  isl::map candidateMap_;
+  // The space of the candidate map.  It is sufficient to uniquely identify the
+  // map in the union_map the matcher operates on.
+  isl::space candidateMapSpace_;
 };
 
 template <typename CandidatePayload, typename PatternPayload>

@@ -72,12 +72,10 @@ TEST(AccessMatcher, MatchResults) {
   auto matches = match(umap, allOf(access(_1, _2)));
   ASSERT_EQ(matches.size(), 3);
 
-  // Check that we can insect the result using placeholder objects.
+  // Check that we can inspect the result using placeholder objects.
   for (const auto &m : matches) {
-    EXPECT_FALSE(isl::union_map(m[_1].candidateMap_).is_empty());
-    EXPECT_TRUE(isl::union_map(m[_1].candidateMap_).is_subset(umap));
-    EXPECT_FALSE(isl::union_map(m[_2].candidateMap_).is_empty());
-    EXPECT_TRUE(isl::union_map(m[_2].candidateMap_).is_subset(umap));
+    EXPECT_FALSE(m[_1].candidateMapSpace_.is_null());
+    EXPECT_FALSE(m[_2].candidateMapSpace_.is_null());
 
     // Check that we got the matching right.
     EXPECT_TRUE(
