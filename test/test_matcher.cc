@@ -38,12 +38,6 @@ TEST(TreeMatcher, CompileTest) {
   auto m9 = sequence(hasDescendant(band(leaf())), any());
   auto m10 = band(leaf());
   auto m11 = band([](isl::schedule_node n) { return true; }, leaf());
-
-  // access pattern matchers.
-  auto m12 = read('X');
-  auto m13 = read('X', 'Y');
-  auto m14 = write('Z');
-  auto m15 = write('S', 'Y');
 }
 
 static isl::schedule_node makeGemmTree() {
