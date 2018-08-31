@@ -120,15 +120,30 @@ inline ScheduleNodeMatcher leaf() {
   return matcher;
 }
 
-inline ScheduleNodeMatcher any(isl::schedule_node &capture) {
+inline ScheduleNodeMatcher anyTree(isl::schedule_node &capture) {
   ScheduleNodeMatcher matcher(capture);
-  matcher.current_ = ScheduleNodeType::Any;
+  matcher.current_ = ScheduleNodeType::AnyTree;
   return matcher;
 }
 
-inline ScheduleNodeMatcher any() {
+inline ScheduleNodeMatcher anyTree() {
   static isl::schedule_node dummyCapture;
-  return any(dummyCapture);
+  return anyTree(dummyCapture);
+}
+
+inline ScheduleNodeMatcher anyForest() {
+  static isl::schedule_node dummyCapture;
+  ScheduleNodeMatcher matcher(dummyCapture);
+  matcher.current_ = ScheduleNodeType::AnyForest;
+  return matcher;
+}
+
+inline ScheduleNodeMatcher
+anyForest(std::vector<isl::schedule_node> &multiCapture) {
+  static isl::schedule_node dummyCapture;
+  ScheduleNodeMatcher matcher(dummyCapture, multiCapture);
+  matcher.current_ = ScheduleNodeType::AnyForest;
+  return matcher;
 }
 
 } // namespace matchers

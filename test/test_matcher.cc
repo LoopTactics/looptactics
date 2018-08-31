@@ -22,20 +22,21 @@ TEST(TreeMatcher, CompileTest) {
             band(
               leaf()),
             filter(
-              any()))));
+              anyTree()))));
   // clang-format on
-  auto m2 = sequence(any());
-  auto m3 = sequence(filter(any()), filter(any()));
-  auto m4 = sequence([](isl::schedule_node n) { return true; }, any());
+  auto m2 = sequence(anyTree());
+  auto m3 = sequence(filter(anyTree()), filter(anyTree()));
+  auto m4 = sequence([](isl::schedule_node n) { return true; }, anyTree());
   auto m5 = sequence([](isl::schedule_node n) { return true; }, filter(leaf()),
                      filter(leaf()));
 
-  auto m6 = sequence(filter(hasNextSibling(filter(any())), any()));
+  auto m6 = sequence(filter(hasNextSibling(filter(anyTree())), anyTree()));
   auto m7 = sequence(filter(
-      hasNextSibling(filter(hasPreviousSibling(filter(any())), any())), any()));
-  auto m8 = sequence(filter(hasSibling(filter(any())), any()));
+      hasNextSibling(filter(hasPreviousSibling(filter(anyTree())), anyTree())),
+      anyTree()));
+  auto m8 = sequence(filter(hasSibling(filter(anyTree())), anyTree()));
 
-  auto m9 = sequence(hasDescendant(band(leaf())), any());
+  auto m9 = sequence(hasDescendant(band(leaf())), anyTree());
   auto m10 = band(leaf());
   auto m11 = band([](isl::schedule_node n) { return true; }, leaf());
 }
@@ -74,7 +75,7 @@ TEST(TreeMatcher, AnyMatchesLeaf) {
         filter(
           leaf()),
         filter(
-          band(any()))));
+          band(anyTree()))));
   // clang-format on
 
   auto node = makeGemmTree();
@@ -96,6 +97,77 @@ TEST(TreeMatcher, LeafMatchesLeaf) {
 
   auto node = makeGemmTree();
   EXPECT_TRUE(ScheduleNodeMatcher::isMatching(matcher, node.child(0)));
+}
+
+TEST(TreeMatcher, AnyForestMatchesMultiple) {
+  using namespace matchers;
+  // clang-format off
+  auto matcher =
+    band(
+      sequence(
+        anyForest()));
+  // clang-format on
+
+  auto node = makeGemmTree();
+  EXPECT_TRUE(ScheduleNodeMatcher::isMatching(matcher, node.child(0)));
+}
+
+TEST(TreeMatcher, AnyForestMatchesOne) {
+  using namespace matchers;
+  // clang-format off
+  auto matcher =
+    band(
+      anyForest());
+  // clang-format on
+
+  auto node = makeGemmTree();
+  EXPECT_TRUE(ScheduleNodeMatcher::isMatching(matcher, node.child(0)));
+}
+
+TEST(TreeMatcher, AnyForestMatchesLeaf) {
+  using namespace matchers;
+  // clang-format off
+  auto matcher =
+    band(
+      sequence(
+        filter(
+          anyForest()),
+        filter(
+          band(
+            anyForest()))));
+  // clang-format on
+
+  auto node = makeGemmTree();
+  EXPECT_TRUE(ScheduleNodeMatcher::isMatching(matcher, node.child(0)));
+}
+
+TEST(TreeMatcher, AnyForestCapture) {
+  using namespace matchers;
+  std::vector<isl::schedule_node> captures;
+  isl::schedule_node first, second;
+
+  // clang-format off
+  auto matcher =
+    band(
+      sequence(
+        anyForest(captures)));
+  // clang-format on
+
+  auto node = makeGemmTree();
+  ASSERT_TRUE(ScheduleNodeMatcher::isMatching(matcher, node.child(0)));
+
+  // clang-format off
+  auto matcher2 =
+    band(
+      sequence(
+        anyTree(first),
+        anyTree(second)));
+  // clang-format on
+  ASSERT_TRUE(ScheduleNodeMatcher::isMatching(matcher2, node.child(0)));
+
+  ASSERT_EQ(captures.size(), 2u);
+  EXPECT_TRUE(captures[0].is_equal(first));
+  EXPECT_TRUE(captures[1].is_equal(second));
 }
 
 int main(int argc, char **argv) {

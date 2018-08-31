@@ -18,8 +18,10 @@
  * auto m = domain(
  *            context(
  *              sequence(
- *                filter(),
- *                filter())));
+ *                filter(
+ *                  anyTree()),
+ *                filter(
+ *                  anyTree()))));
  * ```
  *
  * matches a subtree that starts at a domain node, having context as only
@@ -46,8 +48,18 @@ class ScheduleNodeMatcher;
  * to store a callback function for finer-grain matching.  This function is
  * called on the node before attempting to match its children.  It is passed
  * the node itself and returns true if the matching may continue and false if
- * it should fail immediately without processing the children.  When no child
- * matchers are provided, the node is allowed to have zero or more children.
+ * it should fail immediately without processing the children.
+ *
+ * Type-based matchers must always have child matchers.  These are either
+ * (lists of) type-based matchers or special matchers leaf(), anyTree() or
+ * anyForest().
+ *
+ * The special matcher leaf() indicates that the tree node containing it should
+ * be the leaf in the schedule tree.  The matcher anyTree() indicates that the
+ * tree node may contain exactly one child of the given type.  The matcher
+ * anyForest() indicates that the node may contain an arbitrary number of
+ * children (useful for sequence or set nodes).
+ *
  */
 /** \{ */
 template <typename Arg, typename... Args,
@@ -138,8 +150,10 @@ ScheduleNodeMatcher expansion(std::function<bool(isl::schedule_node)> callback,
 
 ScheduleNodeMatcher leaf();
 
-ScheduleNodeMatcher any(isl::schedule_node &capture);
-ScheduleNodeMatcher any();
+ScheduleNodeMatcher anyTree(isl::schedule_node &capture);
+ScheduleNodeMatcher anyTree();
+
+ScheduleNodeMatcher anyForest(std::vector<isl::schedule_node> &captures);
 /** \} */
 
 enum class ScheduleNodeType {
@@ -155,7 +169,8 @@ enum class ScheduleNodeType {
   Set,
   Expansion,
 
-  Any
+  AnyTree,
+  AnyForest
 };
 
 inline isl_schedule_node_type toIslType(ScheduleNodeType type);
@@ -197,12 +212,17 @@ class ScheduleNodeMatcher {
 #undef DECL_FRIEND_TYPE_MATCH
 
   friend ScheduleNodeMatcher leaf();
-  friend ScheduleNodeMatcher any();
-  friend ScheduleNodeMatcher any(isl::schedule_node &);
+  friend ScheduleNodeMatcher anyTree();
+  friend ScheduleNodeMatcher anyTree(isl::schedule_node &);
+  friend ScheduleNodeMatcher anyForest();
+  friend ScheduleNodeMatcher anyForest(std::vector<isl::schedule_node> &);
 
 private:
   explicit ScheduleNodeMatcher(isl::schedule_node &capture)
-      : capture_(capture) {}
+      : capture_(capture), multiCapture_(dummyMultiCaptureData_) {}
+  explicit ScheduleNodeMatcher(isl::schedule_node &capture,
+                               std::vector<isl::schedule_node> &multiCapture)
+      : capture_(capture), multiCapture_(multiCapture) {}
 
 public:
   static bool isMatching(const ScheduleNodeMatcher &matcher,
@@ -213,6 +233,13 @@ private:
   std::vector<ScheduleNodeMatcher> children_;
   std::function<bool(isl::schedule_node)> nodeCallback_;
   isl::schedule_node &capture_;
+  std::vector<isl::schedule_node> &multiCapture_;
+
+  // Unlike capture_ for which "constructor" functions provide dummy data if
+  // not passed by the user, nodes get appended to the the multi-capture vector
+  // without clearing it.  Therefore, it's better if it does not have program
+  // lifetime and thus keep all trees ever matched alive.
+  std::vector<isl::schedule_node> dummyMultiCaptureData_;
 };
 
 std::function<bool(isl::schedule_node)>

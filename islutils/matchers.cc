@@ -1,4 +1,5 @@
 #include "islutils/matchers.h"
+#include "islutils/die.h"
 
 namespace matchers {
 
@@ -8,8 +9,27 @@ bool ScheduleNodeMatcher::isMatching(const ScheduleNodeMatcher &matcher,
     return false;
   }
 
-  if (matcher.current_ == ScheduleNodeType::Any) {
+  if (matcher.current_ == ScheduleNodeType::AnyTree) {
     matcher.capture_ = node;
+    return true;
+  }
+
+  // Below, we traverse children in order.  If AnyForest match is requested, it
+  // matches this node and all its next siblings.  Currently, AnyForest cannot
+  // be combined with other matchers, so we expect no previous sibling and
+  // capture all next siblings.
+  // The combination of AnyForest with other types would require shell
+  // wildcard-like matching.
+  // We do this in the start rather than in the child-visiting loop because
+  // AnyForest can be the root of the matcher and cannot be converted to an isl
+  // type below.
+  if (matcher.current_ == ScheduleNodeType::AnyForest) {
+    if (node.has_previous_sibling()) {
+      ISLUTILS_DIE("AnyForest matcher combined with other types");
+    }
+    do {
+      matcher.multiCapture_.push_back(node);
+    } while (node.has_next_sibling() && (node = node.next_sibling()));
     return true;
   }
 
@@ -21,15 +41,29 @@ bool ScheduleNodeMatcher::isMatching(const ScheduleNodeMatcher &matcher,
     return false;
   }
 
+  // Check that the number of children matches unless the only matcher child is
+  // AnyForest.  In the latter case, check that the tree node has at least one
+  // child.
   size_t nChildren =
       static_cast<size_t>(isl_schedule_node_n_children(node.get()));
-  if (matcher.children_.size() != nChildren) {
+  bool nextIsAnyForest =
+      matcher.children_.size() == 1 &&
+      matcher.children_.at(0).current_ == ScheduleNodeType::AnyForest;
+  if (matcher.children_.size() != nChildren && !nextIsAnyForest) {
+    return false;
+  }
+  if (nextIsAnyForest && nChildren == 0) {
     return false;
   }
 
   for (size_t i = 0; i < nChildren; ++i) {
     if (!isMatching(matcher.children_.at(i), node.child(i))) {
       return false;
+    }
+    // Return after visiting the first child if we match AnyForest because it
+    // included all the siblings.
+    if (nextIsAnyForest) {
+      return true;
     }
   }
   matcher.capture_ = node;

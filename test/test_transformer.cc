@@ -16,7 +16,7 @@ TEST(Transformer, Capture) {
           filter(filterNode1,
             leaf()),
           filter(filterNode2,
-            any(filterSubtree))));
+            anyTree(filterSubtree))));
     // clang-format on
   }();
 
