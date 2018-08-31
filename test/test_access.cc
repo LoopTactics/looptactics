@@ -1,4 +1,5 @@
 #include "islutils/access.h"
+#include "islutils/access_patterns.h"
 #include "islutils/ctx.h"
 #include "islutils/parser.h"
 
