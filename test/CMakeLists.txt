@@ -34,7 +34,7 @@ add_custom_target(check-transformer COMMAND test_transformer)
 add_dependencies(check check-transformer)
 
 add_custom_target(check-access COMMAND test_access)
-add_dependencies(check check-transformer)
+add_dependencies(check check-access)
 
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/inputs/one-dimensional-init.c"
      "${CMAKE_CURRENT_BINARY_DIR}/inputs/one-dimensional-init.c"; COPYONLY)
