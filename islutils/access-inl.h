@@ -8,16 +8,6 @@
 
 namespace matchers {
 
-template <typename CandidatePayload, typename PatternPayload>
-void appendToCandidateList(
-    isl::map singleOutDimMap, isl::map fullMap,
-    UnpositionedPlaceholder<CandidatePayload, PatternPayload> &placeholder) {
-  for (auto &&candidate : CandidatePayload::candidates(singleOutDimMap, fullMap,
-                                                       placeholder.pattern_)) {
-    placeholder.candidates_.emplace_back(candidate, fullMap.get_space());
-  }
-}
-
 // All placeholders should get different assignments, except those that belong
 // to the same fold which should get equal assignments modulo matched map.
 template <typename CandidatePayload, typename PatternPayload>
@@ -148,44 +138,25 @@ match(isl::union_map access,
   std::vector<isl::map> accesses;
   access.foreach_map([&accesses](isl::map m) { accesses.push_back(m); });
 
-  // TODO: how do we separate maps?  ref ids?
+  // If there is a lot of placeholders with the same coefficient, we want
+  // to group placeholders by coefficient and only call the
+  // aff-matching computation once per coefficient.  Punting for now.
 
-  std::vector<std::vector<
-      std::reference_wrapper<Placeholder<CandidatePayload, PatternPayload>>>>
-      outDimPlaceholders;
+  // Stage 1: fill in the candidate lists for all placeholders.
   for (auto &ph : ps.placeholders_) {
-    if (static_cast<size_t>(ph.outDimPos_) >= outDimPlaceholders.size()) {
-      outDimPlaceholders.resize(ph.outDimPos_ + 1);
-    }
-    outDimPlaceholders[ph.outDimPos_].push_back(ph);
-  }
-
-  // Stage 1: collect candidate values for each placeholder.
-  // This is a compact way of stroing a cross-product of all combinations of
-  // values replacing the placeholders.
-  for (auto acc : accesses) {
-    for (size_t i = 0, ei = outDimPlaceholders.size(); i < ei; ++i) {
-      const auto &dimPlaceholders = outDimPlaceholders[i];
-      if (dimPlaceholders.empty()) {
-        continue;
-      }
-      auto dim = acc.dim(isl::dim::out);
+    int i = ph.outDimPos_;
+    for (auto acc : accesses) {
+      int dim = acc.dim(isl::dim::out);
       if (i >= dim) {
         continue;
       }
       auto single = acc.project_out(isl::dim::out, i + 1, dim - (i + 1))
                         .project_out(isl::dim::out, 0, i);
-      for (size_t j = 0, ej = dimPlaceholders.size(); j < ej; ++j) {
-        // If there is a lot of placeholders with the same coefficient, we want
-        // to also group placeholders by coefficient and only call the
-        // aff-matching computation once per coefficient.  Punting for now.
-        appendToCandidateList(single, acc, dimPlaceholders[j].get());
+      for (auto &&c : CandidatePayload::candidates(single, acc, ph.pattern_)) {
+        ph.candidates_.emplace_back(c, acc.get_space());
       }
     }
-  }
-
-  // Early exit if one of the placeholders has no candidates.
-  for (const auto &ph : ps.placeholders_) {
+    // Early exit if one of the placeholders has no candidates.
     if (ph.candidates_.empty()) {
       return {};
     }
@@ -323,9 +294,10 @@ isl::union_map findAndReplace(isl::union_map umap,
     std::vector<isl::map> toTransform;
     for (const auto &plh : ps.placeholders_) {
       auto candidate = m[plh].candidateMapSpace_;
-      auto found = std::find_if(
-          toTransform.begin(), toTransform.end(),
-          [candidate](isl::map map) { return map.get_space().is_equal(candidate); });
+      auto found = std::find_if(toTransform.begin(), toTransform.end(),
+                                [candidate](isl::map map) {
+                                  return map.get_space().is_equal(candidate);
+                                });
       if (found != toTransform.end()) {
         continue;
       }
