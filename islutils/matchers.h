@@ -235,11 +235,7 @@ private:
   isl::schedule_node &capture_;
   std::vector<isl::schedule_node> &multiCapture_;
 
-  // Unlike capture_ for which "constructor" functions provide dummy data if
-  // not passed by the user, nodes get appended to the the multi-capture vector
-  // without clearing it.  Therefore, it's better if it does not have program
-  // lifetime and thus keep all trees ever matched alive.
-  std::vector<isl::schedule_node> dummyMultiCaptureData_;
+  static thread_local std::vector<isl::schedule_node> dummyMultiCaptureData_;
 };
 
 std::function<bool(isl::schedule_node)>

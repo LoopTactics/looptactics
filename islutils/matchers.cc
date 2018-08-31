@@ -3,6 +3,9 @@
 
 namespace matchers {
 
+thread_local std::vector<isl::schedule_node>
+    ScheduleNodeMatcher::dummyMultiCaptureData_;
+
 bool ScheduleNodeMatcher::isMatching(const ScheduleNodeMatcher &matcher,
                                      isl::schedule_node node) {
   if (!node.get()) {
@@ -27,6 +30,7 @@ bool ScheduleNodeMatcher::isMatching(const ScheduleNodeMatcher &matcher,
     if (node.has_previous_sibling()) {
       ISLUTILS_DIE("AnyForest matcher combined with other types");
     }
+    matcher.multiCapture_.clear();
     do {
       matcher.multiCapture_.push_back(node);
     } while (node.has_next_sibling() && (node = node.next_sibling()));
