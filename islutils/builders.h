@@ -33,6 +33,7 @@ public:
   isl::union_set uset_;
   isl::multi_union_pw_aff mupa_;
   isl::union_map umap_;
+
   isl::union_pw_multi_aff upma_;
   isl::id id_;
 };
@@ -66,18 +67,6 @@ ScheduleNodeBuilder context(isl::set set, ScheduleNodeBuilder &&child);
 template <typename... Args, typename = typename std::enable_if<std::is_same<
                                 typename std::common_type<Args...>::type,
                                 ScheduleNodeBuilder>::value>::type>
-ScheduleNodeBuilder sequence(Args... children) {
-  ScheduleNodeBuilder builder;
-  builder.current_ = isl_schedule_node_sequence;
-  builder.children_ = {children...};
-  return builder;
-}
-
-ScheduleNodeBuilder sequence(std::vector<ScheduleNodeBuilder> &&children);
-
-template <typename... Args, typename = typename std::enable_if<std::is_same<
-                                typename std::common_type<Args...>::type,
-                                ScheduleNodeBuilder>::value>::type>
 ScheduleNodeBuilder set(Args... children) {
   ScheduleNodeBuilder builder;
   builder.current_ = isl_schedule_node_set;
@@ -88,6 +77,31 @@ ScheduleNodeBuilder set(Args... children) {
 ScheduleNodeBuilder set(std::vector<ScheduleNodeBuilder> &&children);
 
 ScheduleNodeBuilder subtree(isl::schedule_node node);
+
+template <typename T,
+          typename = typename std::enable_if<
+              std::is_same<T, ScheduleNodeBuilder>::value ||
+              std::is_same<T, std::vector<ScheduleNodeBuilder>>::value>::type>
+std::vector<ScheduleNodeBuilder> varargToVector(T t) {
+  return {t};
+}
+
+template <typename T, class... Args>
+std::vector<ScheduleNodeBuilder> varargToVector(T t, Args... args) {
+  std::vector<ScheduleNodeBuilder> rest = varargToVector(args...);
+  std::vector<ScheduleNodeBuilder> result = {t};
+  result.insert(std::end(result), std::make_move_iterator(rest.begin()),
+                std::make_move_iterator(rest.end()));
+  return result;
+}
+
+template <class... Args> ScheduleNodeBuilder sequence(Args... args) {
+  std::vector<ScheduleNodeBuilder> children = varargToVector(args...);
+  ScheduleNodeBuilder builder;
+  builder.current_ = isl_schedule_node_sequence;
+  builder.children_ = children;
+  return builder;
+}
 
 } // namespace builders
 
