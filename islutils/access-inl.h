@@ -8,18 +8,19 @@
 
 namespace matchers {
 
-void SingleInputDim::appendToCandidateList(
-    isl::map singleOutDimMap, isl::map fullMap,
-    Placeholder<SingleInputDim, SimpleAff> &placeholder) {
+std::vector<SingleInputDim>
+SingleInputDim::candidates(isl::map singleOutDimMap, isl::map fullMap,
+                           const SimpleAff &pattern) {
+  std::vector<SingleInputDim> result = {};
   singleOutDimMap = singleOutDimMap.coalesce();
   if (!singleOutDimMap.is_single_valued()) {
-    return;
+    return {};
   }
 
   auto pma = isl::pw_multi_aff::from_map(singleOutDimMap);
   // Truly piece-wise access is not a single variable.
   if (pma.n_piece() != 1) {
-    return;
+    return {};
   }
   auto pa = pma.get_pw_aff(0);
   isl::aff a;
@@ -35,15 +36,16 @@ void SingleInputDim::appendToCandidateList(
   auto lspace = isl::local_space(space.domain());
   for (int i = 0; i < dim; ++i) {
     auto candidateAff = isl::aff::var_on_domain(lspace, isl::dim::set, i);
-    candidateAff = candidateAff.scale(placeholder.pattern_.coefficient_);
-    candidateAff =
-        candidateAff.add_constant_val(placeholder.pattern_.constant_);
+    candidateAff = candidateAff.scale(pattern.coefficient_);
+    candidateAff = candidateAff.add_constant_val(pattern.constant_);
     auto candidatePwAff =
         isl::pw_aff(candidateAff).intersect_domain(pa.domain());
     if (pa.is_equal(candidatePwAff)) {
-      placeholder.candidates_.emplace_back(SingleInputDim{i}, fullMap);
+      result.emplace_back(SingleInputDim{i});
     }
   }
+
+  return result;
 }
 
 isl::map mapToNext(isl::space space) {
@@ -66,35 +68,31 @@ isl::map mapToNext(isl::space space) {
   return result.intersect(next == aff);
 }
 
-void StrideCandidate::appendToCandidateList(
-    isl::map singleOutDimMap, isl::map fullMap,
-    UnpositionedPlaceholder<StrideCandidate, StridePattern> &placeholder) {
-  singleOutDimMap = singleOutDimMap.coalesce();
-  if (!singleOutDimMap.is_single_valued()) {
-    return;
-  }
-
+std::vector<StrideCandidate>
+StrideCandidate::candidates(isl::map singleOutDimMap, isl::map fullMap,
+                            const StridePattern &pattern) {
   auto map = mapToNext(singleOutDimMap.get_space().domain());
   auto delta =
       map.apply_domain(singleOutDimMap).apply_range(singleOutDimMap).deltas();
   // TODO: also match parametric strides
-  auto strideAff = isl::aff(isl::local_space(delta.get_space()),
-                            placeholder.pattern_.stride);
+  auto strideAff =
+      isl::aff(isl::local_space(delta.get_space()), pattern.stride);
   auto varAff = isl::aff::var_on_domain(isl::local_space(delta.get_space()),
                                         isl::dim::set, 0);
   using set_maker::operator==;
-
-  if (delta.is_subset(strideAff == varAff)) {
-    placeholder.candidates_.emplace_back(StrideCandidate{}, fullMap);
-  }
+  if (delta.is_subset(strideAff == varAff))
+    return {StrideCandidate{}};
+  return {};
 }
 
 template <typename CandidatePayload, typename PatternPayload>
 void appendToCandidateList(
     isl::map singleOutDimMap, isl::map fullMap,
-    Placeholder<CandidatePayload, PatternPayload> &placeholder) {
-  CandidatePayload::appendToCandidateList(singleOutDimMap, fullMap,
-                                          placeholder);
+    UnpositionedPlaceholder<CandidatePayload, PatternPayload> &placeholder) {
+  for (auto &&candidate : CandidatePayload::candidates(singleOutDimMap, fullMap,
+                                                       placeholder.pattern_)) {
+    placeholder.candidates_.emplace_back(candidate, fullMap);
+  }
 }
 
 // All placeholders should get different assignments, except those that belong
@@ -314,15 +312,11 @@ static inline isl::map mapFrom1DMaps(isl::space space,
   return result;
 }
 
-isl::map SingleInputDim::make1DMap(
-    const DimCandidate<SingleInputDim> &dimCandidate,
-    const UnpositionedPlaceholder<SingleInputDim, SimpleAff> &placeholder,
-    isl::space space) {
-  auto lhs =
-      isl::aff::var_on_domain(isl::local_space(space.domain()), isl::dim::set,
-                              dimCandidate.payload_.inputDimPos_);
-  lhs = lhs.scale(placeholder.pattern_.coefficient_)
-            .add_constant_val(placeholder.pattern_.constant_);
+isl::map SingleInputDim::make1DMap(const SingleInputDim &candidate,
+                                   const SimpleAff &pattern, isl::space space) {
+  auto lhs = isl::aff::var_on_domain(isl::local_space(space.domain()),
+                                     isl::dim::set, candidate.inputDimPos_);
+  lhs = lhs.scale(pattern.coefficient_).add_constant_val(pattern.constant_);
   auto rhs = isl::aff::var_on_domain(isl::local_space(space.range()),
                                      isl::dim::set, 0);
   using map_maker::operator==;
@@ -335,7 +329,8 @@ make1DMap(const DimCandidate<CandidatePayload> &dimCandidate,
           const UnpositionedPlaceholder<CandidatePayload, PatternPayload>
               &placeholder,
           isl::space space) {
-  return CandidatePayload::make1DMap(dimCandidate, placeholder, space);
+  return CandidatePayload::make1DMap(dimCandidate.payload_,
+                                     placeholder.pattern_, space);
 }
 
 template <typename CandidatePayload, typename PatternPayload, typename... Args>

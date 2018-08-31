@@ -12,11 +12,6 @@
 
 namespace matchers {
 
-template <typename CandidatePayload, typename PatternPayload>
-class UnpositionedPlaceholder;
-template <typename CandidatePayload, typename PatternPayload> class Placeholder;
-template <typename CandidatePayload> class DimCandidate;
-
 // Pattern payload class for placeholders that capture simple 1d affine
 // expressions of the form
 //   coefficient_ * X + constant_
@@ -37,19 +32,18 @@ public:
 // appendToCandidateList and make1DMap must be implemented for the matchers and
 // the transformers, respectively, to work.
 //
-// TODO: When "pattern payload" is implemented, change the signatures of
-// appendToCandidateList and make1DMap so that they become independent of
-// Placeholder implementation but connected to the pattern payload class that
-// they actually need.
+// This candidate payload class is aware of the patterns it is compatible with
+// and provides static member functions to work with them.
 class SingleInputDim {
 public:
-  static void
-  appendToCandidateList(isl::map singleOutDimMap, isl::map fullMap,
-                        Placeholder<SingleInputDim, SimpleAff> &placeholder);
-  static inline isl::map make1DMap(
-      const DimCandidate<SingleInputDim> &dimCandidate,
-      const UnpositionedPlaceholder<SingleInputDim, SimpleAff> &placeholder,
-      isl::space space);
+  // Overload these functions to make this candidate payload class compatible
+  // with other patterns.
+  static inline std::vector<SingleInputDim>
+  candidates(isl::map singleOutDimMap, isl::map fullMap,
+             const SimpleAff &pattern);
+  static inline isl::map make1DMap(const SingleInputDim &candidate,
+                                   const SimpleAff &placeholder,
+                                   isl::space space);
 
   int inputDimPos_;
 };
@@ -67,14 +61,9 @@ public:
 
 class StrideCandidate {
 public:
-  static inline void appendToCandidateList(
-      isl::map singleOutDimMap, isl::map fullMap,
-      UnpositionedPlaceholder<StrideCandidate, StridePattern> &placeholder);
-
-  static inline isl::map
-  make1DMap(const DimCandidate<StrideCandidate> &dimCandidate,
-            const UnpositionedPlaceholder<StrideCandidate, StridePattern>
-                &placeholder);
+  static inline std::vector<StrideCandidate>
+  candidates(isl::map singleOutDimMap, isl::map fullMap,
+             const StridePattern &pattern);
 
   bool operator==(const StrideCandidate &) const { return true; }
 };
