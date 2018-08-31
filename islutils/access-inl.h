@@ -144,10 +144,15 @@ match(isl::union_map access,
 
   // Stage 1: fill in the candidate lists for all placeholders.
   for (auto &ph : ps.placeholders_) {
-    int i = ph.outDimPos_;
     for (auto acc : accesses) {
+      int i = ph.outDimPos_;
       int dim = acc.dim(isl::dim::out);
-      if (i >= dim) {
+      // Treat negative indexes as 1-based starting from the end of the output
+      // space of the access relation.
+      if (i < 0) {
+        i = dim + i;
+      }
+      if (i >= dim || i < 0) {
         continue;
       }
       auto single = acc.project_out(isl::dim::out, i + 1, dim - (i + 1))
@@ -243,7 +248,8 @@ isl::map transformOneMap(
                    "the transformation is undefined");
     }
     // Actual transformation.
-    if (map.dim(isl::dim::out) == 0) {
+    int dim = map.dim(isl::dim::out);
+    if (dim == 0) {
       result = map;
       continue;
     }
@@ -251,7 +257,12 @@ isl::map transformOneMap(
     auto space1D =
         addEmptyRange(map.get_space().domain()).add_dims(isl::dim::out, 1);
     for (const auto &plh : rep.replacement) {
-      list[plh.outDimPos_] = make1DMap(oneMatch[plh], plh, space1D);
+      int pos = plh.outDimPos_;
+      // Treat negative positions as starting from the end.
+      if (pos < 0) {
+        pos = dim + pos;
+      }
+      list[pos] = make1DMap(oneMatch[plh], plh, space1D);
     }
     result = mapFrom1DMaps(map.get_space(), list);
   }

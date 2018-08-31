@@ -304,6 +304,39 @@ TEST(AccessMatcher, Strides) {
   EXPECT_EQ(match(umap, allOf(access(dim(0, stride(ctx, 1))))).size(), 1);
 }
 
+TEST(AccessMatcher, NegativeIndexMatch) {
+  auto ctx = ScopedCtx();
+  auto umap = isl::union_map(ctx, "{[i,j]->A[a]: a=j;"
+                                  " [i,j]->B[a]: a=i;"
+                                  " [i,j]->C[a,b]: a=42*i and b=j;"
+                                  " [i,j]->D[a,b]: a=42*i and b=2*j;"
+                                  " [i,j]->E[a,b,e,f,g]: g=j;"
+                                  " [i,j]->F[a,b,e,f,g]: g=i;"
+                                  " [i,j]->G[a,b,e,f,g]: f=j}");
+  EXPECT_EQ(match(umap, allOf(access(dim(-1, stride(ctx, 1))))).size(), 3);
+  EXPECT_EQ(match(umap, allOf(access(dim(-1, stride(ctx, 2))))).size(), 1);
+  EXPECT_EQ(match(umap, allOf(access(dim(-2, stride(ctx, 1))))).size(), 1);
+}
+
+TEST(AccessMatcher, NegativeIndexTransform) {
+  auto ctx = ScopedCtx();
+  auto umap = isl::union_map(ctx, "{[i,j]->A[a]: a=j;"
+                                  " [i,j]->B[a]: a=i;"
+                                  " [i,j]->C[a,b]: a=42*i and b=j;"
+                                  " [i,j]->D[a,b]: a=42*i and b=2*j;"
+                                  " [i,j]->E[a,b,e,f,g]: f=42*i and g=j;"
+                                  " [i,j]->F[a,b,e,f,g]: g=i;"
+                                  " [i,j]->G[a,b,e,f,g]: f=j}");
+  auto i = placeholder(ctx);
+  auto j = placeholder(ctx);
+  auto result =
+      findAndReplace(umap, replace(access(dim(-2, 42 * i), dim(-1, j)),
+                                   access(dim(-2, j), dim(-1, 42 * i))));
+
+  EXPECT_EQ(match(result, allOf(access(dim(-1, 42 * placeholder(ctx))))).size(),
+            2);
+}
+
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
