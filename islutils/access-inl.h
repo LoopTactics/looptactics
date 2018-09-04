@@ -288,4 +288,12 @@ isl::union_map findAndReplace(isl::union_map umap,
   return result;
 }
 
+template <typename TargetPatternPayload, typename CandidatePayload,
+          typename SourcePatternPayload>
+Placeholder<CandidatePayload, TargetPatternPayload>
+pattern_cast(Placeholder<CandidatePayload, SourcePatternPayload> placeholder) {
+  return Placeholder<CandidatePayload, TargetPatternPayload>(
+      static_cast<TargetPatternPayload>(placeholder.pattern_), placeholder.id_);
+}
+
 } // namespace matchers

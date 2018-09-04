@@ -2,6 +2,9 @@
 #define ISLUTILS_ACCESS_PATTERNS_H
 
 #include "islutils/access.h"
+#include "islutils/die.h"
+
+#include <climits>
 
 namespace matchers {
 
@@ -23,11 +26,33 @@ public:
   int outDimPos;
 };
 
+// Marker class for FixedOutDimPattern with not-yet-specified output dimension.
+template <typename PatternTy> class UnfixedOutDimPattern : public PatternTy {
+  template <typename TargetPatternPayload_, typename CandidatePayload_,
+            typename SourcePatternPayload_>
+  friend Placeholder<CandidatePayload_, TargetPatternPayload_> pattern_cast(
+      Placeholder<CandidatePayload_, SourcePatternPayload_> placeholder);
+
+public:
+  explicit UnfixedOutDimPattern(const PatternTy &t) : PatternTy(t) {}
+
+private:
+  explicit operator FixedOutDimPattern<PatternTy>();
+};
+
+template <typename PatternTy>
+UnfixedOutDimPattern<PatternTy>::operator FixedOutDimPattern<PatternTy>() {
+  return FixedOutDimPattern<PatternTy>(*this, INT_MAX);
+}
+
 template <typename PatternTy>
 template <typename CandidateTy>
 std::vector<CandidateTy> FixedOutDimPattern<PatternTy>::candidates(
     isl::map access, const FixedOutDimPattern<PatternTy> &pattern) {
   int pos = pattern.outDimPos;
+  if (pos == INT_MAX) {
+    ISLUTILS_DIE("no out dimension specified for FixedOutDimPattern");
+  }
   int dim = access.dim(isl::dim::out);
   // Treat negative indexes as 1-based starting from the end of the output
   // space of the accessess relation.
@@ -43,20 +68,26 @@ std::vector<CandidateTy> FixedOutDimPattern<PatternTy>::candidates(
                                  static_cast<const PatternTy &>(pattern));
 }
 
+template <typename CandidateTy, typename T>
+Placeholder<CandidateTy, FixedOutDimPattern<T>>
+dim(int pos, Placeholder<CandidateTy, UnfixedOutDimPattern<T>> placeholder) {
+  auto p = pattern_cast<FixedOutDimPattern<T>>(placeholder);
+  p.pattern_.outDimPos = pos;
+  return p;
+}
+
 template <typename CandidateTy, typename PatternTy, typename... Args>
 typename std::enable_if<
-    all_are<UnpositionedPlaceholder<CandidateTy, PatternTy>,
-            UnpositionedPlaceholder<CandidateTy, PatternTy>, Args...>::value,
+    all_are<Placeholder<CandidateTy, UnfixedOutDimPattern<PatternTy>>,
+            Placeholder<CandidateTy, UnfixedOutDimPattern<PatternTy>>,
+            Args...>::value,
     PlaceholderList<CandidateTy, FixedOutDimPattern<PatternTy>>>::type
-access(UnpositionedPlaceholder<CandidateTy, PatternTy> arg, Args... args) {
+access(Placeholder<CandidateTy, UnfixedOutDimPattern<PatternTy>> arg,
+       Args... args) {
   PlaceholderList<CandidateTy, FixedOutDimPattern<PatternTy>> result;
   int pos = 0;
-  for (const auto &a : {arg, args...}) {
-    // FIXME: don't create a new placehodler here...
-    result.emplace_back(Placeholder<CandidateTy, FixedOutDimPattern<PatternTy>>(
-        FixedOutDimPattern<PatternTy>(a.pattern_, pos), pos));
-    result.back().id_ = a.id_; // FIXME: avoid this
-    ++pos;
+  for (const auto &pl : {arg, args...}) {
+    result.emplace_back(dim(pos++, pl));
   }
   return result;
 }
@@ -86,16 +117,6 @@ isl::map FixedOutDimPattern<PatternTy>::transformMap(
   list[pos] = CandidateTy::transformMap(
       list[pos], candidate, static_cast<const PatternTy &>(pattern));
   return mapFrom1DMaps(map.get_space(), list);
-}
-
-template <typename CandidateTy, typename T>
-Placeholder<CandidateTy, FixedOutDimPattern<T>>
-dim(int pos, UnpositionedPlaceholder<CandidateTy, T> placeholder) {
-  // FIXME: don't create a new placeholder here...
-  auto p = Placeholder<CandidateTy, FixedOutDimPattern<T>>(
-      FixedOutDimPattern<T>(T(placeholder.pattern_), pos), pos);
-  p.id_ = placeholder.id_; // FIXME: avoid this
-  return p;
 }
 
 ////////////////////
@@ -151,20 +172,23 @@ inline bool operator==(const SingleInputDim &left,
   return left.inputDimPos_ == right.inputDimPos_;
 }
 
-inline UnpositionedPlaceholder<SingleInputDim, SimpleAff>
+inline Placeholder<SingleInputDim, UnfixedOutDimPattern<SimpleAff>>
 placeholder(isl::ctx ctx) {
-  return UnpositionedPlaceholder<SingleInputDim, SimpleAff>(SimpleAff(ctx));
+  return Placeholder<SingleInputDim, UnfixedOutDimPattern<SimpleAff>>(
+      UnfixedOutDimPattern<SimpleAff>(SimpleAff(ctx)));
 }
 
-inline UnpositionedPlaceholder<SingleInputDim, SimpleAff>
-operator*(int i, UnpositionedPlaceholder<SingleInputDim, SimpleAff> p) {
+inline Placeholder<SingleInputDim, UnfixedOutDimPattern<SimpleAff>>
+operator*(int i,
+          Placeholder<SingleInputDim, UnfixedOutDimPattern<SimpleAff>> p) {
   p.pattern_.coefficient_ = p.pattern_.coefficient_.mul(
       isl::val(p.pattern_.coefficient_.get_ctx(), i));
   return p;
 }
 
-inline UnpositionedPlaceholder<SingleInputDim, SimpleAff>
-operator+(UnpositionedPlaceholder<SingleInputDim, SimpleAff> p, int i) {
+inline Placeholder<SingleInputDim, UnfixedOutDimPattern<SimpleAff>>
+operator+(Placeholder<SingleInputDim, UnfixedOutDimPattern<SimpleAff>> p,
+          int i) {
   p.pattern_.constant_ =
       p.pattern_.constant_.add(isl::val(p.pattern_.constant_.get_ctx(), i));
   return p;
@@ -193,15 +217,15 @@ public:
   bool operator==(const StrideCandidate &) const { return true; }
 };
 
-inline UnpositionedPlaceholder<StrideCandidate, StridePattern>
+inline Placeholder<StrideCandidate, UnfixedOutDimPattern<StridePattern>>
 stride(isl::ctx ctx, int s) {
   StridePattern pattern(ctx);
   pattern.stride = pattern.stride.mul_ui(std::abs(s));
   if (s < 0) {
     pattern.stride = pattern.stride.neg();
   }
-  return UnpositionedPlaceholder<StrideCandidate, StridePattern>(
-      StridePattern(pattern));
+  return Placeholder<StrideCandidate, UnfixedOutDimPattern<StridePattern>>(
+      UnfixedOutDimPattern<StridePattern>(StridePattern(pattern)));
 }
 
 } // namespace matchers

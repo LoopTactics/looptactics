@@ -32,42 +32,32 @@ public:
 };
 
 template <typename CandidatePayload, typename PatternPayload>
-class UnpositionedPlaceholder {
+class Placeholder {
+private:
+  Placeholder(PatternPayload pattern, size_t id)
+      : pattern_(pattern), candidates_({}), id_(id) {}
+
+  template <typename TargetPatternPayload_, typename CandidatePayload_,
+            typename SourcePatternPayload_>
+  friend Placeholder<CandidatePayload_, TargetPatternPayload_> pattern_cast(
+      Placeholder<CandidatePayload_, SourcePatternPayload_> placeholder);
+
 public:
-  explicit UnpositionedPlaceholder(PatternPayload pattern)
+  explicit Placeholder(PatternPayload pattern)
       : pattern_(pattern), candidates_({}), id_(nextId_++) {}
-  UnpositionedPlaceholder(const UnpositionedPlaceholder &) = default;
+  Placeholder(const Placeholder &) = default;
 
   PatternPayload pattern_;
   std::vector<DimCandidate<CandidatePayload>> candidates_;
 
-  // FIXME: make const again
-  size_t id_;
+  const size_t id_;
 
 private:
   static thread_local size_t nextId_;
 };
 
 template <typename CandidatePayload, typename PatternPayload>
-thread_local size_t
-    UnpositionedPlaceholder<CandidatePayload, PatternPayload>::nextId_ = 0;
-
-template <typename CandidatePayload, typename PatternPayload>
-class Placeholder
-    : public UnpositionedPlaceholder<CandidatePayload, PatternPayload> {
-public:
-  explicit Placeholder(PatternPayload pattern, int pos)
-      : UnpositionedPlaceholder<CandidatePayload, PatternPayload>(pattern),
-        outDimPos_(pos) {}
-  explicit Placeholder(
-      const UnpositionedPlaceholder<CandidatePayload, PatternPayload> &other,
-      int pos)
-      : UnpositionedPlaceholder<CandidatePayload, PatternPayload>(other),
-        outDimPos_(pos) {}
-  Placeholder(const Placeholder<CandidatePayload, PatternPayload> &) = default;
-
-  int outDimPos_;
-};
+thread_local size_t Placeholder<CandidatePayload, PatternPayload>::nextId_ = 0;
 
 template <typename CandidatePayload, typename PatternPayload>
 using PlaceholderList =
@@ -181,8 +171,8 @@ public:
 
   // Pattern pyload here is not important.
   template <typename PPayload>
-  DimCandidate<CandidatePayload> operator[](
-      const UnpositionedPlaceholder<CandidatePayload, PPayload> &pl) const {
+  DimCandidate<CandidatePayload>
+  operator[](const Placeholder<CandidatePayload, PPayload> &pl) const {
     auto result = std::find_if(
         placeholderValues_.begin(), placeholderValues_.end(),
         [pl](const std::pair<size_t, DimCandidate<CandidatePayload>> &kvp) {
