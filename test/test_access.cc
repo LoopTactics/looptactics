@@ -8,17 +8,19 @@
 using util::ScopedCtx;
 using namespace matchers;
 
-static matchers::PlaceholderSet<SingleInputDim, SimpleAff>
+static matchers::PlaceholderSet<SingleInputDim, FixedOutDimPattern<SimpleAff>>
 makePlaceholderSet(isl::ctx ctx) {
   using namespace matchers;
 
-  Placeholder<SingleInputDim, SimpleAff> p1(SimpleAff(ctx), 1);
-  Placeholder<SingleInputDim, SimpleAff> p2(SimpleAff(ctx), 0);
+  Placeholder<SingleInputDim, FixedOutDimPattern<SimpleAff>> p1(
+      FixedOutDimPattern<SimpleAff>(SimpleAff(ctx), 1), 1);
+  Placeholder<SingleInputDim, FixedOutDimPattern<SimpleAff>> p2(
+      FixedOutDimPattern<SimpleAff>(SimpleAff(ctx), 0), 0);
   p1.pattern_.coefficient_ = isl::val(ctx, 1);
   p2.pattern_.coefficient_ = isl::val(ctx, 2);
   p1.pattern_.constant_ = isl::val::zero(ctx);
   p2.pattern_.constant_ = isl::val::zero(ctx);
-  PlaceholderSet<SingleInputDim, SimpleAff> ps;
+  PlaceholderSet<SingleInputDim, FixedOutDimPattern<SimpleAff>> ps;
   ps.placeholders_.push_back(p1);
   ps.placeholders_.push_back(p2);
   ps.placeholderFolds_.push_back(0);
@@ -84,14 +86,15 @@ TEST(AccessMatcher, MatchResults) {
   }
 }
 
-static matchers::PlaceholderSet<SingleInputDim, SimpleAff>
+static matchers::PlaceholderSet<SingleInputDim, FixedOutDimPattern<SimpleAff>>
 makeTwoGroupPlaceholderSet(isl::ctx ctx) {
   using namespace matchers;
 
   auto ps = makePlaceholderSet(ctx);
 
   // Make this similar to p1.
-  Placeholder<SingleInputDim, SimpleAff> p3(SimpleAff(ctx), 1);
+  Placeholder<SingleInputDim, FixedOutDimPattern<SimpleAff>> p3(
+      FixedOutDimPattern<SimpleAff>(SimpleAff(ctx), 1), 1);
   p3.pattern_.coefficient_ = isl::val(ctx, 1);
   p3.pattern_.constant_ = isl::val::zero(ctx);
   ps.placeholders_.push_back(p3);
@@ -108,7 +111,6 @@ TEST(AccessMatcher, TwoGroups) {
   using namespace matchers;
 
   auto ctx = ScopedCtx();
-  auto ps = makeTwoGroupPlaceholderSet(ctx);
   auto umap = isl::union_map(
       ctx, "{[i,j]->[a,b]: a=2*j and b=i; [i,j]->A[x,y]: x=42*j and y=i}");
   auto _1 = placeholder(ctx);
@@ -141,17 +143,20 @@ TEST(AccessMatcher, TwoMapsOneMatch) {
   EXPECT_EQ(matches.size(), 1);
 }
 
-static matchers::PlaceholderSet<SingleInputDim, SimpleAff>
+static matchers::PlaceholderSet<SingleInputDim, FixedOutDimPattern<SimpleAff>>
 makeSameGroupSameFoldPlaceholderSet(isl::ctx ctx) {
   using namespace matchers;
 
-  Placeholder<SingleInputDim, SimpleAff> p1(SimpleAff(ctx), 1);
-  Placeholder<SingleInputDim, SimpleAff> p2(SimpleAff(ctx), 0);
+  Placeholder<SingleInputDim, FixedOutDimPattern<SimpleAff>> p1(
+      FixedOutDimPattern<SimpleAff>(SimpleAff(ctx), 1), 1);
+  Placeholder<SingleInputDim, FixedOutDimPattern<SimpleAff>> p2(
+      FixedOutDimPattern<SimpleAff>(SimpleAff(ctx), 0), 0);
+  ;
   p1.pattern_.coefficient_ = isl::val(ctx, 1);
   p2.pattern_.coefficient_ = isl::val(ctx, 1);
   p1.pattern_.constant_ = isl::val::zero(ctx);
   p2.pattern_.constant_ = isl::val::zero(ctx);
-  PlaceholderSet<SingleInputDim, SimpleAff> ps;
+  PlaceholderSet<SingleInputDim, FixedOutDimPattern<SimpleAff>> ps;
   ps.placeholders_.push_back(p1);
   ps.placeholders_.push_back(p2);
 

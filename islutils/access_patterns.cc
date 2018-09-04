@@ -4,8 +4,7 @@
 namespace matchers {
 
 std::vector<SingleInputDim>
-SingleInputDim::candidates(isl::map singleOutDimMap, isl::map fullMap,
-                           const SimpleAff &pattern) {
+SingleInputDim::candidates(isl::map singleOutDimMap, const SimpleAff &pattern) {
   std::vector<SingleInputDim> result = {};
   singleOutDimMap = singleOutDimMap.coalesce();
   if (!singleOutDimMap.is_single_valued()) {
@@ -43,8 +42,10 @@ SingleInputDim::candidates(isl::map singleOutDimMap, isl::map fullMap,
   return result;
 }
 
-isl::map SingleInputDim::make1DMap(const SingleInputDim &candidate,
-                                   const SimpleAff &pattern, isl::space space) {
+isl::map SingleInputDim::transformMap(isl::map map,
+                                      const SingleInputDim &candidate,
+                                      const SimpleAff &pattern) {
+  auto space = map.get_space();
   auto lhs = isl::aff::var_on_domain(isl::local_space(space.domain()),
                                      isl::dim::set, candidate.inputDimPos_);
   lhs = lhs.scale(pattern.coefficient_).add_constant_val(pattern.constant_);
@@ -77,7 +78,7 @@ static isl::map mapToNext(isl::space space) {
 }
 
 std::vector<StrideCandidate>
-StrideCandidate::candidates(isl::map singleOutDimMap, isl::map fullMap,
+StrideCandidate::candidates(isl::map singleOutDimMap,
                             const StridePattern &pattern) {
   auto map = mapToNext(singleOutDimMap.get_space().domain());
   auto delta =
@@ -91,6 +92,33 @@ StrideCandidate::candidates(isl::map singleOutDimMap, isl::map fullMap,
   if (delta.is_subset(strideAff == varAff))
     return {StrideCandidate{}};
   return {};
+}
+
+///////////////////
+// Utility functions for FixedOutDimPattern::transformMap
+
+std::vector<isl::map> listOf1DMaps(isl::map map) {
+  std::vector<isl::map> result;
+  for (int dim = map.dim(isl::dim::out); dim > 0; --dim) {
+    result.push_back(map.project_out(isl::dim::out, 1, dim - 1));
+    map = map.project_out(isl::dim::out, 0, 1);
+  }
+  return result;
+}
+
+isl::space addEmptyRange(isl::space space) {
+  return space.product(space.params().set_from_params()).unwrap();
+}
+
+isl::map mapFrom1DMaps(isl::space space, const std::vector<isl::map> &list) {
+  auto zeroSpace = addEmptyRange(space.domain());
+  auto result = isl::map::universe(zeroSpace);
+  for (const auto &m : list) {
+    result = result.flat_range_product(m);
+  }
+  result =
+      result.set_tuple_id(isl::dim::out, space.get_tuple_id(isl::dim::out));
+  return result;
 }
 
 } // namespace matchers

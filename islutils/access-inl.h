@@ -145,19 +145,7 @@ match(isl::union_map access,
   // Stage 1: fill in the candidate lists for all placeholders.
   for (auto &ph : ps.placeholders_) {
     for (auto acc : accesses) {
-      int i = ph.outDimPos_;
-      int dim = acc.dim(isl::dim::out);
-      // Treat negative indexes as 1-based starting from the end of the output
-      // space of the access relation.
-      if (i < 0) {
-        i = dim + i;
-      }
-      if (i >= dim || i < 0) {
-        continue;
-      }
-      auto single = acc.project_out(isl::dim::out, i + 1, dim - (i + 1))
-                        .project_out(isl::dim::out, 0, i);
-      for (auto &&c : CandidatePayload::candidates(single, acc, ph.pattern_)) {
+      for (auto &&c : CandidatePayload::candidates(acc, ph.pattern_)) {
         ph.candidates_.emplace_back(c, acc.get_space());
       }
     }
@@ -184,41 +172,6 @@ match(isl::union_map access,
         return hasNoDuplicateAssignments(candidate, ps) &&
                groupsAreProperlyFormed(candidate, ps);
       });
-}
-
-static inline std::vector<isl::map> listOf1DMaps(isl::map map) {
-  std::vector<isl::map> result;
-  for (int dim = map.dim(isl::dim::out); dim > 0; --dim) {
-    result.push_back(map.project_out(isl::dim::out, 1, dim - 1));
-    map = map.project_out(isl::dim::out, 0, 1);
-  }
-  return result;
-}
-
-static inline isl::space addEmptyRange(isl::space space) {
-  return space.product(space.params().set_from_params()).unwrap();
-}
-
-static inline isl::map mapFrom1DMaps(isl::space space,
-                                     const std::vector<isl::map> &list) {
-  auto zeroSpace = addEmptyRange(space.domain());
-  auto result = isl::map::universe(zeroSpace);
-  for (const auto &m : list) {
-    result = result.flat_range_product(m);
-  }
-  result =
-      result.set_tuple_id(isl::dim::out, space.get_tuple_id(isl::dim::out));
-  return result;
-}
-
-template <typename CandidatePayload, typename PatternPayload>
-inline isl::map
-make1DMap(const DimCandidate<CandidatePayload> &dimCandidate,
-          const UnpositionedPlaceholder<CandidatePayload, PatternPayload>
-              &placeholder,
-          isl::space space) {
-  return CandidatePayload::make1DMap(dimCandidate.payload_,
-                                     placeholder.pattern_, space);
 }
 
 template <typename CandidatePayload, typename PatternPayload, typename... Args>
@@ -248,23 +201,11 @@ isl::map transformOneMap(
                    "the transformation is undefined");
     }
     // Actual transformation.
-    int dim = map.dim(isl::dim::out);
-    if (dim == 0) {
-      result = map;
-      continue;
-    }
-    auto list = listOf1DMaps(map);
-    auto space1D =
-        addEmptyRange(map.get_space().domain()).add_dims(isl::dim::out, 1);
+    result = map;
     for (const auto &plh : rep.replacement) {
-      int pos = plh.outDimPos_;
-      // Treat negative positions as starting from the end.
-      if (pos < 0) {
-        pos = dim + pos;
-      }
-      list[pos] = make1DMap(oneMatch[plh], plh, space1D);
+      result = CandidatePayload::transformMap(result, oneMatch[plh].payload_,
+                                              plh.pattern_);
     }
-    result = mapFrom1DMaps(map.get_space(), list);
   }
   return result;
 }

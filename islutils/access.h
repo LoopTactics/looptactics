@@ -41,7 +41,8 @@ public:
   PatternPayload pattern_;
   std::vector<DimCandidate<CandidatePayload>> candidates_;
 
-  const size_t id_;
+  // FIXME: make const again
+  size_t id_;
 
 private:
   static thread_local size_t nextId_;
@@ -63,15 +64,10 @@ public:
       int pos)
       : UnpositionedPlaceholder<CandidatePayload, PatternPayload>(other),
         outDimPos_(pos) {}
+  Placeholder(const Placeholder<CandidatePayload, PatternPayload> &) = default;
 
   int outDimPos_;
 };
-
-template <typename CandidatePayload, typename PatternPayload>
-inline Placeholder<CandidatePayload, PatternPayload>
-dim(int pos, UnpositionedPlaceholder<CandidatePayload, PatternPayload> ph) {
-  return Placeholder<CandidatePayload, PatternPayload>(ph, pos);
-}
 
 template <typename CandidatePayload, typename PatternPayload>
 using PlaceholderList =
@@ -96,22 +92,6 @@ typename std::enable_if<
     PlaceholderList<CandidatePayload, PatternPayload>>::type
 access(Placeholder<CandidatePayload, PatternPayload> arg, Args... args) {
   return {arg, args...};
-}
-
-template <typename CandidatePayload, typename PatternPayload, typename... Args>
-typename std::enable_if<
-    all_are<UnpositionedPlaceholder<CandidatePayload, PatternPayload>,
-            UnpositionedPlaceholder<CandidatePayload, PatternPayload>,
-            Args...>::value,
-    PlaceholderList<CandidatePayload, PatternPayload>>::type
-access(UnpositionedPlaceholder<CandidatePayload, PatternPayload> arg,
-       Args... args) {
-  PlaceholderList<CandidatePayload, PatternPayload> result;
-  int pos = 0;
-  for (const auto &a : {arg, args...}) {
-    result.emplace_back(a, pos++);
-  }
-  return result;
 }
 
 template <typename CandidatePayload, typename PatternPayload>
@@ -199,9 +179,10 @@ public:
   Match(const PlaceholderSet<CandidatePayload, PatternPayload> &ps,
         const std::vector<DimCandidate<CandidatePayload>> &combination);
 
+  // Pattern pyload here is not important.
+  template <typename PPayload>
   DimCandidate<CandidatePayload> operator[](
-      const UnpositionedPlaceholder<CandidatePayload, PatternPayload> &pl)
-      const {
+      const UnpositionedPlaceholder<CandidatePayload, PPayload> &pl) const {
     auto result = std::find_if(
         placeholderValues_.begin(), placeholderValues_.end(),
         [pl](const std::pair<size_t, DimCandidate<CandidatePayload>> &kvp) {
