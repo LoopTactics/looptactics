@@ -344,6 +344,91 @@ TEST(AccessMatcher, NegativeIndexTransform) {
             2);
 }
 
+namespace {
+
+class FuncStyleListPattern {
+public:
+  bool isFirst;
+};
+
+class FuncStyleListCandidate {
+public:
+  static std::vector<FuncStyleListCandidate>
+  candidates(isl::map map, const FuncStyleListPattern &pattern) {
+    auto dim = map.dim(isl::dim::out);
+    if (dim == 0) {
+      return {};
+    }
+    FuncStyleListCandidate candidate;
+    if (pattern.isFirst) {
+      candidate.partialMap = map.project_out(isl::dim::out, 0, 1);
+    } else {
+      candidate.partialMap = map.project_out(isl::dim::out, 1, dim - 1);
+    }
+    return {candidate};
+  }
+
+  static isl::map transformMap(isl::map map,
+                               const FuncStyleListCandidate &candidate,
+                               const FuncStyleListPattern &pattern) {
+    if (pattern.isFirst) {
+      auto id = map.get_tuple_id(isl::dim::out);
+      return candidate.partialMap
+          .flat_range_product(map.project_out(isl::dim::out, 0, 1))
+          .set_tuple_id(isl::dim::out, id);
+    } else {
+      auto id = map.get_tuple_id(isl::dim::out);
+      auto dim = map.dim(isl::dim::out);
+      return map.project_out(isl::dim::out, 1, dim - 1)
+          .flat_range_product(candidate.partialMap)
+          .set_tuple_id(isl::dim::out, id);
+    }
+  }
+
+  bool operator==(const FuncStyleListCandidate &) const { return false; }
+
+  isl::map partialMap;
+};
+
+template <typename CandidateTy, typename PatternTy>
+Placeholder<CandidateTy, PatternTy> makePlaceholder(PatternTy pattern) {
+  return Placeholder<CandidateTy, PatternTy>(pattern);
+}
+
+auto head = []() {
+  FuncStyleListPattern pattern;
+  pattern.isFirst = true;
+  return makePlaceholder<FuncStyleListCandidate>(pattern);
+};
+
+auto tail = []() {
+  FuncStyleListPattern pattern;
+  pattern.isFirst = false;
+  return makePlaceholder<FuncStyleListCandidate>(pattern);
+};
+} // namespace
+
+TEST(AccessMatcher, UserDefinedPatterns) {
+  auto ctx = ScopedCtx();
+  auto umap = isl::union_map(ctx, "{[i,j]->A[a,b]: a=i and b=j;"
+                                  " [i,j]->B[a,b,c,d]: a=j and b=i}");
+
+  EXPECT_EQ(match(umap, allOf(access(head(), tail()))).size(), 2);
+}
+
+TEST(AccessMatcher, MultiDimensionalReplace) {
+  auto ctx = ScopedCtx();
+  auto umap = isl::union_map(ctx, "{[i,j]->A[a,b]: a=i and b=j;"
+                                  " [i,j]->B[a,b,c,d]: a=j and b=i}");
+
+  auto h = head();
+  auto t = tail();
+  umap = findAndReplace(umap, replace(access(h, t), access(t, h)));
+  auto expected = isl::union_map(ctx, "{[i,j]->A[b,a]: a=i and b=j;"
+                                      " [i,j]->B[b,c,d,a]: a=j and b=i}");
+  EXPECT_TRUE(umap.is_equal(expected));
+}
+
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
