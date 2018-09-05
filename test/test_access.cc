@@ -159,13 +159,11 @@ TEST(AccessMatcher, TwoGroups) {
   // match them (p2 does not match the "A" space).
   EXPECT_EQ(matches.size(), 1);
 
-#if 0
   auto _3 = placeholder(ctx);
   matches = match(
       umap, allOf(access(dim(0, 2 * _2), dim(1, _1)), access(dim(1, _3))));
   // No matches possible because _3 cannot be assigned the same candidate as _1.
   EXPECT_EQ(matches.size(), 0);
-#endif
 }
 
 TEST(AccessMatcher, TwoMapsOneMatch) {
