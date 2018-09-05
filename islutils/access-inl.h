@@ -296,4 +296,75 @@ pattern_cast(Placeholder<CandidatePayload, SourcePatternPayload> placeholder) {
       static_cast<TargetPatternPayload>(placeholder.pattern_), placeholder.id_);
 }
 
+/// Counter used to create per-thread unique-ish placeholder ids for the
+/// purpose of folding.
+template <typename CandidatePayload, typename PatternPayload>
+thread_local size_t Placeholder<CandidatePayload, PatternPayload>::nextId_ = 0;
+
+/// Build an object used to match all of the access patterns provided as
+/// arguments. Individual patterns can be constructed by calling "access(...)".
+template <typename CandidatePayload, typename PatternPayload, typename... Args>
+PlaceholderSet<CandidatePayload, PatternPayload>
+allOf(PlaceholderList<CandidatePayload, PatternPayload> arg, Args... args) {
+  static_assert(all_are<PlaceholderList<CandidatePayload, PatternPayload>,
+                        PlaceholderList<CandidatePayload, PatternPayload>,
+                        Args...>::value,
+                "can only make PlaceholderSet from PlaceholderLists "
+                "with the same payload types");
+
+  std::vector<PlaceholderList<CandidatePayload, PatternPayload>>
+      placeholderLists = {arg, args...};
+  std::vector<std::pair<size_t, size_t>> knownIds;
+  PlaceholderSet<CandidatePayload, PatternPayload> ps;
+  for (const auto &pl : placeholderLists) {
+    if (pl.empty()) {
+      continue;
+    }
+
+    size_t index = ps.placeholders_.size();
+    ps.placeholderGroups_.emplace_back();
+    for (const auto &p : pl) {
+      ps.placeholders_.push_back(p);
+      ps.placeholderGroups_.back().push_back(index);
+      auto namePos = std::find_if(knownIds.begin(), knownIds.end(),
+                                  [p](const std::pair<size_t, size_t> &pair) {
+                                    return pair.first == p.id_;
+                                  });
+      if (namePos == knownIds.end()) {
+        knownIds.emplace_back(p.id_, index);
+        ps.placeholderFolds_.emplace_back(index);
+      } else {
+        ps.placeholderFolds_.emplace_back(namePos->second);
+      }
+      ++index;
+    }
+  }
+
+  return ps;
+}
+
+template <typename CandidatePayload, typename PatternPayload>
+template <typename PPayload>
+DimCandidate<CandidatePayload> Match<CandidatePayload, PatternPayload>::
+operator[](const Placeholder<CandidatePayload, PPayload> &pl) const {
+  // If pattern_cast from PatterPayload to PPayload cannot be instantiated,
+  // Placeholder<CandidatePayload, PPayload> cannot be a valid key to lookup
+  // match results.
+  static_assert(
+      std::is_same<
+          decltype(pattern_cast<PPayload>(
+              std::declval<Placeholder<CandidatePayload, PatternPayload>>())),
+          Placeholder<CandidatePayload, PPayload>>::value,
+      "incompatible pattern types");
+  auto result = std::find_if(
+      placeholderValues_.begin(), placeholderValues_.end(),
+      [pl](const std::pair<size_t, DimCandidate<CandidatePayload>> &kvp) {
+        return kvp.first == pl.id_;
+      });
+  if (result == placeholderValues_.end()) {
+    ISLUTILS_DIE("no match for the placeholder although matches found");
+  }
+  return result->second;
+}
+
 } // namespace matchers
