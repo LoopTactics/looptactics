@@ -119,6 +119,23 @@ public:
   std::vector<size_t> placeholderFolds_;
 };
 
+template <typename CandidatePayload, typename PatternPayload> class Match;
+
+template <typename CandidatePayload> class MatchCandidates {
+  template <typename CPayload, typename PPayload> friend class Match;
+
+public:
+  const std::vector<isl::space> &candidateSpaces() const {
+    return candidateSpaces_;
+  }
+
+  const CandidatePayload &payload() const { return payload_; }
+
+private:
+  CandidatePayload payload_;
+  std::vector<isl::space> candidateSpaces_;
+};
+
 template <typename CandidatePayload, typename PatternPayload> class Match {
 public:
   Match(const PlaceholderSet<CandidatePayload, PatternPayload> &ps,
@@ -126,7 +143,7 @@ public:
 
   // Pattern could have been casted, so define a new template parameter here.
   template <typename PPayload>
-  DimCandidate<CandidatePayload>
+  MatchCandidates<CandidatePayload>
   operator[](const Placeholder<CandidatePayload, PPayload> &pl) const;
 
 private:

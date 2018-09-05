@@ -76,14 +76,49 @@ TEST(AccessMatcher, MatchResults) {
 
   // Check that we can inspect the result using placeholder objects.
   for (const auto &m : matches) {
-    EXPECT_FALSE(m[_1].candidateMapSpace_.is_null());
-    EXPECT_FALSE(m[_2].candidateMapSpace_.is_null());
+    EXPECT_FALSE(m[_1].candidateSpaces().empty());
+    EXPECT_FALSE(m[_2].candidateSpaces().empty());
 
     // Check that we got the matching right.
-    EXPECT_TRUE(
-        (m[_1].payload_.inputDimPos_ == 0 && m[_2].payload_.inputDimPos_ == 1) ^
-        (m[_1].payload_.inputDimPos_ == 1 && m[_2].payload_.inputDimPos_ == 0));
+    EXPECT_TRUE((m[_1].payload().inputDimPos_ == 0 &&
+                 m[_2].payload().inputDimPos_ == 1) ^
+                (m[_1].payload().inputDimPos_ == 1 &&
+                 m[_2].payload().inputDimPos_ == 0));
   }
+}
+
+TEST(AccessMatcher, MatchResultsMultipleSpaces) {
+  using namespace matchers;
+
+  auto ctx = ScopedCtx();
+  auto umap = isl::union_map(ctx, "{[i,j]->A[a,b]: a=i and b=j;"
+                                  " [i,j]->B[a,b]: a=j and b=i;"
+                                  " [i,j]->C[a,b]: a=i and b=j}");
+  auto _1 = placeholder(ctx);
+  auto _2 = placeholder(ctx);
+  auto matches = match(umap, allOf(access(_1, _2), access(_1, _2)));
+  // Permutations of A,C spaces are allowed.
+  ASSERT_EQ(matches.size(), 2);
+
+  // Each match should have both spaces.
+  for (const auto &m : matches) {
+    EXPECT_EQ(m[_1].candidateSpaces().size(), 2);
+    EXPECT_EQ(m[_2].candidateSpaces().size(), 2);
+  }
+}
+
+TEST(AccessMatcher, MatchResultsNoDuplicateSpace) {
+  using namespace matchers;
+
+  auto ctx = ScopedCtx();
+  auto umap = isl::union_map(ctx, "{[i,j]->A[a,b]: a=i and b=i}");
+  auto _1 = placeholder(ctx);
+  auto matches = match(umap, allOf(access(_1, _1)));
+  ASSERT_EQ(matches.size(), 1);
+
+  // Do not expect the same space twice.
+  auto m = matches.front();
+  EXPECT_EQ(m[_1].candidateSpaces().size(), 1);
 }
 
 static matchers::PlaceholderSet<SingleInputDim, FixedOutDimPattern<SimpleAff>>

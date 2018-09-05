@@ -203,7 +203,7 @@ isl::map transformOneMap(
     // Actual transformation.
     result = map;
     for (const auto &plh : rep.replacement) {
-      result = CandidatePayload::transformMap(result, oneMatch[plh].payload_,
+      result = CandidatePayload::transformMap(result, oneMatch[plh].payload(),
                                               plh.pattern_);
     }
   }
@@ -245,15 +245,17 @@ isl::union_map findAndReplace(isl::union_map umap,
   for (const auto &m : matches) {
     std::vector<isl::map> toTransform;
     for (const auto &plh : ps.placeholders_) {
-      auto candidate = m[plh].candidateMapSpace_;
-      auto found = std::find_if(toTransform.begin(), toTransform.end(),
-                                [candidate](isl::map map) {
-                                  return map.get_space().is_equal(candidate);
-                                });
-      if (found != toTransform.end()) {
-        continue;
+      auto spaces = m[plh].candidateSpaces();
+      for (auto candidate : spaces) {
+        auto found = std::find_if(toTransform.begin(), toTransform.end(),
+                                  [candidate](isl::map map) {
+                                    return map.get_space().is_equal(candidate);
+                                  });
+        if (found != toTransform.end()) {
+          continue;
+        }
+        toTransform.push_back(umap.extract_map(candidate));
       }
-      toTransform.push_back(umap.extract_map(candidate));
     }
 
     for (const auto &candidate : toTransform) {
@@ -345,7 +347,7 @@ allOf(PlaceholderList<CandidatePayload, PatternPayload> arg, Args... args) {
 
 template <typename CandidatePayload, typename PatternPayload>
 template <typename PPayload>
-DimCandidate<CandidatePayload> Match<CandidatePayload, PatternPayload>::
+MatchCandidates<CandidatePayload> Match<CandidatePayload, PatternPayload>::
 operator[](const Placeholder<CandidatePayload, PPayload> &pl) const {
   // If pattern_cast from PatterPayload to PPayload cannot be instantiated,
   // Placeholder<CandidatePayload, PPayload> cannot be a valid key to lookup
@@ -356,15 +358,29 @@ operator[](const Placeholder<CandidatePayload, PPayload> &pl) const {
               std::declval<Placeholder<CandidatePayload, PatternPayload>>())),
           Placeholder<CandidatePayload, PPayload>>::value,
       "incompatible pattern types");
-  auto result = std::find_if(
-      placeholderValues_.begin(), placeholderValues_.end(),
-      [pl](const std::pair<size_t, DimCandidate<CandidatePayload>> &kvp) {
-        return kvp.first == pl.id_;
-      });
-  if (result == placeholderValues_.end()) {
+
+  auto result = MatchCandidates<CandidatePayload>();
+
+  for (const auto &kvp : placeholderValues_) {
+    if (kvp.first == pl.id_) {
+      if (result.candidateSpaces_.empty()) {
+        result.payload_ = kvp.second.payload_;
+      } else if (!(result.payload_ == kvp.second.payload_)) {
+        ISLUTILS_DIE("different payloads for the same placeholder");
+      }
+      if (std::find(
+              result.candidateSpaces_.begin(), result.candidateSpaces_.end(),
+              kvp.second.candidateMapSpace_) != result.candidateSpaces_.end()) {
+        continue;
+      }
+      result.candidateSpaces_.push_back(kvp.second.candidateMapSpace_);
+    }
+  }
+
+  if (result.candidateSpaces_.empty()) {
     ISLUTILS_DIE("no match for the placeholder although matches found");
   }
-  return result->second;
+  return result;
 }
 
 } // namespace matchers
