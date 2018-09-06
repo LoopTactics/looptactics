@@ -22,7 +22,8 @@ ScheduleNodeBuilder::collectChildFilters(isl::ctx ctx) const {
       return nullptr;
     }
 
-    list = isl_union_set_list_add(list, c.uset_.copy());
+    isl_union_set *uset = c.usetBuilder_().release();
+    list = isl_union_set_list_add(list, uset);
   }
   return list;
 }
@@ -63,30 +64,25 @@ ScheduleNodeBuilder::insertSequenceOrSetAt(isl::schedule_node node,
 isl::schedule_node ScheduleNodeBuilder::insertSingleChildTypeNodeAt(
     isl::schedule_node node, isl_schedule_node_type type) const {
   if (current_ == isl_schedule_node_band) {
-    node = isl::manage(isl_schedule_node_insert_partial_schedule(node.release(),
-                                                                 mupa_.copy()));
+    node = node.insert_partial_schedule(mupaBuilder_());
   } else if (current_ == isl_schedule_node_filter) {
     // TODO: if the current node is pointing to a filter, filters are merged
     // document this in builder construction:
     // or type it so that filter cannot have filter children
-    node = isl::manage(
-        isl_schedule_node_insert_filter(node.release(), uset_.copy()));
+    node = node.insert_filter(usetBuilder_());
   } else if (current_ == isl_schedule_node_context) {
-    node = isl::manage(
-        isl_schedule_node_insert_context(node.release(), set_.copy()));
+    node = node.insert_context(setBuilder_());
   } else if (current_ == isl_schedule_node_domain) {
     if (node.get()) {
       assert(false && "cannot insert domain at some node, only at root "
                       "represented as nullptr");
       return isl::schedule_node();
     }
-    node = isl::manage(isl_schedule_node_from_domain(uset_.copy()));
+    node = isl::schedule_node::from_domain(usetBuilder_());
   } else if (current_ == isl_schedule_node_guard) {
-    node = isl::manage(
-        isl_schedule_node_insert_guard(node.release(), set_.copy()));
+    node = node.insert_guard(setBuilder_());
   } else if (current_ == isl_schedule_node_mark) {
-    node =
-        isl::manage(isl_schedule_node_insert_mark(node.release(), id_.copy()));
+    node = node.insert_mark(idBuilder_());
   } else if (current_ == isl_schedule_node_extension) {
     // There is no way to directly insert an extension node in isl.
     // isl_schedule_node_graft_* functions insert an extension node followed by
@@ -95,8 +91,7 @@ isl::schedule_node ScheduleNodeBuilder::insertSingleChildTypeNodeAt(
     // below the filter with the original domain points.  Go back to the
     // introduced sequence node and remove it, letting any child subtree to be
     // constructed as usual.
-    auto extensionRoot =
-        isl::manage(isl_schedule_node_from_extension(umap_.copy()));
+    auto extensionRoot = isl::schedule_node::from_extension(umapBuilder_());
     node = isl::manage(isl_schedule_node_graft_before(node.release(),
                                                       extensionRoot.release()))
                .parent()
@@ -147,11 +142,30 @@ ScheduleNodeBuilder::expandTree(isl::schedule_node node) const {
     assert(false && "only call expandTree on expansion builder");
   }
 
+  isl::union_map expansion;
+  isl::union_pw_multi_aff contraction;
+  if (umapBuilder_ && upmaBuilder_) {
+    expansion = umapBuilder_();
+    contraction = upmaBuilder_();
+  } else if (umapBuilder_) {
+    expansion = umapBuilder_();
+    contraction = isl::union_pw_multi_aff(expansion.reverse());
+  } else if (upmaBuilder_) {
+    contraction = upmaBuilder_();
+    expansion = isl::union_map(contraction).reverse();
+  } else {
+    assert(false && "neither expansion nor contraction builder provided");
+  }
+
+  if (expansion.is_identity()) {
+    assert(false && "dentity expansion map will not lead to an expansion node");
+  }
+
   // Construct the domain of the new subtree by applying the expansion map to
   // the set of domain points active at the given leaf.
   // note that .get_domain would not work for the "extended" parts of the tree
   auto parentDomain = node.get_domain();
-  auto childDomain = parentDomain.apply(umap_);
+  auto childDomain = parentDomain.apply(expansion);
   auto childRoot = isl::schedule_node::from_domain(childDomain);
   childRoot = children_.at(0).insertAt(childRoot.child(0)).parent();
 
@@ -165,12 +179,14 @@ ScheduleNodeBuilder::expandTree(isl::schedule_node node) const {
   // DFS-lookup of the mark node.  Remove the mark node and return its child
   // (the newly inserted expansion node) for continuation.
   auto schedule = node.get_schedule();
-  schedule = isl::manage(isl_schedule_expand(
-      schedule.release(), upma_.copy(), childRoot.get_schedule().release()));
+  schedule =
+      isl::manage(isl_schedule_expand(schedule.release(), contraction.release(),
+                                      childRoot.get_schedule().release()));
   auto optionalNewNode =
       dfsFirst(schedule.get_root(), [markBuilder](isl::schedule_node n) {
         return isl_schedule_node_get_type(n.get()) == isl_schedule_node_mark &&
-               isl_schedule_node_mark_get_id(n.get()) == markBuilder.id_.get();
+               isl_schedule_node_mark_get_id(n.get()) ==
+                   markBuilder.idBuilder_().get();
       });
   if (optionalNewNode.empty()) {
     assert(false && "could not find mark node after expansion");
@@ -220,74 +236,74 @@ isl::schedule_node ScheduleNodeBuilder::build() const {
   return insertAt(isl::schedule_node());
 }
 
-ScheduleNodeBuilder domain(isl::union_set uset, ScheduleNodeBuilder &&child) {
+ScheduleNodeBuilder domain(std::function<isl::union_set()> callback,
+                           ScheduleNodeBuilder &&child) {
   ScheduleNodeBuilder builder;
   builder.current_ = isl_schedule_node_domain;
-  builder.uset_ = uset;
+  builder.usetBuilder_ = callback;
   builder.children_.emplace_back(child);
   return builder;
 }
 
-ScheduleNodeBuilder band(isl::multi_union_pw_aff mupa,
+ScheduleNodeBuilder band(std::function<isl::multi_union_pw_aff()> callback,
                          ScheduleNodeBuilder &&child) {
   ScheduleNodeBuilder builder;
   builder.current_ = isl_schedule_node_band;
-  builder.mupa_ = mupa;
+  builder.mupaBuilder_ = callback;
   builder.children_.emplace_back(child);
   return builder;
 }
 
-ScheduleNodeBuilder filter(isl::union_set uset, ScheduleNodeBuilder &&child) {
+ScheduleNodeBuilder filter(std::function<isl::union_set()> callback,
+                           ScheduleNodeBuilder &&child) {
   ScheduleNodeBuilder builder;
   builder.current_ = isl_schedule_node_filter;
-  builder.uset_ = uset;
+  builder.usetBuilder_ = callback;
   builder.children_.emplace_back(child);
   return builder;
 }
 
-ScheduleNodeBuilder extension(isl::union_map umap,
+ScheduleNodeBuilder extension(std::function<isl::union_map()> callback,
                               ScheduleNodeBuilder &&child) {
   ScheduleNodeBuilder builder;
   builder.current_ = isl_schedule_node_extension;
-  builder.umap_ = umap;
+  builder.umapBuilder_ = callback;
   builder.children_.emplace_back(child);
   return builder;
 }
 
-ScheduleNodeBuilder expansion(isl::union_map umap,
+ScheduleNodeBuilder expansion(std::function<isl::union_map()> callback,
                               ScheduleNodeBuilder &&child) {
-  if (umap.is_identity()) {
-    assert(false && "dentity expansion map will not lead to an expansion node");
-  }
-
   ScheduleNodeBuilder builder;
   builder.current_ = isl_schedule_node_expansion;
-  builder.umap_ = umap;
-  builder.upma_ = isl::union_pw_multi_aff(umap.reverse());
+  builder.umapBuilder_ = callback;
   builder.children_.emplace_back(child);
   return builder;
 }
 
-ScheduleNodeBuilder mark(isl::id id, ScheduleNodeBuilder &&child) {
+ScheduleNodeBuilder mark(std::function<isl::id()> callback,
+                         ScheduleNodeBuilder &&child) {
   ScheduleNodeBuilder builder;
   builder.current_ = isl_schedule_node_mark;
-  builder.id_ = id;
+  builder.idBuilder_ = callback;
   builder.children_.emplace_back(child);
   return builder;
 }
 
-ScheduleNodeBuilder guard(isl::set set, ScheduleNodeBuilder &&child) {
+ScheduleNodeBuilder guard(std::function<isl::set()> callback,
+                          ScheduleNodeBuilder &&child) {
   ScheduleNodeBuilder builder;
   builder.current_ = isl_schedule_node_guard;
-  builder.set_ = set;
+  builder.setBuilder_ = callback;
   builder.children_.emplace_back(child);
   return builder;
 }
 
-ScheduleNodeBuilder context(isl::set set, ScheduleNodeBuilder &&child) {
+ScheduleNodeBuilder context(std::function<isl::set()> callback,
+                            ScheduleNodeBuilder &&child) {
   ScheduleNodeBuilder builder;
   builder.current_ = isl_schedule_node_context;
-  builder.set_ = set;
+  builder.setBuilder_ = callback;
   builder.children_.emplace_back(child);
   return builder;
 }
@@ -308,41 +324,37 @@ ScheduleNodeBuilder set(std::vector<ScheduleNodeBuilder> &&children) {
 
 ScheduleNodeBuilder subtree(isl::schedule_node node) {
   ScheduleNodeBuilder builder;
-  builder.current_ = isl_schedule_node_get_type(node.get());
+  auto type = isl_schedule_node_get_type(node.get());
 
-  if (builder.current_ == isl_schedule_node_domain) {
-    builder.uset_ =
-        isl::manage(isl_schedule_node_domain_get_domain(node.get()));
-  } else if (builder.current_ == isl_schedule_node_filter) {
-    builder.uset_ =
-        isl::manage(isl_schedule_node_filter_get_filter(node.get()));
-  } else if (builder.current_ == isl_schedule_node_context) {
-    builder.set_ =
-        isl::manage(isl_schedule_node_context_get_context(node.get()));
-  } else if (builder.current_ == isl_schedule_node_guard) {
-    builder.set_ = isl::manage(isl_schedule_node_guard_get_guard(node.get()));
-  } else if (builder.current_ == isl_schedule_node_mark) {
-    builder.id_ = isl::manage(isl_schedule_node_mark_get_id(node.get()));
-  } else if (builder.current_ == isl_schedule_node_band) {
-    builder.mupa_ =
-        isl::manage(isl_schedule_node_band_get_partial_schedule(node.get()));
-  } else if (builder.current_ == isl_schedule_node_extension) {
-    builder.umap_ =
-        isl::manage(isl_schedule_node_extension_get_extension(node.get()));
-  } else if (builder.current_ == isl_schedule_node_expansion) {
-    builder.umap_ =
-        isl::manage(isl_schedule_node_expansion_get_expansion(node.get()));
-    builder.upma_ =
-        isl::manage(isl_schedule_node_expansion_get_contraction(node.get()));
-  } else if (builder.current_ == isl_schedule_node_sequence ||
-             builder.current_ == isl_schedule_node_set ||
-             builder.current_ == isl_schedule_node_leaf) {
+  if (type == isl_schedule_node_domain) {
+    builder = domain([node]() { return node.domain_get_domain(); });
+  } else if (type == isl_schedule_node_filter) {
+    builder = filter([node]() { return node.filter_get_filter(); });
+  } else if (type == isl_schedule_node_context) {
+    builder = context([node]() { return node.context_get_context(); });
+  } else if (type == isl_schedule_node_guard) {
+    builder = guard([node]() { return node.guard_get_guard(); });
+  } else if (type == isl_schedule_node_mark) {
+    builder = mark([node]() { return node.mark_get_id(); });
+  } else if (type == isl_schedule_node_band) {
+    builder = band([node]() { return node.band_get_partial_schedule(); });
+  } else if (type == isl_schedule_node_extension) {
+    builder = extension([node]() { return node.extension_get_extension(); });
+  } else if (type == isl_schedule_node_expansion) {
+    builder.current_ = type;
+    builder.umapBuilder_ = [node]() { return node.expansion_get_expansion(); };
+    builder.upmaBuilder_ = [node]() {
+      return node.expansion_get_contraction();
+    };
+  } else if (type == isl_schedule_node_sequence ||
+             type == isl_schedule_node_set || type == isl_schedule_node_leaf) {
     /* no payload */
   } else {
     assert(false && "unhandled node type");
   }
 
   int nChildren = isl_schedule_node_n_children(node.get());
+  builder.children_.clear();
   for (int i = 0; i < nChildren; ++i) {
     builder.children_.push_back(subtree(node.child(i)));
   }
