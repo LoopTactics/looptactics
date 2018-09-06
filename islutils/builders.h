@@ -30,6 +30,12 @@ namespace builders {
  * function objects with this class.  The C++ standard (as of C++17) does not
  * guarantee any order of evaluation on function arguments other that they are
  * not interleaved.
+ *
+ * An arbitrary schedule (sub)tree may appear at the leaves of the builder.
+ * This (sub)tree is created by first creating the builder that would build it
+ * and then running it to insert nodes at a leaf.  Following the
+ * lazy-evaluation principle, ScheduleNodeBuilder stores a function object that
+ * is called to create the subtree builder.
  */
 class ScheduleNodeBuilder {
 private:
@@ -60,6 +66,8 @@ public:
   std::function<isl::union_map()> umapBuilder_;
   std::function<isl::union_pw_multi_aff()> upmaBuilder_;
   std::function<isl::id()> idBuilder_;
+
+  std::function<ScheduleNodeBuilder()> subBuilder_;
 };
 
 /** \defgroup BuildersCstr Builder Constructors *
@@ -155,8 +163,6 @@ ScheduleNodeBuilder set(Args... children) {
 
 ScheduleNodeBuilder set(std::vector<ScheduleNodeBuilder> &&children);
 
-ScheduleNodeBuilder subtree(isl::schedule_node node);
-
 template <typename T,
           typename = typename std::enable_if<
               std::is_same<T, ScheduleNodeBuilder>::value ||
@@ -181,7 +187,19 @@ template <class... Args> ScheduleNodeBuilder sequence(Args... args) {
   builder.children_ = children;
   return builder;
 }
-/** \} */
+
+/** Create a schedule node builder that replicates the given schedule node.
+ */
+ScheduleNodeBuilder subtreeBuilder(isl::schedule_node node);
+
+/** Construct a lazily-evaluated schedule tree builder that reconstructs the
+ * subtree rooted at the given node. */
+ScheduleNodeBuilder subtree(isl::schedule_node node);
+
+/** Construct a lazily-evaluated schedule tree builder that forwards control
+ * over the subtree construction to the another builder returned by the
+ * callback.  Typically used with subtreeBuilder(). */
+ScheduleNodeBuilder subtree(std::function<ScheduleNodeBuilder()> callback);
 
 } // namespace builders
 

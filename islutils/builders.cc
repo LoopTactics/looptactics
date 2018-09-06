@@ -214,12 +214,16 @@ ScheduleNodeBuilder::insertAt(isl::schedule_node node) const {
     return expandTree(node);
   } else if (current_ == isl_schedule_node_leaf) {
     // Leaf is a special type in isl that has no children, it gets added
-    // automatically, i.e. there is no need to insert it. Builder with leaf
-    // type can only be constructed from isl subtree.  Double-check that there
-    // are no children and stop here.
+    // automatically, i.e. there is no need to insert it. Double-check that
+    // there are no children and stop here.
     if (!children_.empty()) {
       assert(false && "leaf builder has children");
       return isl::schedule_node();
+    }
+    // If lazy-evaluation subtree builder is provided for the leaf node, call
+    // it, otherwise just return the current node.
+    if (subBuilder_) {
+      return subBuilder_().insertAt(node);
     }
     return node;
   }
@@ -322,7 +326,7 @@ ScheduleNodeBuilder set(std::vector<ScheduleNodeBuilder> &&children) {
   return builder;
 }
 
-ScheduleNodeBuilder subtree(isl::schedule_node node) {
+ScheduleNodeBuilder subtreeBuilder(isl::schedule_node node) {
   ScheduleNodeBuilder builder;
   auto type = isl_schedule_node_get_type(node.get());
 
@@ -360,6 +364,16 @@ ScheduleNodeBuilder subtree(isl::schedule_node node) {
   }
 
   return builder;
+}
+
+ScheduleNodeBuilder subtree(std::function<ScheduleNodeBuilder()> callback) {
+  ScheduleNodeBuilder builder;
+  builder.subBuilder_ = callback;
+  return builder;
+}
+
+ScheduleNodeBuilder subtree(isl::schedule_node node) {
+  return subtreeBuilder(node);
 }
 
 } // namespace builders
