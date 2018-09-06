@@ -20,6 +20,8 @@ private:
   isl::schedule_node expandTree(isl::schedule_node) const;
 
 public:
+  ScheduleNodeBuilder() : current_(isl_schedule_node_leaf) {}
+
   isl::schedule_node insertAt(isl::schedule_node node) const;
   isl::schedule_node build() const;
 
@@ -38,31 +40,31 @@ public:
   isl::id id_;
 };
 
-ScheduleNodeBuilder domain(isl::union_set uset);
-ScheduleNodeBuilder domain(isl::union_set uset, ScheduleNodeBuilder &&child);
+ScheduleNodeBuilder domain(isl::union_set uset,
+                           ScheduleNodeBuilder &&child = ScheduleNodeBuilder());
 
-ScheduleNodeBuilder band(isl::multi_union_pw_aff mupa);
 ScheduleNodeBuilder band(isl::multi_union_pw_aff mupa,
-                         ScheduleNodeBuilder &&child);
+                         ScheduleNodeBuilder &&child = ScheduleNodeBuilder());
 
-ScheduleNodeBuilder filter(isl::union_set uset);
-ScheduleNodeBuilder filter(isl::union_set uset, ScheduleNodeBuilder &&child);
+ScheduleNodeBuilder filter(isl::union_set uset,
+                           ScheduleNodeBuilder &&child = ScheduleNodeBuilder());
 
-ScheduleNodeBuilder extension(isl::union_map umap);
-ScheduleNodeBuilder extension(isl::union_map umap, ScheduleNodeBuilder &&child);
+ScheduleNodeBuilder
+extension(isl::union_map umap,
+          ScheduleNodeBuilder &&child = ScheduleNodeBuilder());
 
-ScheduleNodeBuilder expansion(isl::union_map expansion);
-ScheduleNodeBuilder expansion(isl::union_map expansion,
-                              ScheduleNodeBuilder &&child);
+ScheduleNodeBuilder
+expansion(isl::union_map expansion,
+          ScheduleNodeBuilder &&child = ScheduleNodeBuilder());
 
-ScheduleNodeBuilder mark(isl::id id);
-ScheduleNodeBuilder mark(isl::id id, ScheduleNodeBuilder &&child);
+ScheduleNodeBuilder mark(isl::id id,
+                         ScheduleNodeBuilder &&child = ScheduleNodeBuilder());
 
-ScheduleNodeBuilder guard(isl::set set);
-ScheduleNodeBuilder guard(isl::set set, ScheduleNodeBuilder &&child);
+ScheduleNodeBuilder guard(isl::set set,
+                          ScheduleNodeBuilder &&child = ScheduleNodeBuilder());
 
-ScheduleNodeBuilder context(isl::set set);
-ScheduleNodeBuilder context(isl::set set, ScheduleNodeBuilder &&child);
+ScheduleNodeBuilder
+context(isl::set set, ScheduleNodeBuilder &&child = ScheduleNodeBuilder());
 
 template <typename... Args, typename = typename std::enable_if<std::is_same<
                                 typename std::common_type<Args...>::type,

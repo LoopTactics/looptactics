@@ -220,61 +220,42 @@ isl::schedule_node ScheduleNodeBuilder::build() const {
   return insertAt(isl::schedule_node());
 }
 
-ScheduleNodeBuilder domain(isl::union_set uset) {
+ScheduleNodeBuilder domain(isl::union_set uset, ScheduleNodeBuilder &&child) {
   ScheduleNodeBuilder builder;
   builder.current_ = isl_schedule_node_domain;
   builder.uset_ = uset;
-  return builder;
-}
-
-ScheduleNodeBuilder domain(isl::union_set uset, ScheduleNodeBuilder &&child) {
-  auto builder = domain(uset);
   builder.children_.emplace_back(child);
-  return builder;
-}
-
-ScheduleNodeBuilder band(isl::multi_union_pw_aff mupa) {
-  ScheduleNodeBuilder builder;
-  builder.current_ = isl_schedule_node_band;
-  builder.mupa_ = mupa;
   return builder;
 }
 
 ScheduleNodeBuilder band(isl::multi_union_pw_aff mupa,
                          ScheduleNodeBuilder &&child) {
-  auto builder = band(mupa);
-  builder.children_.emplace_back(child);
-  return builder;
-}
-
-ScheduleNodeBuilder filter(isl::union_set uset) {
   ScheduleNodeBuilder builder;
-  builder.current_ = isl_schedule_node_filter;
-  builder.uset_ = uset;
+  builder.current_ = isl_schedule_node_band;
+  builder.mupa_ = mupa;
+  builder.children_.emplace_back(child);
   return builder;
 }
 
 ScheduleNodeBuilder filter(isl::union_set uset, ScheduleNodeBuilder &&child) {
-  auto builder = filter(uset);
-  builder.children_.emplace_back(child);
-  return builder;
-}
-
-ScheduleNodeBuilder extension(isl::union_map umap) {
   ScheduleNodeBuilder builder;
-  builder.current_ = isl_schedule_node_extension;
-  builder.umap_ = umap;
+  builder.current_ = isl_schedule_node_filter;
+  builder.uset_ = uset;
+  builder.children_.emplace_back(child);
   return builder;
 }
 
 ScheduleNodeBuilder extension(isl::union_map umap,
                               ScheduleNodeBuilder &&child) {
-  auto builder = extension(umap);
+  ScheduleNodeBuilder builder;
+  builder.current_ = isl_schedule_node_extension;
+  builder.umap_ = umap;
   builder.children_.emplace_back(child);
   return builder;
 }
 
-ScheduleNodeBuilder expansion(isl::union_map umap) {
+ScheduleNodeBuilder expansion(isl::union_map umap,
+                              ScheduleNodeBuilder &&child) {
   if (umap.is_identity()) {
     assert(false && "dentity expansion map will not lead to an expansion node");
   }
@@ -283,51 +264,30 @@ ScheduleNodeBuilder expansion(isl::union_map umap) {
   builder.current_ = isl_schedule_node_expansion;
   builder.umap_ = umap;
   builder.upma_ = isl::union_pw_multi_aff(umap.reverse());
-  return builder;
-}
-
-ScheduleNodeBuilder expansion(isl::union_map umap,
-                              ScheduleNodeBuilder &&child) {
-  auto builder = expansion(umap);
   builder.children_.emplace_back(child);
-  return builder;
-}
-
-ScheduleNodeBuilder mark(isl::id id) {
-  ScheduleNodeBuilder builder;
-  builder.current_ = isl_schedule_node_mark;
-  builder.id_ = id;
   return builder;
 }
 
 ScheduleNodeBuilder mark(isl::id id, ScheduleNodeBuilder &&child) {
-  auto builder = mark(id);
-  builder.children_.emplace_back(child);
-  return builder;
-}
-
-ScheduleNodeBuilder guard(isl::set set) {
   ScheduleNodeBuilder builder;
-  builder.current_ = isl_schedule_node_guard;
-  builder.set_ = set;
+  builder.current_ = isl_schedule_node_mark;
+  builder.id_ = id;
+  builder.children_.emplace_back(child);
   return builder;
 }
 
 ScheduleNodeBuilder guard(isl::set set, ScheduleNodeBuilder &&child) {
-  auto builder = guard(set);
+  ScheduleNodeBuilder builder;
+  builder.current_ = isl_schedule_node_guard;
+  builder.set_ = set;
   builder.children_.emplace_back(child);
   return builder;
 }
 
-ScheduleNodeBuilder context(isl::set set) {
+ScheduleNodeBuilder context(isl::set set, ScheduleNodeBuilder &&child) {
   ScheduleNodeBuilder builder;
   builder.current_ = isl_schedule_node_context;
   builder.set_ = set;
-  return builder;
-}
-
-ScheduleNodeBuilder context(isl::set set, ScheduleNodeBuilder &&child) {
-  auto builder = context(set);
   builder.children_.emplace_back(child);
   return builder;
 }
