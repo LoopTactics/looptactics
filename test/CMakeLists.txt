@@ -7,13 +7,16 @@ set(TEST_NAMES
     transformer
     access)
 
+set(TEST_INPUTS
+    one-dimensional-init.c
+    stencil.c)
+
 add_custom_target(check COMMAND echo "Running all")
 
-configure_file("${CMAKE_CURRENT_SOURCE_DIR}/inputs/one-dimensional-init.c"
-     "${CMAKE_CURRENT_BINARY_DIR}/inputs/one-dimensional-init.c"; COPYONLY)
-
-configure_file("${CMAKE_CURRENT_SOURCE_DIR}/inputs/stencil.c"
-     "${CMAKE_CURRENT_BINARY_DIR}/inputs/stencil.c"; COPYONLY)
+foreach(file ${TEST_INPUTS})
+  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/inputs/${file}"
+       "${CMAKE_CURRENT_BINARY_DIR}/inputs/${file}" COPYONLY)
+endforeach()
 
 foreach(case ${TEST_NAMES})
   add_executable("test_${case}" "test_${case}.cc")
