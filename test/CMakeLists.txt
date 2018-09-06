@@ -9,6 +9,7 @@ set(TEST_NAMES
 
 set(TEST_INPUTS
     one-dimensional-init.c
+    nested.c
     stencil.c)
 
 add_custom_target(check COMMAND echo "Running all")
