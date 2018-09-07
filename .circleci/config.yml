@@ -2,12 +2,25 @@ version: 2
 jobs:
   build:
     docker:
-      - image: ubuntu:bionic
+      - image: ftynse/islutils:build
     steps:
       - checkout
       - run:
-          name: Greeting
-          command: echo Hello, world.
+          name: checkout isl
+          command: git submodule update --init --recursive external/isl
       - run:
-          name: Print the Current Time
-          command: date
+          name: checkout pet
+          command: git submodule update --init external/pet
+      - run: mkdir -p build
+      - run:
+          name: cmake
+          command: (cd build; cmake ..)
+      - run:
+          name: build isl and pet
+          command: (cd build; make pet)
+      - run:
+          name: build
+          command: (cd build; make)
+      - run:
+          name: test
+          command: (cd build; make check)
