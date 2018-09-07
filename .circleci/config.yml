@@ -6,21 +6,32 @@ jobs:
     steps:
       - checkout
       - run:
-          name: checkout isl
-          command: git submodule update --init --recursive external/isl
-      - run:
-          name: checkout pet
-          command: git submodule update --init external/pet
-      - run: mkdir -p build
+          name: checkout submodules
+          command: |
+            git submodule update --init --recursive external/isl
+            git submodule update --init external/pet
       - run:
           name: cmake
-          command: (cd build; cmake ..)
+          command: |
+            mkdir -p build
+            cd build
+            cmake ..
+      - restore_cache:
+          key: isl-pet-bin
       - run:
-          name: build isl
-          command: (cd build; make isl)
-      - run:
-          name: build pet
-          command: (cd build; make pet)
+          name: build isl and pet
+          command: |
+            cd build
+            cat ../.git/modules/external/isl/HEAD > id
+            cat ../.git/modules/external/pet/HEAD >> id
+            if [ -e ../external/id ]; then old=`cat ../external/id`; new=`cat id`; if [ "$old" != "$new" ]; then make pet; else echo "skipping cached build"; fi; else make pet; fi
+            cp id ../external
+      - save_cache:
+          key: isl-pet-bin
+          paths:
+            - external/install-isl
+            - external/install-pet
+            - external/id
       - run:
           name: build
           command: (cd build; make)
