@@ -16,7 +16,10 @@ jobs:
           name: cmake
           command: (cd build; cmake ..)
       - run:
-          name: build isl and pet
+          name: build isl
+          command: (cd build; make isl)
+      - run:
+          name: build pet
           command: (cd build; make pet)
       - run:
           name: build
