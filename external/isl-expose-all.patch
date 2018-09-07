@@ -558,12 +558,12 @@ index a52e6fec..288cfb45 100644
  	if (is_isl_stat(type))
  		return checked ? "stat" : "void";
  
-+	if (type->isEnumeralType())
++	if (type->isEnumeralType()) {
 +		if (checked)
 +			return "isl::checked::dim";
 +		else
 +			return "isl::dim";
-+
++       }
  	if (type->isIntegerType())
  		return type.getAsString();
  
