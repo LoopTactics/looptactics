@@ -83,3 +83,4 @@ target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})
 target_link_libraries(islutils ${isl_LIB} ${pet_LIB})
 
 add_subdirectory(test)
+add_subdirectory(docs)
