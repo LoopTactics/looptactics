@@ -14,7 +14,7 @@ ExternalProject_Add(isl
      UPDATE_COMMAND ./autogen.sh
      PATCH_COMMAND patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/external/isl-no-throw-copy-constructor.patch COMMAND patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/external/isl-expose-all.patch
      CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --with-clang=system --with-int=imath-32
-     BUILD_COMMAND make -j
+     BUILD_COMMAND make
      EXCLUDE_FROM_ALL 1
 )
 
@@ -26,7 +26,7 @@ ExternalProject_Add(pet
      INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/install-pet
      UPDATE_COMMAND ./autogen.sh
      CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --with-isl-prefix=${CMAKE_CURRENT_SOURCE_DIR}/external/install-isl --with-isl=system
-     BUILD_COMMAND make -j
+     BUILD_COMMAND make
      EXCLUDE_FROM_ALL 1
 )
 
