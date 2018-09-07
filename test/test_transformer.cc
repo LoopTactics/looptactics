@@ -1,4 +1,5 @@
 #include <islutils/builders.h>
+#include <islutils/locus.h>
 #include <islutils/matchers.h>
 #include <islutils/parser.h>
 
@@ -162,6 +163,83 @@ TEST_F(Schedule, MergeBandsDeclarative) {
   }
 
   expectSingleBand(node);
+}
+
+static isl::union_map computeAllDependences(const Scop &scop) {
+  // False dependences (output and anti).
+  // Sinks are writes, sources are reads and writes.
+  auto falseDepsFlow =
+      isl::union_access_info(
+          scop.reads.unite(scop.mayWrites).unite(scop.mustWrites))
+          .set_may_source(scop.mayWrites.unite(scop.reads))
+          .set_must_source(scop.mustWrites)
+          .set_kill(scop.mustWrites)
+          .set_schedule(scop.schedule)
+          .compute_flow();
+
+  isl::union_map falseDeps = falseDepsFlow.get_may_dependence();
+
+  // Flow dependences.
+  // Sinks are reads and sources are writes.
+  auto flowDepsFlow = isl::union_access_info(scop.reads)
+                          .set_may_source(scop.mayWrites)
+                          .set_must_source(scop.mustWrites)
+                          .set_kill(scop.mustWrites)
+                          .set_schedule(scop.schedule)
+                          .compute_flow();
+
+  isl::union_map flowDeps = flowDepsFlow.get_may_dependence();
+
+  return flowDeps.unite(falseDeps);
+}
+
+// The partial schedule is only defined for those domain elements that passed
+// through filters until "node".  Therefore, there is no need to explicitly
+// introduce auxiliary dimensions for the filters.
+static inline isl::union_map
+filterOutCarriedDependences(isl::union_map dependences,
+                            isl::schedule_node node) {
+  auto partialSchedule = node.get_prefix_schedule_multi_union_pw_aff();
+  return dependences.eq_at(partialSchedule);
+}
+
+static bool canMerge(isl::schedule_node parentBand,
+                     isl::union_map dependences) {
+  // Permutability condition: there are no negative distances along the
+  // dimensions that are carried until now by any of dimensions.
+  auto t1 = parentBand.band_get_partial_schedule();
+  auto t2 = parentBand.child(0).band_get_partial_schedule();
+  auto schedule = isl::union_map::from(t1.flat_range_product(t2));
+  auto scheduleSpace = isl::map::from_union_map(schedule).get_space();
+  auto positiveOrthant =
+      isl::set(isl::basic_set::positive_orthant(scheduleSpace));
+  return dependences.apply_domain(schedule)
+      .apply_range(schedule)
+      .deltas()
+      .is_subset(positiveOrthant);
+}
+
+static std::vector<bool> detectCoincidence(isl::schedule_node band,
+                                           isl::union_map dependences) {
+  std::vector<bool> result;
+  auto schedule = band.band_get_partial_schedule();
+  int dim = schedule.dim(isl::dim::set);
+  result.resize(dim);
+  for (int i = 0; i < dim; ++i) {
+    auto upa = schedule.get_union_pw_aff(dim);
+    auto partialSchedule = isl::union_map::from_union_pw_aff(upa);
+    auto deltas = isl::set(dependences.apply_domain(partialSchedule)
+                               .apply_range(partialSchedule)
+                               .deltas());
+    auto zeroSet = [&]() {
+      auto aff = isl::aff::var_on_domain(isl::local_space(deltas.get_space()),
+                                         isl::dim::set, 0);
+      using set_maker::operator==;
+      return isl::set(aff == 0);
+    }();
+    result[i] = deltas.is_subset(zeroSet);
+  }
+  return result;
 }
 
 int main(int argc, char **argv) {
