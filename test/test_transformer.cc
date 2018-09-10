@@ -221,14 +221,31 @@ static bool canMerge(isl::schedule_node parentBand,
       .is_subset(positiveOrthant);
 }
 
+static inline isl::schedule_node
+rebuild(isl::schedule_node node,
+        const builders::ScheduleNodeBuilder &replacement) {
+  // this may not be always legal...
+  node = node.cut();
+  node = replacement.insertAt(node);
+  return node;
+}
+
+isl::schedule_node
+replaceOnce(isl::schedule_node node,
+            const matchers::ScheduleNodeMatcher &pattern,
+            const builders::ScheduleNodeBuilder &replacement) {
+  if (matchers::ScheduleNodeMatcher::isMatching(pattern, node)) {
+    node = rebuild(node, replacement);
+  }
+  return node;
+}
+
 isl::schedule_node
 replaceRepeatedly(isl::schedule_node node,
                   const matchers::ScheduleNodeMatcher &pattern,
                   const builders::ScheduleNodeBuilder &replacement) {
   while (matchers::ScheduleNodeMatcher::isMatching(pattern, node)) {
-    // this may not be always legal...
-    node = node.cut();
-    node = replacement.insertAt(node);
+    node = rebuild(node, replacement);
   }
   return node;
 }
@@ -241,6 +258,17 @@ replaceDFSPreorderRepeatedly(isl::schedule_node node,
   for (int i = 0; i < node.n_children(); ++i) {
     node = replaceDFSPreorderRepeatedly(node.child(i), pattern, replacement)
                .parent();
+  }
+  return node;
+}
+
+isl::schedule_node
+replaceDFSPreorderOnce(isl::schedule_node node,
+                       const matchers::ScheduleNodeMatcher &pattern,
+                       const builders::ScheduleNodeBuilder &replacement) {
+  node = replaceOnce(node, pattern, replacement);
+  for (int i = 0; i < node.n_children(); ++i) {
+    node = replaceDFSPreorderOnce(node.child(i), pattern, replacement).parent();
   }
   return node;
 }
@@ -293,22 +321,50 @@ static std::vector<bool> detectCoincidence(isl::schedule_node band,
   std::vector<bool> result;
   auto schedule = band.band_get_partial_schedule();
   int dim = schedule.dim(isl::dim::set);
-  result.resize(dim);
+  if (dependences.is_empty()) {
+    result.resize(dim, true);
+    return result;
+  }
   for (int i = 0; i < dim; ++i) {
-    auto upa = schedule.get_union_pw_aff(dim);
+    auto upa = schedule.get_union_pw_aff(i);
     auto partialSchedule = isl::union_map::from_union_pw_aff(upa);
     auto deltas = isl::set(dependences.apply_domain(partialSchedule)
                                .apply_range(partialSchedule)
                                .deltas());
     auto zeroSet = [&]() {
-      auto aff = isl::aff::var_on_domain(isl::local_space(deltas.get_space()),
-                                         isl::dim::set, 0);
+      auto lspace = isl::local_space(deltas.get_space());
+      auto aff = isl::aff::var_on_domain(lspace, isl::dim::set, 0);
+      auto zeroAff = isl::aff(lspace);
       using set_maker::operator==;
-      return isl::set(aff == 0);
+      return isl::set(aff == zeroAff);
     }();
-    result[i] = deltas.is_subset(zeroSet);
+    result.push_back(deltas.is_subset(zeroSet));
   }
   return result;
+}
+
+TEST_F(Schedule, MarkCoincident) {
+  isl::schedule_node node, child;
+  auto dependences = computeAllDependences(scop_);
+
+  auto matcher = [&]() {
+    using namespace matchers;
+    return band(node, anyTree(child));
+  }();
+
+  auto marker = [&]() {
+    auto descr = builders::BandDescriptor(node.band_get_partial_schedule());
+    descr.coincident = detectCoincidence(node, dependences);
+    return descr;
+  };
+
+  auto builder = [&]() {
+    using namespace builders;
+    return band(marker, subtree(child));
+  }();
+
+  node = replaceDFSPreorderOnce(scop_.schedule.get_root(), matcher, builder);
+  node.dump();
 }
 
 int main(int argc, char **argv) {
