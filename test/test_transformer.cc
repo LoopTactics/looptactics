@@ -54,7 +54,7 @@ TEST(Transformer, Capture) {
   node.dump();
 
   // Let's transform!
-  auto transformedBuilder = [=]() {
+  auto transformedBuilder = [&]() {
     auto filter1 = filterNode1.filter_get_filter();
     auto filter2 = filterNode2.filter_get_filter();
     auto schedule = bandNode.band_get_partial_schedule();

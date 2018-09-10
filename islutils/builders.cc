@@ -384,7 +384,7 @@ ScheduleNodeBuilder subtreeBuilder(isl::schedule_node node) {
   int nChildren = isl_schedule_node_n_children(node.get());
   builder.children_.clear();
   for (int i = 0; i < nChildren; ++i) {
-    builder.children_.push_back(subtree(node.child(i)));
+    builder.children_.push_back(subtreeBuilder(node.child(i)));
   }
 
   return builder;
@@ -394,10 +394,6 @@ ScheduleNodeBuilder subtree(std::function<ScheduleNodeBuilder()> callback) {
   ScheduleNodeBuilder builder;
   builder.subBuilder_ = callback;
   return builder;
-}
-
-ScheduleNodeBuilder subtree(isl::schedule_node node) {
-  return subtreeBuilder(node);
 }
 
 } // namespace builders

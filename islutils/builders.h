@@ -218,14 +218,22 @@ template <class... Args> ScheduleNodeBuilder sequence(Args... args) {
  */
 ScheduleNodeBuilder subtreeBuilder(isl::schedule_node node);
 
-/** Construct a lazily-evaluated schedule tree builder that reconstructs the
- * subtree rooted at the given node. */
-ScheduleNodeBuilder subtree(isl::schedule_node node);
-
 /** Construct a lazily-evaluated schedule tree builder that forwards control
  * over the subtree construction to the another builder returned by the
  * callback.  Typically used with subtreeBuilder(). */
 ScheduleNodeBuilder subtree(std::function<ScheduleNodeBuilder()> callback);
+
+/** Construct a lazily-evaluated schedule tree builder that reconstructs the
+ * subtree rooted at the given node.
+ * Note that non-const reference is only used to prevent the argument from
+ * binding to temporaries, because the argument itself is stored by-reference
+ * in a lambda within the returned ScheduleNodeBuilder.  It is the under
+ * reposibility of the caller to make sure the reference is valid when the tree
+ * is actually built.
+ */
+inline ScheduleNodeBuilder subtree(isl::schedule_node &node) {
+  return subtree([&]() { return subtreeBuilder(node); });
+}
 
 } // namespace builders
 
