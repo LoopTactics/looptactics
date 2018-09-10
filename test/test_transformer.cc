@@ -166,25 +166,26 @@ TEST_F(Schedule, MergeBandsDeclarative) {
 }
 
 static isl::union_map computeAllDependences(const Scop &scop) {
+  // For the simplest possible dependence analysis, get rid of reference tags.
+  auto reads = scop.reads.domain_factor_domain();
+  auto mayWrites = scop.mayWrites.domain_factor_domain();
+  auto mustWrites = scop.mustWrites.domain_factor_domain();
+
   // False dependences (output and anti).
   // Sinks are writes, sources are reads and writes.
-  auto falseDepsFlow =
-      isl::union_access_info(
-          scop.reads.unite(scop.mayWrites).unite(scop.mustWrites))
-          .set_may_source(scop.mayWrites.unite(scop.reads))
-          .set_must_source(scop.mustWrites)
-          .set_kill(scop.mustWrites)
-          .set_schedule(scop.schedule)
-          .compute_flow();
+  auto falseDepsFlow = isl::union_access_info(mayWrites.unite(mustWrites))
+                           .set_may_source(mayWrites.unite(reads))
+                           .set_must_source(mustWrites)
+                           .set_schedule(scop.schedule)
+                           .compute_flow();
 
   isl::union_map falseDeps = falseDepsFlow.get_may_dependence();
 
   // Flow dependences.
   // Sinks are reads and sources are writes.
-  auto flowDepsFlow = isl::union_access_info(scop.reads)
-                          .set_may_source(scop.mayWrites)
-                          .set_must_source(scop.mustWrites)
-                          .set_kill(scop.mustWrites)
+  auto flowDepsFlow = isl::union_access_info(reads)
+                          .set_may_source(mayWrites)
+                          .set_must_source(mustWrites)
                           .set_schedule(scop.schedule)
                           .compute_flow();
 
@@ -206,17 +207,85 @@ filterOutCarriedDependences(isl::union_map dependences,
 static bool canMerge(isl::schedule_node parentBand,
                      isl::union_map dependences) {
   // Permutability condition: there are no negative distances along the
-  // dimensions that are carried until now by any of dimensions.
+  // dimensions that are not carried until now by any of dimensions.
   auto t1 = parentBand.band_get_partial_schedule();
   auto t2 = parentBand.child(0).band_get_partial_schedule();
   auto schedule = isl::union_map::from(t1.flat_range_product(t2));
   auto scheduleSpace = isl::map::from_union_map(schedule).get_space();
   auto positiveOrthant =
-      isl::set(isl::basic_set::positive_orthant(scheduleSpace));
+      isl::set(isl::basic_set::positive_orthant(scheduleSpace.range()));
+  dependences = filterOutCarriedDependences(dependences, parentBand);
   return dependences.apply_domain(schedule)
       .apply_range(schedule)
       .deltas()
       .is_subset(positiveOrthant);
+}
+
+isl::schedule_node
+replaceRepeatedly(isl::schedule_node node,
+                  const matchers::ScheduleNodeMatcher &pattern,
+                  const builders::ScheduleNodeBuilder &replacement) {
+  while (matchers::ScheduleNodeMatcher::isMatching(pattern, node)) {
+    // this may not be always legal...
+    node = node.cut();
+    node = replacement.insertAt(node);
+  }
+  return node;
+}
+
+isl::schedule_node
+replaceDFSPreorderRepeatedly(isl::schedule_node node,
+                             const matchers::ScheduleNodeMatcher &pattern,
+                             const builders::ScheduleNodeBuilder &replacement) {
+  node = replaceRepeatedly(node, pattern, replacement);
+  for (int i = 0; i < node.n_children(); ++i) {
+    node = replaceDFSPreorderRepeatedly(node.child(i), pattern, replacement)
+               .parent();
+  }
+  return node;
+}
+
+TEST_F(Schedule, MergeBandsIfTilable) {
+  isl::schedule_node parent, child, grandchild;
+  auto dependences = computeAllDependences(scop_);
+
+  auto canMergeCaptureChild = [&child, dependences](isl::schedule_node node) {
+    if (canMerge(node.parent(), dependences)) {
+      child = node;
+      return true;
+    }
+    return false;
+  };
+
+  auto matcher = [&]() {
+    using namespace matchers;
+    // clang-format off
+    return band(parent,
+             band(canMergeCaptureChild,
+               anyTree(grandchild)));
+    // clang-format on
+  }();
+
+  // Use lambdas to lazily initialize the builder with the nodes and values yet
+  // to be captured by the matcher.
+  auto declarativeMerger = builders::ScheduleNodeBuilder();
+  {
+    using namespace builders;
+    auto schedule = [&]() {
+      auto descr =
+          BandDescriptor(parent.band_get_partial_schedule().flat_range_product(
+              child.band_get_partial_schedule()));
+      descr.permutable = 1;
+      return descr;
+    };
+    auto st = [&]() { return subtreeBuilder(grandchild); };
+    declarativeMerger = band(schedule, subtree(st));
+  }
+
+  auto node = topmostBand();
+  node = replaceDFSPreorderRepeatedly(node, matcher, declarativeMerger);
+  expectSingleBand(node);
+  EXPECT_EQ(isl_schedule_node_band_get_permutable(node.get()), isl_bool_true);
 }
 
 static std::vector<bool> detectCoincidence(isl::schedule_node band,

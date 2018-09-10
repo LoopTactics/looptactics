@@ -11,6 +11,32 @@
 namespace builders {
 
 /** \ingroup Builders
+ * \brief Simple class wrapping multiple properties of band nodes in schedule
+ * trees.
+ *
+ * Band node properties such as coincidence and permutability flags as well as
+ * the partial schedule of the band are exposed as public members.  The class
+ * is implicitly constructible from multi_union_pw_aff with all flags reset.
+ * Implicit construction allows the caller to pass instances of
+ * multi_union_pw_aff to band(...) builder constructor without additional
+ * overloads.
+ */
+class BandDescriptor {
+public:
+  /* implicit */ BandDescriptor(isl::multi_union_pw_aff mupa)
+      : partialSchedule(mupa), coincident(false, mupa.dim(isl::dim::set)),
+        permutable(false) {}
+
+  explicit BandDescriptor(isl::schedule_node band);
+
+  isl::schedule_node applyPropertiesToBandNode(isl::schedule_node node);
+
+  isl::multi_union_pw_aff partialSchedule;
+  std::vector<bool> coincident;
+  bool permutable;
+};
+
+/** \ingroup Builders
  * \brief Declarative description of a schedule tree node to build.
  *
  * Data storage class for the nested-call schedule tree building API.  One can
@@ -60,7 +86,7 @@ public:
 
   // XXX: Cannot use a union because C++ isl types have non-trivial
   // constructors.  Cannot use std::variant because no C++17.
-  std::function<isl::multi_union_pw_aff()> mupaBuilder_;
+  std::function<BandDescriptor()> bandBuilder_;
   std::function<isl::set()> setBuilder_;
   std::function<isl::union_set()> usetBuilder_;
   std::function<isl::union_map()> umapBuilder_;
@@ -96,12 +122,12 @@ domain(isl::union_set uset,
   return domain([uset]() { return uset; }, std::move(child));
 }
 
-ScheduleNodeBuilder band(std::function<isl::multi_union_pw_aff()> callback,
+ScheduleNodeBuilder band(std::function<BandDescriptor()> callback,
                          ScheduleNodeBuilder &&child = ScheduleNodeBuilder());
 inline ScheduleNodeBuilder
-band(isl::multi_union_pw_aff mupa,
+band(BandDescriptor descr,
      ScheduleNodeBuilder &&child = ScheduleNodeBuilder()) {
-  return band([mupa]() { return mupa; }, std::move(child));
+  return band([descr]() { return descr; }, std::move(child));
 }
 
 ScheduleNodeBuilder filter(std::function<isl::union_set()> callback,

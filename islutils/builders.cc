@@ -6,6 +6,27 @@
 
 namespace builders {
 
+BandDescriptor::BandDescriptor(isl::schedule_node band) {
+  partialSchedule = band.band_get_partial_schedule();
+  int n = partialSchedule.dim(isl::dim::set);
+  for (int i = 0; i < n; ++i) {
+    coincident.push_back(band.band_member_get_coincident(i));
+  }
+  permutable =
+      isl_schedule_node_band_get_permutable(band.get()) == isl_bool_true;
+}
+
+isl::schedule_node
+BandDescriptor::applyPropertiesToBandNode(isl::schedule_node node) {
+  int size = coincident.size();
+  for (int i = 0; i < size; ++i) {
+    node = node.band_member_set_coincident(i, coincident[i]);
+  }
+  node = isl::manage(
+      isl_schedule_node_band_set_permutable(node.release(), permutable));
+  return node;
+}
+
 isl_union_set_list *
 ScheduleNodeBuilder::collectChildFilters(isl::ctx ctx) const {
   if (children_.empty()) {
@@ -64,7 +85,9 @@ ScheduleNodeBuilder::insertSequenceOrSetAt(isl::schedule_node node,
 isl::schedule_node ScheduleNodeBuilder::insertSingleChildTypeNodeAt(
     isl::schedule_node node, isl_schedule_node_type type) const {
   if (current_ == isl_schedule_node_band) {
-    node = node.insert_partial_schedule(mupaBuilder_());
+    auto bandDescriptor = bandBuilder_();
+    node = node.insert_partial_schedule(bandDescriptor.partialSchedule);
+    node = bandDescriptor.applyPropertiesToBandNode(node);
   } else if (current_ == isl_schedule_node_filter) {
     // TODO: if the current node is pointing to a filter, filters are merged
     // document this in builder construction:
@@ -249,11 +272,11 @@ ScheduleNodeBuilder domain(std::function<isl::union_set()> callback,
   return builder;
 }
 
-ScheduleNodeBuilder band(std::function<isl::multi_union_pw_aff()> callback,
+ScheduleNodeBuilder band(std::function<BandDescriptor()> callback,
                          ScheduleNodeBuilder &&child) {
   ScheduleNodeBuilder builder;
   builder.current_ = isl_schedule_node_band;
-  builder.mupaBuilder_ = callback;
+  builder.bandBuilder_ = callback;
   builder.children_.emplace_back(child);
   return builder;
 }
@@ -341,7 +364,8 @@ ScheduleNodeBuilder subtreeBuilder(isl::schedule_node node) {
   } else if (type == isl_schedule_node_mark) {
     builder = mark([node]() { return node.mark_get_id(); });
   } else if (type == isl_schedule_node_band) {
-    builder = band([node]() { return node.band_get_partial_schedule(); });
+    builder = band(
+        [node]() { return BandDescriptor(node.band_get_partial_schedule()); });
   } else if (type == isl_schedule_node_extension) {
     builder = extension([node]() { return node.extension_get_extension(); });
   } else if (type == isl_schedule_node_expansion) {
