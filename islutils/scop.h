@@ -25,7 +25,7 @@ public:
   isl::union_map mustWrites;
   /// \}
 
-  inline void dump();
+  inline void dump() const;
 };
 
 isl::union_set Scop::domain() const {
@@ -40,7 +40,7 @@ isl::union_set Scop::domain() const {
   return isl::manage(isl_schedule_node_domain_get_domain(root.get()));
 }
 
-void Scop::dump() {
+void Scop::dump() const {
   isl_schedule_dump(schedule.get());
   isl_union_map_dump(reads.get());
   isl_union_map_dump(mayWrites.get());
