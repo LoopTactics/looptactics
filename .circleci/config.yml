@@ -10,6 +10,7 @@ jobs:
           command: |
             git submodule update --init --recursive external/isl
             git submodule update --init external/pet
+            git submodule update --init external/googletest
       - run:
           name: cmake
           command: |
