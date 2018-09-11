@@ -169,8 +169,3 @@ TEST(TreeMatcher, AnyForestCapture) {
   EXPECT_TRUE(captures[0].is_equal(first));
   EXPECT_TRUE(captures[1].is_equal(second));
 }
-
-int main(int argc, char **argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

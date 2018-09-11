@@ -366,8 +366,3 @@ TEST_F(Schedule, MarkCoincident) {
   node = replaceDFSPreorderOnce(scop_.schedule.get_root(), matcher, builder);
   node.dump();
 }
-
-int main(int argc, char **argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

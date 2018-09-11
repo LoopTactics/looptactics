@@ -12,8 +12,3 @@ TEST(SetMaker, Equality) {
     EXPECT_TRUE((a1 == a2).is_equal(m));
   }
 }
-
-int main(int argc, char **argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
