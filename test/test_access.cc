@@ -462,7 +462,23 @@ TEST(AccessMatcher, MultiDimensionalReplace) {
   EXPECT_TRUE(umap.is_equal(expected));
 }
 
-int main(int argc, char **argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+// Access strides may be caused by strides in the iteration domain.
+// Check that, for strided domains, we can detect strides properly, given the
+// information on the sparseness of the domain.
+TEST(AccessMatcher, StrideInStridedDomain) {
+  auto scop = Parser("inputs/strided_domain.c").getScop();
+  // Since the input is a simple 1d loop, we can get the schedule without
+  // auxiliary dimensions directly without traversing the tree.
+  auto schedule = scop.schedule.get_map();
+  auto nonEmptySchedulePoints = isl::set(scop.domain().apply(schedule));
+  auto sHolder = stride(nonEmptySchedulePoints.get_ctx(), 3);
+  auto reads = scop.reads.curry().apply_domain(schedule);
+
+  // Expected a match when sparseness information is provided.
+  sHolder.pattern_.nonEmptySchedulePoints = nonEmptySchedulePoints;
+  EXPECT_EQ(match(reads, allOf(access(sHolder))).size(), 1);
+
+  // Expected no match when sparseness information is not provided.
+  sHolder.pattern_.nonEmptySchedulePoints = isl::set();
+  EXPECT_EQ(match(reads, allOf(access(sHolder))).size(), 0);
 }

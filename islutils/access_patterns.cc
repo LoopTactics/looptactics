@@ -57,8 +57,14 @@ isl::map SingleInputDim::transformMap(isl::map map,
 
 ///////////////////////////////
 
-static isl::map mapToNext(isl::space space) {
+// Create a relation between a point in the given space and one
+// (if "all" == false) or multiple (otherwise) points in the same space
+// such that the value along the last dimension of the space in the range is
+// strictly greater than the value along the same dimension in the domain, and
+// all other values are mutually equal.
+static isl::map mapToNext(isl::space space, bool all = false) {
   using map_maker::operator==;
+  using map_maker::operator<;
   int dim = space.dim(isl::dim::set);
 
   auto result = isl::map::universe(space.map_from_set());
@@ -74,13 +80,27 @@ static isl::map mapToNext(isl::space space) {
   auto aff =
       isl::aff::var_on_domain(isl::local_space(space), isl::dim::set, dim - 1);
   auto next = aff.add_constant_si(1);
-  return result.intersect(next == aff);
+  return all ? result.intersect(aff < aff) : result.intersect(next == aff);
 }
 
 std::vector<StrideCandidate>
 StrideCandidate::candidates(isl::map singleOutDimMap,
                             const StridePattern &pattern) {
-  auto map = mapToNext(singleOutDimMap.get_space().domain());
+  // Construct a relation between a point in space representing loops (e.g.,
+  // partial schedule space) and is immediate successor in the innermost loop
+  // (the last dimension).
+  // By default, just add 1 to the last dimension to get the next iteration.
+  // If the space is not dense, i.e. not all points in the space correspond to
+  // actual loop iterations, which happens for loops with non-unit step, the set
+  // of active schedule points must be provided in the pattern.  In this case,
+  // take the lexicographically smallest point that is active.
+  auto map = mapToNext(singleOutDimMap.get_space().domain(),
+                       !pattern.nonEmptySchedulePoints.is_null());
+  if (pattern.nonEmptySchedulePoints) {
+    map = map.intersect_domain(pattern.nonEmptySchedulePoints)
+              .intersect_range(pattern.nonEmptySchedulePoints);
+    map = map.lexmin();
+  }
   auto delta =
       map.apply_domain(singleOutDimMap).apply_range(singleOutDimMap).deltas();
   // TODO: also match parametric strides

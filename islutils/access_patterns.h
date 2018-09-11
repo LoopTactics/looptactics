@@ -196,11 +196,34 @@ operator+(Placeholder<SingleInputDim, UnfixedOutDimPattern<SimpleAff>> p,
 
 ////////////////////
 
+/**
+ * Pattern class to detect strides in an access relation.
+ * By stride, we understand the constant offset in number of elements between
+ * elements of an array accessed by subsequent iterations of the innermost
+ * (relative to the partially applied schedule) loop.
+ * For example, vectorization often requires that all accesses are either
+ * stride-zero (the same element is accessed in all iterations) or stride-one
+ * (subsequent iterations access subsequent array elements).
+ *
+ * If the offset is not constant between loop iterations, the offset is
+ * considered to be undefined and is not matched by any stride.
+ *
+ * The pattern includes the value of the stride and, optionally, the set of
+ * relevant points in schedule space.  The latter is useful in cases where not
+ * every point in the schedule space performs the access, for example in case
+ * of non-unit iterator increments or modular if-conditions.
+ *
+ * Candidates for this pattern may be captured by the StrideCandidate class.
+ *
+ * This class is designed for one-dimensional arrays.  It can be wrapped into
+ * FixedOutDimPattern to operate on any dimension of a multi-dimensional array.
+ */
 class StridePattern {
 public:
   explicit StridePattern(isl::ctx ctx) : stride(isl::val::one(ctx)) {}
 
-  isl::val stride;
+  isl::val stride;                 ///< Expected stirde.
+  isl::set nonEmptySchedulePoints; ///< Schedule points to check, if not empty.
 };
 
 class StrideCandidate {
