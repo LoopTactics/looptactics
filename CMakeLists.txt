@@ -32,21 +32,6 @@ ExternalProject_Add(pet
 
 add_subdirectory(external/googletest EXCLUDE_FROM_ALL)
 
-# Patch googletest with the provided patch.
-# Detect if the patch has already been applied: if the force application would
-# fail and application of the reverted patch would succeeed, then the patch is
-# applied and therefore should be skipped.
-add_custom_target(patch-gtest
-    COMMAND patch --dry-run -f -p1 < ${CMAKE_SOURCE_DIR}/gtest.patch\;
-            if [ $$? -eq 0 ]\; then patch -f -p1 < ${CMAKE_SOURCE_DIR}/gtest.patch\;
-            else patch --dry-run -R -p1 < ${CMAKE_SOURCE_DIR}/gtest.patch\;
-              if [ $$? -eq 0 ]\; then echo "Skipping already applied patch" \;
-              else echo "Cannot apply googletest patch" \; exit 1\;
-              fi\;
-            fi\;
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/external/googletest)
-add_dependencies(gtest patch-gtest)
-
 set(isl_LIB "libisl.so")
 set(isl_LIBPATH "external/install-isl/lib")
 set(isl_INCLUDE "external/install-isl/include")
