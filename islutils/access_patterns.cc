@@ -88,8 +88,12 @@ StrideCandidate::candidates(isl::map singleOutDimMap,
       isl::aff(isl::local_space(delta.get_space()), pattern.stride);
   auto varAff = isl::aff::var_on_domain(isl::local_space(delta.get_space()),
                                         isl::dim::set, 0);
+  // Since the empty set is a subset of any set, empty deltas set (caused,
+  // e.g., by empty input set) would indicate a match.  However, it does not
+  // make sense to say that accessed that is not performed has any meaningful
+  // stride.  Consider empty deltas as an absence of match.
   using set_maker::operator==;
-  if (delta.is_subset(strideAff == varAff))
+  if (!delta.is_empty() && delta.is_subset(strideAff == varAff))
     return {StrideCandidate{}};
   return {};
 }
