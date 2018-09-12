@@ -94,6 +94,9 @@ class PlaceholderSet {
   friend PlaceholderSet allOf(Args... args);
 
 public:
+  using CandidateTy = CandidatePayload;
+  using PatternTy = PatternPayload;
+
   std::vector<Placeholder<CandidatePayload, PatternPayload>> placeholders_;
 
   // Each inner vector has a set of indices of placeholders that should appear
@@ -184,10 +187,10 @@ private:
 template <typename CandidatePayload, typename PatternPayload>
 using Matches = std::vector<Match<CandidatePayload, PatternPayload>>;
 
-template <typename CandidatePayload, typename PatternPayload>
-Matches<CandidatePayload, PatternPayload>
-match(isl::union_map access,
-      PlaceholderSet<CandidatePayload, PatternPayload> ps);
+template <typename PlaceholderCollectionTy>
+Matches<typename PlaceholderCollectionTy::CandidateTy,
+        typename PlaceholderCollectionTy::PatternTy>
+match(isl::union_map access, PlaceholderCollectionTy ps);
 
 template <typename CandidatePayload, typename PatternPayload>
 struct Replacement {

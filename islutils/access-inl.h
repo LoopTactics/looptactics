@@ -100,11 +100,13 @@ Match<CandidatePayload, PatternPayload>::Match(
   }
 }
 
-template <typename CandidatePayload, typename PatternPayload>
+template <typename PlaceholderCollectionTy>
 void recursivelyCheckCombinations(
-    const PlaceholderSet<CandidatePayload, PatternPayload> &ps,
-    std::vector<DimCandidate<CandidatePayload>> partialCombination,
-    Matches<CandidatePayload, PatternPayload> &suitableCandidates) {
+    const PlaceholderCollectionTy &ps,
+    std::vector<DimCandidate<typename PlaceholderCollectionTy::CandidateTy>>
+        partialCombination,
+    Matches<typename PlaceholderCollectionTy::CandidateTy,
+            typename PlaceholderCollectionTy::PatternTy> &suitableCandidates) {
 
   if (!ps.isSuitableCombination(partialCombination)) {
     return;
@@ -126,18 +128,21 @@ void recursivelyCheckCombinations(
   }
 }
 
-template <typename CandidatePayload, typename PatternPayload>
-Matches<CandidatePayload, PatternPayload> suitableCombinations(
-    const PlaceholderSet<CandidatePayload, PatternPayload> &ps) {
-  Matches<CandidatePayload, PatternPayload> result;
+template <typename PlaceholderCollectionTy>
+Matches<typename PlaceholderCollectionTy::CandidateTy,
+        typename PlaceholderCollectionTy::PatternTy>
+suitableCombinations(const PlaceholderCollectionTy &ps) {
+  Matches<typename PlaceholderCollectionTy::CandidateTy,
+          typename PlaceholderCollectionTy::PatternTy>
+      result;
   recursivelyCheckCombinations(ps, {}, result);
   return result;
 }
 
-template <typename CandidatePayload, typename PatternPayload>
-Matches<CandidatePayload, PatternPayload>
-match(isl::union_map access,
-      PlaceholderSet<CandidatePayload, PatternPayload> ps) {
+template <typename PlaceholderCollectionTy>
+Matches<typename PlaceholderCollectionTy::CandidateTy,
+        typename PlaceholderCollectionTy::PatternTy>
+match(isl::union_map access, PlaceholderCollectionTy ps) {
   std::vector<isl::map> accesses;
   access.foreach_map([&accesses](isl::map m) { accesses.push_back(m); });
 
@@ -148,7 +153,8 @@ match(isl::union_map access,
   // Stage 1: fill in the candidate lists for all placeholders.
   for (auto &ph : ps) {
     for (auto acc : accesses) {
-      for (auto &&c : CandidatePayload::candidates(acc, ph.pattern_)) {
+      for (auto &&c :
+           PlaceholderCollectionTy::CandidateTy::candidates(acc, ph.pattern_)) {
         ph.candidates_.emplace_back(c, acc.get_space());
       }
     }
@@ -160,7 +166,7 @@ match(isl::union_map access,
 
   // Stage 2: generate all combinations of values replacing the placeholders
   // while filtering incompatible ones immediately.
-  return suitableCombinations<CandidatePayload, PatternPayload>(ps);
+  return suitableCombinations(ps);
 }
 
 template <typename CandidatePayload, typename PatternPayload, typename... Args>
