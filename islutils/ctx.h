@@ -1,7 +1,7 @@
 #ifndef ISLUTILS_CTX_H
 #define ISLUTILS_CTX_H
 
-#include <isl/ctx.h>
+#include <isl/cpp.h>
 
 namespace util {
 
@@ -15,6 +15,7 @@ namespace util {
 class ScopedCtx {
 public:
   ScopedCtx() : ctx(isl_ctx_alloc()) {}
+  explicit ScopedCtx(isl::ctx &&ctx) : ctx(ctx) {}
   ScopedCtx(const ScopedCtx &) = delete;
   ScopedCtx(ScopedCtx &&) = default;
   ~ScopedCtx() { isl_ctx_free(ctx.release()); }

@@ -1,9 +1,12 @@
 #include <islutils/builders.h>
+#include <islutils/ctx.h>
 #include <islutils/locus.h>
 #include <islutils/matchers.h>
 #include <islutils/parser.h>
 
 #include "gtest/gtest.h"
+
+using util::ScopedCtx;
 
 TEST(Transformer, Capture) {
   isl::schedule_node bandNode, filterNode1, filterNode2, filterSubtree;
@@ -79,7 +82,9 @@ TEST(Transformer, Capture) {
 }
 
 struct Schedule : public ::testing::Test {
-  virtual void SetUp() override { scop_ = Parser("inputs/nested.c").getScop(); }
+  virtual void SetUp() override {
+    scop_ = Parser("inputs/nested.c").getScop(ctx_);
+  }
 
   isl::schedule_node topmostBand() {
     return scop_.schedule.get_root().child(0);
@@ -91,6 +96,7 @@ struct Schedule : public ::testing::Test {
   }
 
   Scop scop_;
+  ScopedCtx ctx_ = ScopedCtx(ctxWithPetOptions());
 };
 
 TEST_F(Schedule, MergeBandsCallLambda) {

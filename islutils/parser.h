@@ -10,7 +10,9 @@ class Parser {
 
 public:
   Parser(std::string Filename);
-  Scop getScop();
+  Scop getScop(isl::ctx ctx);
 };
+
+isl::ctx ctxWithPetOptions();
 
 #endif // PARSER_H

@@ -285,8 +285,8 @@ TEST(AccessMatcher, PlaceholderWithConstantsNoMatch) {
 TEST(AccessMatcher, Stencil) {
   using namespace matchers;
 
-  auto ctx = ScopedCtx();
-  auto scop = Parser("inputs/stencil.c").getScop();
+  auto ctx = ScopedCtx(ctxWithPetOptions());
+  auto scop = Parser("inputs/stencil.c").getScop(ctx);
   ASSERT_FALSE(scop.schedule.is_null());
 
   // Don't want to include tree matchers in this _unit_ test, go to the first
@@ -466,7 +466,8 @@ TEST(AccessMatcher, MultiDimensionalReplace) {
 // Check that, for strided domains, we can detect strides properly, given the
 // information on the sparseness of the domain.
 TEST(AccessMatcher, StrideInStridedDomain) {
-  auto scop = Parser("inputs/strided_domain.c").getScop();
+  auto ctx = ScopedCtx(ctxWithPetOptions());
+  auto scop = Parser("inputs/strided_domain.c").getScop(ctx);
   // Since the input is a simple 1d loop, we can get the schedule without
   // auxiliary dimensions directly without traversing the tree.
   auto schedule = scop.schedule.get_map();

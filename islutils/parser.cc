@@ -1,13 +1,15 @@
 #include "parser.h"
 #include "pet.h"
 
+#include <isl/cpp.h>
+
 Parser::Parser(std::string Filename) : Filename(Filename) {}
 
-Scop Parser::getScop() {
+Scop Parser::getScop(isl::ctx ctx) {
   Scop S;
 
-  isl_ctx *ctx = isl_ctx_alloc_with_pet_options();
-  pet_scop *scop = pet_scop_extract_from_C_source(ctx, Filename.c_str(), NULL);
+  pet_scop *scop =
+      pet_scop_extract_from_C_source(ctx.get(), Filename.c_str(), NULL);
   S.schedule = isl::manage(pet_scop_get_schedule(scop));
   S.reads = isl::manage(pet_scop_get_tagged_may_reads(scop));
   S.mayWrites = isl::manage(pet_scop_get_tagged_may_writes(scop));
@@ -16,3 +18,5 @@ Scop Parser::getScop() {
 
   return S;
 }
+
+isl::ctx ctxWithPetOptions() { return isl_ctx_alloc_with_pet_options(); }
