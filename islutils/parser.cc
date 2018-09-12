@@ -12,6 +12,7 @@ Scop Parser::getScop() {
   S.reads = isl::manage(pet_scop_get_tagged_may_reads(scop));
   S.mayWrites = isl::manage(pet_scop_get_tagged_may_writes(scop));
   S.mustWrites = isl::manage(pet_scop_get_tagged_must_writes(scop));
+  pet_scop_free(scop);
 
   return S;
 }
