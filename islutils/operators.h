@@ -13,7 +13,7 @@ namespace isl {
 /// This must live in the isl namespace to enable ADL.
 template <typename T,
           typename = typename std::enable_if<is_isl_type<T>::value>::type>
-bool operator==(const T &left, const T &right) {
+inline bool operator==(const T &left, const T &right) {
   if (left.is_null() && right.is_null()) {
     return true;
   }
@@ -21,6 +21,12 @@ bool operator==(const T &left, const T &right) {
     return false;
   }
   return left.is_equal(right);
+}
+
+// Specialization for isl ids, which are pointer-comparable.
+template <>
+inline bool operator==<isl::id>(const isl::id &left, const isl::id &right) {
+  return left.get() == right.get();
 }
 
 /// Inequality comparison operator for isl objects.
