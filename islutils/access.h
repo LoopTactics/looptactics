@@ -127,6 +127,26 @@ public:
   decltype(placeholders_.end()) end() { return placeholders_.end(); }
 
   decltype(placeholders_.cend()) cend() const { return placeholders_.cend(); }
+
+  // Filtering function that checks if a combination of candidate assignments
+  // to placeholders (input is a vector of assignments co-indexed with
+  // placehodlers_) is valid.
+  // In particular, check that, within each group, all candidates matched the
+  // same map and that different groups matched different maps, as well as that
+  // all placeholders have unique candidates except for those within one fold
+  // that have the same candidate assigned.
+  //
+  // Note that the filter must work on incomplete candidates for the
+  // branch-and-cut to work.  It can return "true" for incomplete candidates
+  // and only actually check complete candidates, but would require enumerating
+  // them all.
+  // Note also that the filter might be doing duplicate work: in the
+  // hasNoDuplicateAssignments example, there is not need to check all pairs in
+  // the N-element list if we know that elements of (N-1) array are unique.
+  // This algorithmic optimization requires some API changes and is left for
+  // future work.
+  bool isSuitableCombination(
+      const std::vector<DimCandidate<CandidatePayload>> &combination) const;
 };
 
 template <typename CandidatePayload, typename PatternPayload> class Match;

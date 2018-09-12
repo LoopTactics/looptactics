@@ -80,6 +80,13 @@ bool groupsAreProperlyFormed(
 }
 
 template <typename CandidatePayload, typename PatternPayload>
+bool PlaceholderSet<CandidatePayload, PatternPayload>::isSuitableCombination(
+    const std::vector<DimCandidate<CandidatePayload>> &combination) const {
+  return hasNoDuplicateAssignments(combination, *this) &&
+         groupsAreProperlyFormed(combination, *this);
+}
+
+template <typename CandidatePayload, typename PatternPayload>
 Match<CandidatePayload, PatternPayload>::Match(
     const PlaceholderSet<CandidatePayload, PatternPayload> &ps,
     const std::vector<DimCandidate<CandidatePayload>> &combination) {
@@ -93,45 +100,37 @@ Match<CandidatePayload, PatternPayload>::Match(
   }
 }
 
-template <typename CandidatePayload, typename PatternPayload, typename FilterTy>
+template <typename CandidatePayload, typename PatternPayload>
 void recursivelyCheckCombinations(
     const PlaceholderSet<CandidatePayload, PatternPayload> &ps,
     std::vector<DimCandidate<CandidatePayload>> partialCombination,
-    FilterTy filter,
     Matches<CandidatePayload, PatternPayload> &suitableCandidates) {
-  static_assert(
-      std::is_same<
-          decltype(filter(
-              std::declval<std::vector<DimCandidate<CandidatePayload>>>())),
-          bool>::value,
-      "unexpected type of the callable filter");
 
-  if (!filter(partialCombination)) {
+  if (!ps.isSuitableCombination(partialCombination)) {
     return;
   }
 
-  // At this point, the partialCombination is full and has been checked to pass
-  // the filter.
+  // The partial combination is known to be suitable. If it is also full, add
+  // it to the list and be done.
   if (partialCombination.size() == containerSize(ps)) {
     suitableCandidates.emplace_back(ps, partialCombination);
     return;
   }
 
+  // Otherwise, try adding one element to the combination and recurse.
   auto pos = partialCombination.size();
   for (const auto &candidate : ps.placeholders_[pos].candidates_) {
     partialCombination.push_back(candidate);
-    recursivelyCheckCombinations(ps, partialCombination, filter,
-                                 suitableCandidates);
+    recursivelyCheckCombinations(ps, partialCombination, suitableCandidates);
     partialCombination.pop_back();
   }
 }
 
-template <typename CandidatePayload, typename PatternPayload, typename FilterTy>
-Matches<CandidatePayload, PatternPayload>
-suitableCombinations(const PlaceholderSet<CandidatePayload, PatternPayload> &ps,
-                     FilterTy filter) {
+template <typename CandidatePayload, typename PatternPayload>
+Matches<CandidatePayload, PatternPayload> suitableCombinations(
+    const PlaceholderSet<CandidatePayload, PatternPayload> &ps) {
   Matches<CandidatePayload, PatternPayload> result;
-  recursivelyCheckCombinations(ps, {}, filter, result);
+  recursivelyCheckCombinations(ps, {}, result);
   return result;
 }
 
@@ -161,21 +160,7 @@ match(isl::union_map access,
 
   // Stage 2: generate all combinations of values replacing the placeholders
   // while filtering incompatible ones immediately.
-  // TODO: customize the filter for acceptable combinations.
-  // Note that the filter must work on incomplete candidates for the
-  // branch-and-cut to work.  It can return "true" for incomplete candidates
-  // and only actually check complete candidates, but would require enumerating
-  // them all.
-  // Note also that the filter might be doing duplicate work: in the
-  // hasNoDuplicateAssignments example, there is not need to check all pairs in
-  // the N-element list if we know that elements of (N-1) array are unique.
-  // This algorithmic optimization requires some API changes and is left for
-  // future work.
-  return suitableCombinations<CandidatePayload, PatternPayload>(
-      ps, [ps](const std::vector<DimCandidate<CandidatePayload>> &candidate) {
-        return hasNoDuplicateAssignments(candidate, ps) &&
-               groupsAreProperlyFormed(candidate, ps);
-      });
+  return suitableCombinations<CandidatePayload, PatternPayload>(ps);
 }
 
 template <typename CandidatePayload, typename PatternPayload, typename... Args>
