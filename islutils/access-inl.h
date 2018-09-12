@@ -12,35 +12,47 @@ template <typename Container> size_t containerSize(Container &&c) {
   return std::distance(c.cbegin(), c.cend());
 }
 
-// All placeholders should get different assignments, except those that belong
-// to the same fold which should get equal assignments modulo matched map.
-template <typename CandidatePayload, typename PatternPayload>
-bool hasNoDuplicateAssignments(
-    const std::vector<DimCandidate<CandidatePayload>> &combination,
-    const PlaceholderSet<CandidatePayload, PatternPayload> &ps) {
+// Check that, if two elements in "combination" correspond to the same values
+// in "folds", they are equal, and that they are unique within "combination"
+// otherwise.  Comparison is performed by calling the function object
+// "eqCompare".  "folds" must be at least as large as "combination".
+template <typename T, typename EqComparator>
+bool areFoldsValid(const std::vector<T> &combination,
+                   const std::vector<size_t> &folds, EqComparator eqCompare) {
   // Algorithmically not the most efficient way of finding duplicates, but
   // removes the need to include hash-tables and/or perform additional
   // allocations.
   size_t size = combination.size();
-  if (containerSize(ps) != ps.placeholderFolds_.size()) {
-    ISLUTILS_DIE("placeholder folds are not properly set up");
+  if (size > folds.size()) {
+    ISLUTILS_DIE("folds are not properly set up");
   }
 
   for (size_t i = 0; i < size; ++i) {
     for (size_t j = i + 1; j < size; ++j) {
-      if (ps.placeholderFolds_[i] == ps.placeholderFolds_[j]) {
-        if (!combination.at(i).isEqualModuloMap(combination.at(j))) {
+      if (folds[i] == folds[j]) {
+        if (!eqCompare(combination.at(i), combination.at(j))) {
           return false;
         } else {
           continue;
         }
       }
-      if (combination.at(i).isEqualModuloMap(combination.at(j))) {
+      if (eqCompare(combination.at(i), combination.at(j))) {
         return false;
       }
     }
   }
   return true;
+}
+
+// All placeholders should get different assignments, except those that belong
+// to the same fold which should get equal assignments modulo matched map.
+template <typename CandidatePayload, typename PatternPayload>
+inline bool hasNoDuplicateAssignments(
+    const std::vector<DimCandidate<CandidatePayload>> &combination,
+    const PlaceholderSet<CandidatePayload, PatternPayload> &ps) {
+  return areFoldsValid(combination, ps.placeholderFolds_,
+      [](const DimCandidate<CandidatePayload> &left,
+         const DimCandidate<CandidatePayload> &right) { return left.isEqualModuloMap(right); });
 }
 
 // All placeholders in a group are either not yet matched, or matched the same
