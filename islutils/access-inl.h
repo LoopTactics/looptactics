@@ -8,6 +8,10 @@
 
 namespace matchers {
 
+template <typename Container> size_t containerSize(Container &&c) {
+  return std::distance(c.cbegin(), c.cend());
+}
+
 // All placeholders should get different assignments, except those that belong
 // to the same fold which should get equal assignments modulo matched map.
 template <typename CandidatePayload, typename PatternPayload>
@@ -18,7 +22,7 @@ bool hasNoDuplicateAssignments(
   // removes the need to include hash-tables and/or perform additional
   // allocations.
   size_t size = combination.size();
-  if (ps.placeholders_.size() != ps.placeholderFolds_.size()) {
+  if (containerSize(ps) != ps.placeholderFolds_.size()) {
     ISLUTILS_DIE("placeholder folds are not properly set up");
   }
 
@@ -79,7 +83,7 @@ template <typename CandidatePayload, typename PatternPayload>
 Match<CandidatePayload, PatternPayload>::Match(
     const PlaceholderSet<CandidatePayload, PatternPayload> &ps,
     const std::vector<DimCandidate<CandidatePayload>> &combination) {
-  if (ps.placeholders_.size() != combination.size()) {
+  if (containerSize(ps) != combination.size()) {
     ISLUTILS_DIE("expected the same number of placeholders and candidates");
   }
 
@@ -108,7 +112,7 @@ void recursivelyCheckCombinations(
 
   // At this point, the partialCombination is full and has been checked to pass
   // the filter.
-  if (partialCombination.size() == ps.placeholders_.size()) {
+  if (partialCombination.size() == containerSize(ps)) {
     suitableCandidates.emplace_back(ps, partialCombination);
     return;
   }
@@ -143,7 +147,7 @@ match(isl::union_map access,
   // aff-matching computation once per coefficient.  Punting for now.
 
   // Stage 1: fill in the candidate lists for all placeholders.
-  for (auto &ph : ps.placeholders_) {
+  for (auto &ph : ps) {
     for (auto acc : accesses) {
       for (auto &&c : CandidatePayload::candidates(acc, ph.pattern_)) {
         ph.candidates_.emplace_back(c, acc.get_space());
@@ -323,7 +327,7 @@ allOf(PlaceholderList<CandidatePayload, PatternPayload> arg, Args... args) {
       continue;
     }
 
-    size_t index = ps.placeholders_.size();
+    size_t index = containerSize(ps);
     ps.placeholderGroups_.emplace_back();
     for (const auto &p : pl) {
       ps.placeholders_.push_back(p);

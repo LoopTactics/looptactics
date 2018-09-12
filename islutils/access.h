@@ -117,6 +117,16 @@ public:
   // placeholders_ of the first placeholder in the fold.
   // One placeholder cannot belong to multiple folds.
   std::vector<size_t> placeholderFolds_;
+
+  decltype(placeholders_.begin()) begin() { return placeholders_.begin(); }
+
+  decltype(placeholders_.cbegin()) cbegin() const {
+    return placeholders_.cbegin();
+  }
+
+  decltype(placeholders_.end()) end() { return placeholders_.end(); }
+
+  decltype(placeholders_.cend()) cend() const { return placeholders_.cend(); }
 };
 
 template <typename CandidatePayload, typename PatternPayload> class Match;
