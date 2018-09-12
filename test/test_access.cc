@@ -483,3 +483,46 @@ TEST(AccessMatcher, StrideInStridedDomain) {
   sHolder.pattern_.nonEmptySchedulePoints = isl::set();
   EXPECT_EQ(match(reads, allOf(access(sHolder))).size(), 0);
 }
+
+TEST(AccessMatcher, StrideInStridedDomainWithMultiDimensionalAccess) {
+  auto ctx = ScopedCtx(ctxWithPetOptions());
+  auto scop = Parser("inputs/strided_domain_multi_dimensions.c").getScop(ctx);
+  auto schedule = scop.schedule.get_map();
+  auto reads = scop.reads.curry().apply_domain(schedule);
+  auto writes = scop.mustWrites.curry().apply_domain(schedule);
+  auto nonEmptySchedulePoints = isl::set(scop.domain().apply(schedule));
+  // expect stride equals to 2
+  auto sHolder = stride(nonEmptySchedulePoints.get_ctx(), 2);
+  sHolder.pattern_.nonEmptySchedulePoints = nonEmptySchedulePoints;
+
+  // Expect to match when sparseness information is provided.
+  EXPECT_EQ(match(reads, allOf(access(dim(1, sHolder)))).size(), 1);
+
+  // Expect to match when sparseness information is provided.
+  EXPECT_EQ(match(writes, allOf(access(dim(1, sHolder)))).size(), 1);
+  // Stride computation is done only for the innermost loop.
+  EXPECT_EQ(match(writes, allOf(access(dim(0, sHolder)))).size(), 0);
+}
+
+TEST(AccessMatcher, StrideInStridedDomainWithDimensionCoefficients) {
+  auto ctx = ScopedCtx(ctxWithPetOptions());
+  auto scop = Parser("inputs/strided_domain_with_coefficients.c").getScop(ctx);
+  auto schedule = scop.schedule.get_map();
+  auto reads = scop.reads.curry().apply_domain(schedule);
+  auto writes = scop.mustWrites.curry().apply_domain(schedule);
+  auto nonEmptySchedulePoints = isl::set(scop.domain().apply(schedule));
+  // Expect stride equals to 4
+  auto sHolder = stride(nonEmptySchedulePoints.get_ctx(), 4);
+  sHolder.pattern_.nonEmptySchedulePoints = nonEmptySchedulePoints;
+
+  // Expect to match when sparseness information is provided.
+  EXPECT_EQ(match(writes, allOf(access(sHolder))).size(), 1);
+  // Expect stride equals to 6
+  auto newStride = isl::val(nonEmptySchedulePoints.get_ctx(), 6);
+  sHolder.pattern_.stride = newStride;
+  EXPECT_EQ(match(reads, allOf(access(sHolder))).size(), 2);
+  // Expect zero stride
+  newStride = isl::val(nonEmptySchedulePoints.get_ctx(), 0);
+  sHolder.pattern_.stride = newStride;
+  EXPECT_EQ(match(reads, allOf(access(sHolder))).size(), 1);
+}
