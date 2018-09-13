@@ -123,13 +123,13 @@ public:
 
   decltype(placeholders_.begin()) begin() { return placeholders_.begin(); }
 
-  decltype(placeholders_.cbegin()) cbegin() const {
+  decltype(placeholders_.cbegin()) begin() const {
     return placeholders_.cbegin();
   }
 
   decltype(placeholders_.end()) end() { return placeholders_.end(); }
 
-  decltype(placeholders_.cend()) cend() const { return placeholders_.cend(); }
+  decltype(placeholders_.cend()) end() const { return placeholders_.cend(); }
 
   // Filtering function that checks if a combination of candidate assignments
   // to placeholders (input is a vector of assignments co-indexed with

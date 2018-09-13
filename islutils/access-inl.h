@@ -9,7 +9,7 @@
 namespace matchers {
 
 template <typename Container> size_t containerSize(Container &&c) {
-  return std::distance(c.cbegin(), c.cend());
+  return std::distance(c.begin(), c.end());
 }
 
 // Check that, if two elements in "combination" correspond to the same values
