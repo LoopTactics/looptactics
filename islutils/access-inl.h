@@ -397,6 +397,28 @@ pattern_cast(Placeholder<CandidatePayload, SourcePatternPayload> placeholder) {
 template <typename CandidatePayload, typename PatternPayload>
 thread_local size_t Placeholder<CandidatePayload, PatternPayload>::nextId_ = 0;
 
+template <typename Iterable>
+void setupFolds(const Iterable &iterable, std::vector<size_t> &folds) {
+  folds.clear();
+  folds.reserve(containerSize(iterable));
+
+  std::vector<std::pair<size_t, size_t>> knownIds;
+  size_t index = 0;
+  for (const auto &p : iterable) {
+    auto namePos = std::find_if(knownIds.begin(), knownIds.end(),
+                                [p](const std::pair<size_t, size_t> &pair) {
+                                  return pair.first == p.id_;
+                                });
+    if (namePos == knownIds.end()) {
+      knownIds.emplace_back(p.id_, index);
+      folds.emplace_back(index);
+    } else {
+      folds.emplace_back(namePos->second);
+    }
+    ++index;
+  }
+}
+
 /// Build an object used to match all of the access patterns provided as
 /// arguments. Individual patterns can be constructed by calling "access(...)".
 template <typename CandidatePayload, typename PatternPayload, typename... Args>
@@ -410,7 +432,6 @@ allOf(PlaceholderList<CandidatePayload, PatternPayload> arg, Args... args) {
 
   std::vector<PlaceholderList<CandidatePayload, PatternPayload>>
       placeholderLists = {arg, args...};
-  std::vector<std::pair<size_t, size_t>> knownIds;
   PlaceholderSet<CandidatePayload, PatternPayload> ps;
   for (const auto &pl : placeholderLists) {
     if (pl.empty()) {
@@ -422,19 +443,11 @@ allOf(PlaceholderList<CandidatePayload, PatternPayload> arg, Args... args) {
     for (const auto &p : pl) {
       ps.placeholders_.push_back(p);
       ps.placeholderGroups_.back().push_back(index);
-      auto namePos = std::find_if(knownIds.begin(), knownIds.end(),
-                                  [p](const std::pair<size_t, size_t> &pair) {
-                                    return pair.first == p.id_;
-                                  });
-      if (namePos == knownIds.end()) {
-        knownIds.emplace_back(p.id_, index);
-        ps.placeholderFolds_.emplace_back(index);
-      } else {
-        ps.placeholderFolds_.emplace_back(namePos->second);
-      }
       ++index;
     }
   }
+
+  setupFolds(ps, ps.placeholderFolds_);
 
   return ps;
 }
