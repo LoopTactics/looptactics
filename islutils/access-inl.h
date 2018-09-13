@@ -249,10 +249,6 @@ match(isl::union_map access, PlaceholderCollectionTy ps) {
   std::vector<isl::map> accesses;
   access.foreach_map([&accesses](isl::map m) { accesses.push_back(m); });
 
-  // If there is a lot of placeholders with the same coefficient, we want
-  // to group placeholders by coefficient and only call the
-  // aff-matching computation once per coefficient.  Punting for now.
-
   // Stage 1: fill in the candidate lists for all placeholders.
   for (auto &ph : ps) {
     for (auto acc : accesses) {
