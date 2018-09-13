@@ -14,11 +14,15 @@ template <typename Container> size_t containerSize(Container &&c) {
 
 // Check that, if two elements in "combination" correspond to the same values
 // in "folds", they are equal, and that they are unique within "combination"
-// otherwise.  Comparison is performed by calling the function object
-// "eqCompare".  "folds" must be at least as large as "combination".
-template <typename T, typename EqComparator>
+// otherwise.  Comparison is performed by calling the function objects
+// "eqCompare" and "neCompare" for equality and non-equality respectively.
+// While these operations are often reciprocal, this is not always the case,
+// for example in tri-state logic.
+// "folds" must be at least as large as "combination".
+template <typename T, typename EqComparator, typename NeComparator>
 bool areFoldsValid(const std::vector<T> &combination,
-                   const std::vector<size_t> &folds, EqComparator eqCompare) {
+                   const std::vector<size_t> &folds, EqComparator eqCompare,
+                   NeComparator neCompare) {
   // Algorithmically not the most efficient way of finding duplicates, but
   // removes the need to include hash-tables and/or perform additional
   // allocations.
@@ -30,7 +34,7 @@ bool areFoldsValid(const std::vector<T> &combination,
   for (size_t i = 0; i < size; ++i) {
     for (size_t j = i + 1; j < size; ++j) {
       if (folds[i] == folds[j]) {
-        if (!eqCompare(combination.at(i), combination.at(j))) {
+        if (neCompare(combination.at(i), combination.at(j))) {
           return false;
         } else {
           continue;
@@ -51,8 +55,14 @@ inline bool hasNoDuplicateAssignments(
     const std::vector<DimCandidate<CandidatePayload>> &combination,
     const PlaceholderSet<CandidatePayload, PatternPayload> &ps) {
   return areFoldsValid(combination, ps.placeholderFolds_,
-      [](const DimCandidate<CandidatePayload> &left,
-         const DimCandidate<CandidatePayload> &right) { return left.isEqualModuloMap(right); });
+                       [](const DimCandidate<CandidatePayload> &left,
+                          const DimCandidate<CandidatePayload> &right) {
+                         return left.isEqualModuloMap(right);
+                       },
+                       [](const DimCandidate<CandidatePayload> &left,
+                          const DimCandidate<CandidatePayload> &right) {
+                         return !left.isEqualModuloMap(right);
+                       });
 }
 
 // All placeholders in a group are either not yet matched, or matched the same
@@ -96,6 +106,87 @@ bool PlaceholderSet<CandidatePayload, PatternPayload>::isSuitableCombination(
     const std::vector<DimCandidate<CandidatePayload>> &combination) const {
   return hasNoDuplicateAssignments(combination, *this) &&
          groupsAreProperlyFormed(combination, *this);
+}
+
+template <typename CandidatePayload>
+static inline isl::space
+findSpace(const std::vector<size_t> &group,
+          const std::vector<DimCandidate<CandidatePayload>> &combination) {
+  for (auto idx : group) {
+    if (idx >= combination.size()) {
+      continue;
+    }
+    return combination.at(idx).candidateMapSpace_;
+  }
+  return isl::space();
+}
+
+// Handle both right-tagged and untagged access relation spaces,
+// [] -> [__ref_tagX[] -> arrayID[]]
+// [] -> arrayID[]
+// and return arrayID.  Return a null isl::id if there is no tuple tuple id at
+// the expected location.
+static inline isl::id extractArrayId(isl::space accessSpace) {
+  auto rangeSpace = accessSpace.range();
+  if (rangeSpace.is_wrapping()) {
+    rangeSpace = rangeSpace.unwrap().range();
+  }
+  if (!rangeSpace.has_tuple_id(isl::dim::set)) {
+    return isl::id();
+  }
+  return rangeSpace.get_tuple_id(isl::dim::set);
+}
+
+// Compare if two groups (containing indexes of candidates in "combination")
+// matched the same array (if "equality" is set) or different arrays (if
+// "equality" is not set).  If it is impossible to determine the array that
+// matched at least one of the group, e.g., in case of partial combination,
+// return false for both equality and inequality checks.
+// Array ids are expected to be tuple ids of the rightmost set space in the
+// matched space.  Two absent ids are interpreted as equal since the
+// corresponding spaces are considered equal.  All groups are expected to match
+// exactly one space.
+template <typename CandidatePayload>
+bool compareGroupsBelongToSameArray(
+    const std::vector<size_t> &group1, const std::vector<size_t> &group2,
+    const std::vector<DimCandidate<CandidatePayload>> &combination,
+    bool equality) {
+  // By this point, we should know that any placeholder in the group matched
+  // the same space.
+  isl::space space1 = findSpace(group1, combination);
+  isl::space space2 = findSpace(group2, combination);
+  // If one of the groups has no placeholder with assigned candidates, consider
+  // as different.
+  if (space1.is_null() || space2.is_null()) {
+    return false;
+  }
+  isl::id id1 = extractArrayId(space1);
+  isl::id id2 = extractArrayId(space2);
+  return (id1 == id2) ^ !equality;
+}
+
+// In addition to PlaceholderSet::isSuitableCombination checks for
+// candidate/placeholder uniqueness and group formation, check that groups that
+// belong to the same group fold have matched the same array while gruops that
+// belong to different group folds matched different arrays.
+template <typename CandidatePayload, typename PatternPayload>
+bool PlaceholderGroupedSet<CandidatePayload, PatternPayload>::
+    isSuitableCombination(
+        const std::vector<DimCandidate<CandidatePayload>> &combination) const {
+  return static_cast<const PlaceholderSet<CandidatePayload, PatternPayload> &>(
+             *this)
+             .isSuitableCombination(combination) &&
+         areFoldsValid(this->placeholderGroups_, placeholderGroupFolds_,
+                       [&combination](const std::vector<size_t> &group1,
+                                      const std::vector<size_t> &group2) {
+                         return compareGroupsBelongToSameArray(
+                             group1, group2, combination, true);
+                       },
+                       [&combination](const std::vector<size_t> &group1,
+                                      const std::vector<size_t> &group2) {
+                         return compareGroupsBelongToSameArray(
+                             group1, group2, combination, false);
+                       });
 }
 
 template <typename CandidatePayload, typename PatternPayload>

@@ -526,3 +526,68 @@ TEST(AccessMatcher, StrideInStridedDomainWithDimensionCoefficients) {
   sHolder.pattern_.stride = newStride;
   EXPECT_EQ(match(reads, allOf(access(sHolder))).size(), 1);
 }
+
+static matchers::PlaceholderGroupedSet<SingleInputDim,
+                                       FixedOutDimPattern<SimpleAff>>
+makeTwoGroupsPlaceholderGroupedSet(isl::ctx ctx, bool sameArray) {
+  using namespace matchers;
+
+  Placeholder<SingleInputDim, FixedOutDimPattern<SimpleAff>> p1(
+      FixedOutDimPattern<SimpleAff>(SimpleAff(ctx), 0));
+  Placeholder<SingleInputDim, FixedOutDimPattern<SimpleAff>> p2(
+      FixedOutDimPattern<SimpleAff>(SimpleAff(ctx), 1));
+  Placeholder<SingleInputDim, FixedOutDimPattern<SimpleAff>> p3(
+      FixedOutDimPattern<SimpleAff>(SimpleAff(ctx), 0));
+  Placeholder<SingleInputDim, FixedOutDimPattern<SimpleAff>> p4(
+      FixedOutDimPattern<SimpleAff>(SimpleAff(ctx), 1));
+  p1.pattern_.coefficient_ = isl::val(ctx, 1);
+  p2.pattern_.coefficient_ = isl::val(ctx, 1);
+  p3.pattern_.coefficient_ = isl::val(ctx, 1);
+  p4.pattern_.coefficient_ = isl::val(ctx, 1);
+  p1.pattern_.constant_ = isl::val::zero(ctx);
+  p2.pattern_.constant_ = isl::val::zero(ctx);
+  p3.pattern_.constant_ = isl::val::zero(ctx);
+  p4.pattern_.constant_ = isl::val::zero(ctx);
+  PlaceholderGroupedSet<SingleInputDim, FixedOutDimPattern<SimpleAff>> ps;
+  ps.placeholders_.push_back(p1);
+  ps.placeholders_.push_back(p2);
+  ps.placeholders_.push_back(p3);
+  ps.placeholders_.push_back(p4);
+
+  // Placeholders belong to the different folds fold.
+  ps.placeholderFolds_.push_back(0);
+  ps.placeholderFolds_.push_back(1);
+  ps.placeholderFolds_.push_back(0);
+  ps.placeholderFolds_.push_back(1);
+
+  // Pairs of placeholders must appear in the same relation.
+  ps.placeholderGroups_.emplace_back();
+  ps.placeholderGroups_.back().push_back(0);
+  ps.placeholderGroups_.back().push_back(1);
+  ps.placeholderGroups_.emplace_back();
+  ps.placeholderGroups_.back().push_back(2);
+  ps.placeholderGroups_.back().push_back(3);
+
+  // Groups must match the same array (belong to the same group fold) if
+  // "sameArray" is set and different arrays otherwise.
+  ps.placeholderGroupFolds_.push_back(0);
+  ps.placeholderGroupFolds_.push_back(sameArray ? 0 : 1);
+
+  return ps;
+}
+
+TEST(AccessMatcher, GroupFolds) {
+  auto ctx = ScopedCtx();
+  auto umapSame = isl::union_map(ctx, "{[i,j]->[ref1[]->A[a,b]]: a=i and b=j;"
+                                      " [i,j]->[ref2[]->A[a,b]]: a=i and b=j}");
+  auto umapDiff = isl::union_map(ctx, "{[i,j]->[ref1[]->A[a,b]]: a=i and b=j;"
+                                      " [i,j]->[ref2[]->B[a,b]]: a=i and b=j}");
+
+  auto psSame = makeTwoGroupsPlaceholderGroupedSet(ctx, true);
+  auto psDiff = makeTwoGroupsPlaceholderGroupedSet(ctx, false);
+  // permutations are possible, so 2 matches
+  EXPECT_EQ(match(umapSame, psSame).size(), 2);
+  EXPECT_EQ(match(umapDiff, psSame).size(), 0);
+  EXPECT_EQ(match(umapSame, psDiff).size(), 0);
+  EXPECT_EQ(match(umapDiff, psDiff).size(), 2);
+}

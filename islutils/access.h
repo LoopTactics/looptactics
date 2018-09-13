@@ -152,6 +152,16 @@ public:
       const std::vector<DimCandidate<CandidatePayload>> &combination) const;
 };
 
+template <typename CandidatePayload, typename PatternPayload>
+class PlaceholderGroupedSet
+    : public PlaceholderSet<CandidatePayload, PatternPayload> {
+public:
+  std::vector<size_t> placeholderGroupFolds_;
+
+  bool isSuitableCombination(
+      const std::vector<DimCandidate<CandidatePayload>> &combination) const;
+};
+
 template <typename CandidatePayload, typename PatternPayload> class Match;
 
 template <typename CandidatePayload> class MatchCandidates {
