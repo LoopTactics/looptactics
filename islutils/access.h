@@ -56,9 +56,20 @@ private:
   static thread_local size_t nextId_;
 };
 
+// Using char rather than void because it appears as a function argument.  The
+// actual payload is useless.
+using ArrayPlaceholder = Placeholder<char, char>;
+inline ArrayPlaceholder arrayPlaceholder() { return ArrayPlaceholder('A'); }
+
 template <typename CandidatePayload, typename PatternPayload>
 using PlaceholderList =
     std::vector<Placeholder<CandidatePayload, PatternPayload>>;
+
+template <typename CandidatePayload, typename PatternPayload>
+struct ArrayPlaceholderList {
+  ArrayPlaceholder array;
+  PlaceholderList<CandidatePayload, PatternPayload> list;
+};
 
 template <typename Arg, typename Arg0, typename... Args>
 struct all_are
@@ -79,6 +90,16 @@ typename std::enable_if<
     PlaceholderList<CandidatePayload, PatternPayload>>::type
 access(Placeholder<CandidatePayload, PatternPayload> arg, Args... args) {
   return {arg, args...};
+}
+
+template <typename CandidatePayload, typename PatternPayload, typename... Args>
+typename std::enable_if<
+    all_are<Placeholder<CandidatePayload, PatternPayload>,
+            Placeholder<CandidatePayload, PatternPayload>, Args...>::value,
+    ArrayPlaceholderList<CandidatePayload, PatternPayload>>::type
+access(ArrayPlaceholder array,
+       Placeholder<CandidatePayload, PatternPayload> arg, Args... args) {
+  return {array, {arg, args...}};
 }
 
 template <typename CandidatePayload, typename PatternPayload>
@@ -157,6 +178,11 @@ class PlaceholderGroupedSet
     : public PlaceholderSet<CandidatePayload, PatternPayload> {
 public:
   std::vector<size_t> placeholderGroupFolds_;
+
+  PlaceholderGroupedSet(){};
+  explicit PlaceholderGroupedSet(
+      PlaceholderSet<CandidatePayload, PatternPayload> &&parent)
+      : PlaceholderSet<CandidatePayload, PatternPayload>(parent) {}
 
   bool isSuitableCombination(
       const std::vector<DimCandidate<CandidatePayload>> &combination) const;

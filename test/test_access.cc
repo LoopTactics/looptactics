@@ -591,3 +591,23 @@ TEST(AccessMatcher, GroupFolds) {
   EXPECT_EQ(match(umapSame, psDiff).size(), 0);
   EXPECT_EQ(match(umapDiff, psDiff).size(), 2);
 }
+
+TEST(AccessMatcher, GroupFoldsAPI) {
+  auto ctx = ScopedCtx();
+  auto umapSame = isl::union_map(ctx, "{[i,j]->[ref1[]->A[a,b]]: a=i and b=j;"
+                                      " [i,j]->[ref2[]->A[a,b]]: a=i and b=j}");
+  auto umapDiff = isl::union_map(ctx, "{[i,j]->[ref1[]->A[a,b]]: a=i and b=j;"
+                                      " [i,j]->[ref2[]->B[a,b]]: a=i and b=j}");
+
+  auto _i = placeholder(ctx);
+  auto _j = placeholder(ctx);
+  auto Arr = arrayPlaceholder();
+  auto Other = arrayPlaceholder();
+  auto psSame = allOf(access(Arr, _i, _j), access(Arr, _i, _j));
+  auto psDiff = allOf(access(Arr, _i, _j), access(Other, _i, _j));
+  // permutations are possible, so 2 matches
+  EXPECT_EQ(match(umapSame, psSame).size(), 2);
+  EXPECT_EQ(match(umapDiff, psSame).size(), 0);
+  EXPECT_EQ(match(umapSame, psDiff).size(), 0);
+  EXPECT_EQ(match(umapDiff, psDiff).size(), 2);
+}

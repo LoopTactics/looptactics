@@ -452,6 +452,23 @@ allOf(PlaceholderList<CandidatePayload, PatternPayload> arg, Args... args) {
   return ps;
 }
 
+template <typename CandidatePayload, typename PatternPayload, typename... Args>
+PlaceholderGroupedSet<CandidatePayload, PatternPayload>
+allOf(ArrayPlaceholderList<CandidatePayload, PatternPayload> arg,
+      Args... args) {
+  static_assert(all_are<ArrayPlaceholderList<CandidatePayload, PatternPayload>,
+                        ArrayPlaceholderList<CandidatePayload, PatternPayload>,
+                        Args...>::value,
+                "can only make PlaceholderSet from PlaceholderLists "
+                "with the same payload types");
+
+  auto pgs = PlaceholderGroupedSet<CandidatePayload, PatternPayload>(
+      allOf(arg.list, args.list...));
+  setupFolds(std::initializer_list<ArrayPlaceholder>{arg.array, args.array...},
+             pgs.placeholderGroupFolds_);
+  return pgs;
+}
+
 template <typename CandidatePayload, typename PatternPayload>
 template <typename PPayload>
 MatchCandidates<CandidatePayload> Match<CandidatePayload, PatternPayload>::

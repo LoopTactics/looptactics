@@ -92,6 +92,19 @@ access(Placeholder<CandidateTy, UnfixedOutDimPattern<PatternTy>> arg,
   return result;
 }
 
+template <typename CandidateTy, typename PatternTy, typename... Args>
+typename std::enable_if<
+    all_are<Placeholder<CandidateTy, UnfixedOutDimPattern<PatternTy>>,
+            Placeholder<CandidateTy, UnfixedOutDimPattern<PatternTy>>,
+            Args...>::value,
+    ArrayPlaceholderList<CandidateTy, FixedOutDimPattern<PatternTy>>>::type
+access(ArrayPlaceholder array,
+       Placeholder<CandidateTy, UnfixedOutDimPattern<PatternTy>> arg,
+       Args... args) {
+  int pos = 0;
+  return {array, {dim(pos++, arg), dim(pos++, args)...}};
+}
+
 std::vector<isl::map> listOf1DMaps(isl::map map);
 isl::space addEmptyRange(isl::space space);
 isl::map mapFrom1DMaps(isl::space, const std::vector<isl::map> &list);
