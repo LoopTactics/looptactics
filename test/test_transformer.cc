@@ -279,9 +279,9 @@ replaceDFSPreorderOnce(isl::schedule_node node,
   return node;
 }
 
-TEST_F(Schedule, MergeBandsIfTilable) {
+isl::schedule_node mergeIfTilable(isl::schedule_node node,
+                                  isl::union_map dependences) {
   isl::schedule_node parent, child, grandchild;
-  auto dependences = computeAllDependences(scop_);
 
   auto canMergeCaptureChild = [&child, dependences](isl::schedule_node node) {
     if (canMerge(node.parent(), dependences)) {
@@ -316,8 +316,12 @@ TEST_F(Schedule, MergeBandsIfTilable) {
     declarativeMerger = band(schedule, subtree(st));
   }
 
-  auto node = topmostBand();
-  node = replaceDFSPreorderRepeatedly(node, matcher, declarativeMerger);
+  return replaceDFSPreorderRepeatedly(node, matcher, declarativeMerger);
+}
+
+TEST_F(Schedule, MergeBandsIfTilable) {
+  auto dependences = computeAllDependences(scop_);
+  auto node = mergeIfTilable(topmostBand(), dependences);
   expectSingleBand(node);
   EXPECT_EQ(isl_schedule_node_band_get_permutable(node.get()), isl_bool_true);
 }
