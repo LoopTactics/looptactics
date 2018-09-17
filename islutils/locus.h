@@ -1,3 +1,6 @@
+#ifndef ISLUTILS_LOCUS_H
+#define ISLUTILS_LOCUS_H
+
 #include <isl/cpp.h>
 
 namespace set_maker {
@@ -59,3 +62,5 @@ isl::map operator<(isl::pw_aff lhs, isl::pw_aff rhs);
 } // namespace map_maker
 
 #include "locus-inl.h"
+
+#endif // ISLUTILS_LOCUS_H
