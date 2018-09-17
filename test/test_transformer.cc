@@ -1,3 +1,4 @@
+#include <islutils/access_patterns.h>
 #include <islutils/builders.h>
 #include <islutils/ctx.h>
 #include <islutils/locus.h>
@@ -375,6 +376,111 @@ TEST_F(Schedule, MarkCoincident) {
 
   node = replaceDFSPreorderOnce(scop_.schedule.get_root(), matcher, builder);
   node.dump();
+}
+
+static bool canSink(isl::schedule_node band) {
+  auto dim = band.band_get_partial_schedule().dim(isl::dim::set);
+  if (dim < 2) {
+    return false;
+  }
+
+  auto permutable =
+      isl_schedule_node_band_get_permutable(band.get()) == isl_bool_true;
+  if (!permutable) {
+    return false;
+  }
+
+  return true;
+}
+
+// pluto-style sinking
+// assuming access relations with tags in the range
+static int findSinkable(isl::union_map accesses, isl::schedule_node band) {
+  auto schedule = band.band_get_partial_schedule();
+  auto nDim = schedule.dim(isl::dim::set);
+  auto ctx = accesses.get_ctx();
+
+  std::vector<int64_t> weights;
+  weights.reserve(nDim);
+  for (unsigned i = 0; i < nDim; ++i) {
+
+    auto schedule1D = schedule.get_union_pw_aff(i);
+    auto scheduleMap1D = isl::union_map::from_union_pw_aff(schedule1D);
+    auto scheduledAccess = accesses.apply_domain(scheduleMap1D);
+
+    using namespace matchers;
+    int nRepeated =
+        match(scheduledAccess, allOf(access(dim(-1, stride(ctx, 0))))).size();
+    int nLocal = 0;
+    for (int s = 1; s <= 4; ++s) {
+      nLocal +=
+          match(scheduledAccess, allOf(access(dim(-1, stride(ctx, s))))).size();
+    }
+    int nAccesses = scheduledAccess.n_map();
+    int nNonLocal = nAccesses - nRepeated - nLocal;
+    bool isVectorizable = nNonLocal == 0;
+
+    // count # of stride-zero (+4 per access)
+    // count # of stride-one (+2 per access)
+    // is vectorizable <= # of stride-zero + # of stride-one = # of accesses
+    // (bonus 8) all other strides (-16 per access)
+    weights.push_back(2 * nLocal + 4 * nRepeated + 8 * isVectorizable -
+                      16 * nNonLocal);
+  }
+
+  auto maxWeightIter = std::max_element(weights.begin(), weights.end());
+  return std::distance(weights.begin(), maxWeightIter);
+}
+
+TEST(Transformer, SinkLocal) {
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto scop = pet::Scop::parseFile(ctx, "inputs/1mm_fused.c").getScop();
+
+  auto dependences = computeAllDependences(scop);
+  scop.schedule =
+      mergeIfTilable(scop.schedule.get_root(), dependences).get_schedule();
+
+  isl::schedule_node node, child;
+  auto matcher = matchers::band(
+      [&node](isl::schedule_node n) {
+        if (canSink(n)) {
+          node = n;
+          return true;
+        }
+        return false;
+      },
+      matchers::anyTree(child));
+
+  isl::union_map accesses =
+      scop.reads.unite(scop.mayWrites).unite(scop.mustWrites).curry();
+
+  builders::ScheduleNodeBuilder builder = builders::band(
+      [&node, &accesses]() {
+        int pos = findSinkable(accesses, node);
+        auto schedule = node.band_get_partial_schedule();
+        auto scheduleAtPos = schedule.get_union_pw_aff(pos);
+        schedule = schedule.drop_dims(isl::dim::set, pos, 1);
+        schedule =
+            schedule.flat_range_product(isl::multi_union_pw_aff(scheduleAtPos));
+
+        builders::BandDescriptor descriptor(node);
+        descriptor.partialSchedule = schedule;
+        auto isCoincident = descriptor.coincident.at(pos);
+        descriptor.coincident.erase(descriptor.coincident.begin() + pos);
+        descriptor.coincident.push_back(isCoincident);
+        return descriptor;
+      },
+      builders::subtree(child));
+
+  node = replaceDFSPreorderOnce(scop.schedule.get_root(), matcher, builder);
+
+  // Check that we indeed sink the "j" loop.
+  // clang-format off
+  auto expected = isl::union_map(ctx,
+      "{ S_0[i, j, k] -> [o0, o1, o2, o3] : o0 = i and o1 = k and o2 = j and o3 = 0;"
+        "S_1[i, j, k] -> [o0, o1, o2, o3] : o0 = i and o1 = k and o2 = j and o3 = 1 }");
+  // clang-format on
+  EXPECT_TRUE(node.get_schedule().get_map().is_subset(expected));
 }
 
 // Check that all relevant parts of the code (loops and transformed statements)

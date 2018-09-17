@@ -9,6 +9,7 @@ set(TEST_NAMES
 
 set(TEST_INPUTS
     one-dimensional-init.c
+    1mm_fused.c
     nested.c
     strided_domain.c
     strided_domain_with_coefficients.c
