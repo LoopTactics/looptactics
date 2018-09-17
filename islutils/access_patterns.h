@@ -207,6 +207,14 @@ operator+(Placeholder<SingleInputDim, UnfixedOutDimPattern<SimpleAff>> p,
   return p;
 }
 
+inline Placeholder<SingleInputDim, UnfixedOutDimPattern<SimpleAff>>
+operator-(Placeholder<SingleInputDim, UnfixedOutDimPattern<SimpleAff>> p,
+          int i) {
+  p.pattern_.constant_ =
+      p.pattern_.constant_.sub(isl::val(p.pattern_.constant_.get_ctx(), i));
+  return p;
+}
+
 ////////////////////
 
 /**

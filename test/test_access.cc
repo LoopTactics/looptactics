@@ -299,8 +299,8 @@ TEST(AccessMatcher, Stencil) {
 
   // Note that placeholders are _not_ reused between different calls to allOf.
   auto _1 = placeholder(ctx);
-  auto psReads = allOf(access(dim(0, _1 + (-1))), access(dim(0, _1)),
-                       access(dim(0, _1 + 1)));
+  auto psReads =
+      allOf(access(dim(0, _1 - 1)), access(dim(0, _1)), access(dim(0, _1 + 1)));
   auto psWrites = allOf(access(dim(0, _1)));
   EXPECT_EQ(match(reads, psReads).size(), 1);
   EXPECT_EQ(match(writes, psWrites).size(), 1);
