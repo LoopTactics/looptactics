@@ -217,9 +217,9 @@ static bool canMerge(isl::schedule_node parentBand,
   auto t1 = parentBand.band_get_partial_schedule();
   auto t2 = parentBand.child(0).band_get_partial_schedule();
   auto schedule = isl::union_map::from(t1.flat_range_product(t2));
-  auto scheduleSpace = isl::map::from_union_map(schedule).get_space();
+  auto scheduleSpace = isl::set(schedule.range()).get_space();
   auto positiveOrthant =
-      isl::set(isl::basic_set::positive_orthant(scheduleSpace.range()));
+      isl::set(isl::basic_set::positive_orthant(scheduleSpace));
   dependences = filterOutCarriedDependences(dependences, parentBand);
   return dependences.apply_domain(schedule)
       .apply_range(schedule)
