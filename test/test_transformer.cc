@@ -354,10 +354,9 @@ static std::vector<bool> detectCoincidence(isl::schedule_node band,
   return result;
 }
 
-TEST_F(Schedule, MarkCoincident) {
+isl::schedule_node markCoincident(isl::schedule_node root,
+                                  isl::union_map dependences) {
   isl::schedule_node node, child;
-  auto dependences = computeAllDependences(scop_);
-
   auto matcher = [&]() {
     using namespace matchers;
     return band(node, anyTree(child));
@@ -374,8 +373,12 @@ TEST_F(Schedule, MarkCoincident) {
     return band(marker, subtree(child));
   }();
 
-  node = replaceDFSPreorderOnce(scop_.schedule.get_root(), matcher, builder);
-  node.dump();
+  return replaceDFSPreorderOnce(root, matcher, builder);
+}
+
+TEST_F(Schedule, MarkCoincident) {
+  auto dependences = computeAllDependences(scop_);
+  markCoincident(scop_.schedule.get_root(), dependences).dump();
 }
 
 static bool canSink(isl::schedule_node band) {
