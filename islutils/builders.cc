@@ -377,6 +377,7 @@ ScheduleNodeBuilder subtreeBuilder(isl::schedule_node node) {
   } else if (type == isl_schedule_node_sequence ||
              type == isl_schedule_node_set || type == isl_schedule_node_leaf) {
     /* no payload */
+    builder.current_ = type;
   } else {
     assert(false && "unhandled node type");
   }
