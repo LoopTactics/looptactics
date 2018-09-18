@@ -1,15 +1,15 @@
 #include <islutils/builders.h>
 #include <islutils/ctx.h>
 #include <islutils/matchers.h>
-#include <islutils/parser.h>
+#include <islutils/pet_wrapper.h>
 
 #include "gtest/gtest.h"
 
 using util::ScopedCtx;
 
 TEST(TreeMatcher, ReadFromFile) {
-  auto ctx = ScopedCtx(ctxWithPetOptions());
-  Scop S = Parser("inputs/one-dimensional-init.c").getScop(ctx);
+  auto ctx = ScopedCtx(pet::allocCtx());
+  Scop S = pet::Scop::parseFile(ctx, "inputs/one-dimensional-init.c").getScop();
   EXPECT_TRUE(!S.schedule.is_null());
 }
 

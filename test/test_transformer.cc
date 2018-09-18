@@ -2,7 +2,7 @@
 #include <islutils/ctx.h>
 #include <islutils/locus.h>
 #include <islutils/matchers.h>
-#include <islutils/parser.h>
+#include <islutils/pet_wrapper.h>
 
 #include "gtest/gtest.h"
 
@@ -83,7 +83,7 @@ TEST(Transformer, Capture) {
 
 struct Schedule : public ::testing::Test {
   virtual void SetUp() override {
-    scop_ = Parser("inputs/nested.c").getScop(ctx_);
+    scop_ = pet::Scop::parseFile(ctx_, "inputs/nested.c").getScop();
   }
 
   isl::schedule_node topmostBand() {
@@ -96,7 +96,7 @@ struct Schedule : public ::testing::Test {
   }
 
   Scop scop_;
-  ScopedCtx ctx_ = ScopedCtx(ctxWithPetOptions());
+  ScopedCtx ctx_ = ScopedCtx(pet::allocCtx());
 };
 
 TEST_F(Schedule, MergeBandsCallLambda) {

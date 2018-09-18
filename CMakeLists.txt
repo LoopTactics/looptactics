@@ -45,8 +45,8 @@ link_directories(islutils ${isl_LIBPATH} ${pet_LIBPATH})
 add_library(islutils
 
             islutils/matchers.cc
-            islutils/parser.cc
             islutils/builders.cc
+            islutils/pet_wrapper.cc
             islutils/access_patterns.cc)
 target_include_directories(islutils PUBLIC ${CMAKE_SOURCE_DIR})
 target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})

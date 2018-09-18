@@ -1,7 +1,7 @@
 #include "islutils/access.h"
 #include "islutils/access_patterns.h"
 #include "islutils/ctx.h"
-#include "islutils/parser.h"
+#include "islutils/pet_wrapper.h"
 
 #include "gtest/gtest.h"
 
@@ -285,8 +285,8 @@ TEST(AccessMatcher, PlaceholderWithConstantsNoMatch) {
 TEST(AccessMatcher, Stencil) {
   using namespace matchers;
 
-  auto ctx = ScopedCtx(ctxWithPetOptions());
-  auto scop = Parser("inputs/stencil.c").getScop(ctx);
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto scop = pet::Scop::parseFile(ctx, "inputs/stencil.c").getScop();
   ASSERT_FALSE(scop.schedule.is_null());
 
   // Don't want to include tree matchers in this _unit_ test, go to the first
@@ -466,8 +466,8 @@ TEST(AccessMatcher, MultiDimensionalReplace) {
 // Check that, for strided domains, we can detect strides properly, given the
 // information on the sparseness of the domain.
 TEST(AccessMatcher, StrideInStridedDomain) {
-  auto ctx = ScopedCtx(ctxWithPetOptions());
-  auto scop = Parser("inputs/strided_domain.c").getScop(ctx);
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto scop = pet::Scop::parseFile(ctx, "inputs/strided_domain.c").getScop();
   // Since the input is a simple 1d loop, we can get the schedule without
   // auxiliary dimensions directly without traversing the tree.
   auto schedule = scop.schedule.get_map();
@@ -485,8 +485,10 @@ TEST(AccessMatcher, StrideInStridedDomain) {
 }
 
 TEST(AccessMatcher, StrideInStridedDomainWithMultiDimensionalAccess) {
-  auto ctx = ScopedCtx(ctxWithPetOptions());
-  auto scop = Parser("inputs/strided_domain_multi_dimensions.c").getScop(ctx);
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto scop =
+      pet::Scop::parseFile(ctx, "inputs/strided_domain_multi_dimensions.c")
+          .getScop();
   auto schedule = scop.schedule.get_map();
   auto reads = scop.reads.curry().apply_domain(schedule);
   auto writes = scop.mustWrites.curry().apply_domain(schedule);
@@ -505,8 +507,10 @@ TEST(AccessMatcher, StrideInStridedDomainWithMultiDimensionalAccess) {
 }
 
 TEST(AccessMatcher, StrideInStridedDomainWithDimensionCoefficients) {
-  auto ctx = ScopedCtx(ctxWithPetOptions());
-  auto scop = Parser("inputs/strided_domain_with_coefficients.c").getScop(ctx);
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto scop =
+      pet::Scop::parseFile(ctx, "inputs/strided_domain_with_coefficients.c")
+          .getScop();
   auto schedule = scop.schedule.get_map();
   auto reads = scop.reads.curry().apply_domain(schedule);
   auto writes = scop.mustWrites.curry().apply_domain(schedule);
