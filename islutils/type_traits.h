@@ -32,4 +32,16 @@ struct is_isl_c_type
           bool, is_isl_type<decltype(isl::manage(std::declval<T>()))>::value> {
 };
 
+template <typename T> struct isl_wrap {
+  typedef decltype(isl::manage(std::declval<T>())) type;
+};
+
+template <typename T> using isl_wrap_t = typename isl_wrap<T>::type;
+
+template <typename T> struct isl_unwrap {
+  typedef decltype(std::declval<T>().get()) type;
+};
+
+template <typename T> using isl_unwrap_t = typename isl_unwrap<T>::type;
+
 #endif // ISLUTILS_TYPE_TRAITS
