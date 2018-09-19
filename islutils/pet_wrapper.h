@@ -60,6 +60,12 @@ public:
   /// Find a statement by its identifier.
   pet_stmt *stmt(isl::id id) const;
 
+  /// Return an assignable wrapper class that can be used to overwrite the
+  /// Scop's schedule.
+  IslCopyRefWrapper<isl::schedule> schedule();
+  /// Return a copy of the Scop's schedule.
+  isl::schedule schedule() const;
+
 private:
   pet_scop *scop_;
 };
