@@ -372,3 +372,39 @@ TEST_F(Schedule, MarkCoincident) {
   node = replaceDFSPreorderOnce(scop_.schedule.get_root(), matcher, builder);
   node.dump();
 }
+
+// Check that all relevant parts of the code (loops and transformed statements)
+// are correctly generated.  In particular, check that loops are generated in
+// the right order.  Whitespace is ignored.
+TEST(Transformer, Codegen) {
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto petScop = pet::Scop::parseFile(ctx, "inputs/nested.c");
+
+  std::string loop1 = "for (int c0 = 0; c0 <= min(1023, n - 2); c0 += 1)";
+  std::string loop2 = "for (int c1 = 0; c1 < n - c0 - 1; c1 += 1)";
+  std::string loop3 = "for (int c2 = n - 1; c2 <= n + 41; c2 += 1)";
+  std::string loop4 = "for (int c3 = c0 + 1; c3 < n - c1; c3 += 1)";
+  std::string stmt = "foo((c0), (c1), (c2), (c3));";
+  auto result = petScop.codegen();
+
+  auto loop1pos = result.find(loop1);
+  auto loop2pos = result.find(loop2, loop1pos + loop1.length());
+  auto loop3pos = result.find(loop3, loop2pos + loop2.length());
+  auto loop4pos = result.find(loop4, loop3pos + loop3.length());
+  auto stmtpos = result.find(stmt, loop4pos + loop4.length());
+
+  // Note that we don't care about the particular positions in the string, only
+  // that the relation between them holds. Therefore we use ASSERT_TRUE on
+  // relations to avoid useless and potentially large (npos) numbers output in
+  // case an assertion fails.
+  ASSERT_TRUE(loop1pos != std::string::npos);
+  ASSERT_TRUE(loop2pos != std::string::npos);
+  ASSERT_TRUE(loop3pos != std::string::npos);
+  ASSERT_TRUE(loop4pos != std::string::npos);
+  ASSERT_TRUE(stmtpos != std::string::npos);
+
+  ASSERT_TRUE(loop2pos > loop1pos);
+  ASSERT_TRUE(loop3pos > loop2pos);
+  ASSERT_TRUE(loop4pos > loop3pos);
+  ASSERT_TRUE(stmtpos > loop4pos);
+}
