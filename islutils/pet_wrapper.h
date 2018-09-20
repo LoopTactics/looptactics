@@ -37,6 +37,8 @@ private:
   isl_unwrap_t<T> &ref;
 };
 
+std::string printIdAsComment(isl::ast_build build, isl::ast_node node);
+
 class Scop {
 public:
   explicit Scop(pet_scop *scop) : scop_(scop) {}
@@ -55,7 +57,8 @@ public:
   /// parts. Modifying the result will not affect this Scop.
   ::Scop getScop() const;
   /// Generate code
-  std::string codegen() const;
+  std::string codegen(std::function<std::string(isl::ast_build, isl::ast_node)>
+                          custom = printIdAsComment) const;
 
   /// Find a statement by its identifier.
   pet_stmt *stmt(isl::id id) const;

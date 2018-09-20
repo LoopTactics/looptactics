@@ -521,3 +521,32 @@ TEST(Transformer, Codegen) {
   ASSERT_TRUE(loop4pos > loop3pos);
   ASSERT_TRUE(stmtpos > loop4pos);
 }
+
+TEST(Transformer, InjectStatement) {
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto petScop = pet::Scop::parseFile(ctx, "inputs/stencil.c");
+
+  isl::schedule_node node;
+  auto matcher = [&]() {
+    using namespace matchers;
+    return anyTree(node);
+  }();
+
+  matchers::ScheduleNodeMatcher::isMatching(
+      matcher, petScop.getScop().schedule.get_root().child(0));
+
+  auto builder = [&]() {
+    using namespace builders;
+    return extension(
+        isl::union_map(ctx, "[] -> {[]->someLongAndHopefullyUniqueName[]:}"),
+        sequence(filter(isl::union_set(
+                     ctx, "[] -> {someLongAndHopefullyUniqueName[]:}")),
+                 filter(petScop.getScop().domain().universe(), subtree(node))));
+  }();
+
+  auto sched = builder.insertAt(petScop.getScop().schedule.get_root().child(0))
+                   .get_schedule();
+  petScop.schedule() = sched;
+  auto code = petScop.codegen();
+  EXPECT_TRUE(code.find("someLongAndHopefullyUniqueName") != std::string::npos);
+}
