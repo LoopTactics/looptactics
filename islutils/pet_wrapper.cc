@@ -37,11 +37,12 @@ namespace {
 struct StmtDescr {
   // Unique identifier of the statement occurrence in the AST.
   isl::id occurrenceId;
-  // A map between access reference identifiers and ast expressions
-  // corresponding to the code that performs those accesses.
-  isl::id_to_ast_expr ref2expr;
   // A pointer to the pet statement.
   pet_stmt *stmt;
+  // A copy of AST build at the point where the occurrence was encountered.
+  // XXX: This is potentially expensive in terms of memory, but simplifies the
+  // injection of custom statements to one callback.
+  isl::ast_build astBuild;
 };
 
 // Wrapper class to be passed as a user pointer to unexported C callbacks
@@ -83,21 +84,15 @@ static __isl_give isl_ast_node *at_domain(__isl_take isl_ast_node *node,
   isl_ast_expr_free(idArg);
   auto statement = wrapper->scop.stmt(id);
 
-  // Extract the schedule in terms of Domain[...] -> Iterators[...], invert it.
+  // Store the statement descriptor with the unique occurrence id and the state
+  // of the AST builder at this position, annotate the AST node with the
+  // occurrence identifier so that a later call can find the descriptor using
+  // this identifier.
   auto astBuild = isl::manage_copy(build);
-  auto schedule = isl::map::from_union_map(astBuild.get_schedule());
-  auto iteratorMap = isl::pw_multi_aff::from_map(schedule.reverse());
-
-  // Store the statement descriptor with the unique occurrence id and inverted
-  // schedule, annotate the AST node with the occurrence identifier so that a
-  // later call can find the descriptor using this identifier.
   auto occurrenceId = isl::id::alloc(
       astBuild.get_ctx(), id.get_name() + "_occ_" + std::to_string(counter++),
       nullptr);
-  auto ref2expr = isl::manage(
-      pet_stmt_build_ast_exprs(statement, astBuild.get(), transformSubscripts,
-                               iteratorMap.get(), nullptr, nullptr));
-  wrapper->stmts.emplace_back(StmtDescr{occurrenceId, ref2expr, statement});
+  wrapper->stmts.emplace_back(StmtDescr{occurrenceId, statement, astBuild});
   return isl_ast_node_set_annotation(node, occurrenceId.release());
 }
 
@@ -142,7 +137,16 @@ std::string Scop::codegen() const {
         isl_ast_print_options_free(options);
         isl::id occurrenceId = isl::manage_copy(node).get_annotation();
         const StmtDescr &descr = findStmtDescriptor(*wrapper, occurrenceId);
-        return pet_stmt_print_body(descr.stmt, p, descr.ref2expr.get());
+
+        // Extract the schedule in terms of Domain[...] -> Iterators[...],
+        // invert it.
+        auto schedule = isl::map::from_union_map(descr.astBuild.get_schedule());
+        auto iteratorMap = isl::pw_multi_aff::from_map(schedule.reverse());
+
+        isl::id_to_ast_expr ref2expr = isl::manage(pet_stmt_build_ast_exprs(
+            descr.stmt, descr.astBuild.get(), transformSubscripts,
+            iteratorMap.get(), nullptr, nullptr));
+        return pet_stmt_print_body(descr.stmt, p, ref2expr.get());
       },
       &wrapper);
   prn = isl_ast_node_print(astNode.get(), prn, options);
