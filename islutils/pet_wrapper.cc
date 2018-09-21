@@ -183,7 +183,7 @@ std::string Scop::codegen(
     std::function<std::string(isl::ast_build, isl::ast_node, pet_stmt *)>
         custom) const {
   auto ctx = getCtx();
-  auto build = isl::ast_build(ctx);
+  auto build = isl::ast_build::from_context(getScop().context);
 
   // Construct the list of statement descriptors with partial schedules while
   // building the AST.
