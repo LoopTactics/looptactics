@@ -50,7 +50,8 @@ struct StmtDescr {
 struct ScopAndStmtsWrapper {
   const Scop &scop;
   std::vector<StmtDescr> &stmts;
-  std::function<std::string(isl::ast_build, isl::ast_node)> customCodegen;
+  std::function<std::string(isl::ast_build, isl::ast_node, pet_stmt *)>
+      stmtCodegen;
 };
 } // namespace
 
@@ -111,6 +112,39 @@ static const StmtDescr &findStmtDescriptor(const ScopAndStmtsWrapper &wrapper,
   return dummy;
 }
 
+static std::string printScheduledPetStmt(isl::ast_build astBuild,
+                                         isl::ast_node node, pet_stmt *stmt) {
+  if (!stmt) {
+    ISLUTILS_DIE("attempting to print non-pet statement");
+  }
+
+  // Extract the schedule in terms of Domain[...] -> Iterators[...],
+  // invert it.
+  auto schedule = isl::map::from_union_map(astBuild.get_schedule());
+  auto iteratorMap = isl::pw_multi_aff::from_map(schedule.reverse());
+  isl::id_to_ast_expr ref2expr = isl::manage(
+      pet_stmt_build_ast_exprs(stmt, astBuild.get(), transformSubscripts,
+                               iteratorMap.get(), nullptr, nullptr));
+
+  isl_printer *p = isl_printer_to_str(schedule.get_ctx().get());
+  p = isl_printer_set_output_format(p, ISL_FORMAT_C);
+  p = pet_stmt_print_body(stmt, p, ref2expr.get());
+  std::string result(isl_printer_get_str(p));
+  isl_printer_free(p);
+  return result;
+}
+
+static inline std::string printIdAsComment(isl::ast_node node) {
+  isl::id occurrenceId = node.get_annotation();
+  return "// " + occurrenceId.get_name();
+}
+
+std::string printPetAndCustomComments(isl::ast_build build, isl::ast_node node,
+                                      pet_stmt *stmt) {
+  return stmt ? printScheduledPetStmt(build, node, stmt)
+              : printIdAsComment(node);
+}
+
 static __isl_give isl_printer *
 printStatement(__isl_take isl_printer *p,
                __isl_take isl_ast_print_options *options,
@@ -121,34 +155,21 @@ printStatement(__isl_take isl_printer *p,
   isl::id occurrenceId = isl::manage_copy(node).get_annotation();
   const StmtDescr &descr = findStmtDescriptor(*wrapper, occurrenceId);
 
-  // Extract the schedule in terms of Domain[...] -> Iterators[...],
-  // invert it.
-  auto schedule = isl::map::from_union_map(descr.astBuild.get_schedule());
-  auto iteratorMap = isl::pw_multi_aff::from_map(schedule.reverse());
-
-  if (descr.stmt) {
-    isl::id_to_ast_expr ref2expr = isl::manage(pet_stmt_build_ast_exprs(
-        descr.stmt, descr.astBuild.get(), transformSubscripts,
-        iteratorMap.get(), nullptr, nullptr));
-    return pet_stmt_print_body(descr.stmt, p, ref2expr.get());
-  } else if (wrapper->customCodegen) {
-    std::string str =
-        wrapper->customCodegen(descr.astBuild, isl::manage_copy(node));
-    return isl_printer_print_str(p, str.c_str());
-  } else {
-    ISLUTILS_DIE("Non-pet statement found with no custom codegen");
-    return isl_printer_free(p);
+  if (!wrapper->stmtCodegen) {
+    ISLUTILS_DIE("no statement codegen function provided");
   }
-}
 
-std::string printIdAsComment(isl::ast_build, isl::ast_node node) {
-  isl::id occurrenceId = node.get_annotation();
-  return "// " + occurrenceId.get_name() + "\n";
+  std::string str =
+      wrapper->stmtCodegen(descr.astBuild, isl::manage_copy(node), descr.stmt);
+  p = isl_printer_start_line(p);
+  p = isl_printer_print_str(p, str.c_str());
+  return isl_printer_end_line(p);
 }
 
 // Generate code for the scop given its current schedule.
 std::string Scop::codegen(
-    std::function<std::string(isl::ast_build, isl::ast_node)> custom) const {
+    std::function<std::string(isl::ast_build, isl::ast_node, pet_stmt *)>
+        custom) const {
   auto ctx = getCtx();
   auto build = isl::ast_build(ctx);
 
