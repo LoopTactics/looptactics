@@ -37,6 +37,14 @@ private:
   isl_unwrap_t<T> &ref;
 };
 
+std::string printPetStmt(pet_stmt *stmt, isl::id_to_ast_expr ref2expr);
+isl::id_to_ast_expr
+buildRef2Expr(pet_stmt *stmt, isl::ast_build astBuild,
+              __isl_give isl_multi_pw_aff *(*indexTransform)(
+                  __isl_take isl_multi_pw_aff *, __isl_keep isl_id *, void *),
+              void *user);
+std::string printScheduledPetStmt(isl::ast_build astBuild, isl::ast_node node,
+                                  pet_stmt *stmt);
 std::string printPetAndCustomComments(isl::ast_build build, isl::ast_node node,
                                       pet_stmt *stmt);
 

@@ -112,8 +112,26 @@ static const StmtDescr &findStmtDescriptor(const ScopAndStmtsWrapper &wrapper,
   return dummy;
 }
 
-static std::string printScheduledPetStmt(isl::ast_build astBuild,
-                                         isl::ast_node node, pet_stmt *stmt) {
+std::string printPetStmt(pet_stmt *stmt, isl::id_to_ast_expr ref2expr) {
+  isl_printer *p = isl_printer_to_str(ref2expr.get_ctx().get());
+  p = isl_printer_set_output_format(p, ISL_FORMAT_C);
+  p = pet_stmt_print_body(stmt, p, ref2expr.get());
+  std::string result(isl_printer_get_str(p));
+  isl_printer_free(p);
+  return result;
+}
+
+isl::id_to_ast_expr
+buildRef2Expr(pet_stmt *stmt, isl::ast_build astBuild,
+              __isl_give isl_multi_pw_aff *(*indexTransform)(
+                  __isl_take isl_multi_pw_aff *, __isl_keep isl_id *, void *),
+              void *user) {
+  return isl::manage(pet_stmt_build_ast_exprs(
+      stmt, astBuild.get(), indexTransform, user, nullptr, nullptr));
+}
+
+std::string printScheduledPetStmt(isl::ast_build astBuild, isl::ast_node node,
+                                  pet_stmt *stmt) {
   if (!stmt) {
     ISLUTILS_DIE("attempting to print non-pet statement");
   }
@@ -122,16 +140,9 @@ static std::string printScheduledPetStmt(isl::ast_build astBuild,
   // invert it.
   auto schedule = isl::map::from_union_map(astBuild.get_schedule());
   auto iteratorMap = isl::pw_multi_aff::from_map(schedule.reverse());
-  isl::id_to_ast_expr ref2expr = isl::manage(
-      pet_stmt_build_ast_exprs(stmt, astBuild.get(), transformSubscripts,
-                               iteratorMap.get(), nullptr, nullptr));
-
-  isl_printer *p = isl_printer_to_str(schedule.get_ctx().get());
-  p = isl_printer_set_output_format(p, ISL_FORMAT_C);
-  p = pet_stmt_print_body(stmt, p, ref2expr.get());
-  std::string result(isl_printer_get_str(p));
-  isl_printer_free(p);
-  return result;
+  auto ref2expr =
+      buildRef2Expr(stmt, astBuild, transformSubscripts, iteratorMap.get());
+  return printPetStmt(stmt, ref2expr);
 }
 
 static inline std::string printIdAsComment(isl::ast_node node) {
