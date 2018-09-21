@@ -16,6 +16,8 @@ public:
   /// is assumed to be a domain node (it is one for valid Scops).
   inline isl::union_set domain() const;
 
+  /// Context of the Scop, i.e. the constraints on the parameters.
+  isl::set context;
   /// Schedule of the Scop, defined over its domain.
   isl::schedule schedule;
   /// \{

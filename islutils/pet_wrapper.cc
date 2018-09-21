@@ -23,6 +23,7 @@ isl::ctx Scop::getCtx() const {
 
 ::Scop Scop::getScop() const {
   ::Scop S;
+  S.context = isl::manage(pet_scop_get_context(scop_));
   S.schedule = isl::manage(pet_scop_get_schedule(scop_));
   S.reads = isl::manage(pet_scop_get_tagged_may_reads(scop_));
   S.mayWrites = isl::manage(pet_scop_get_tagged_may_writes(scop_));
