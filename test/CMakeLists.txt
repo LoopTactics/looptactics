@@ -14,6 +14,7 @@ set(TEST_INPUTS
     strided_domain.c
     strided_domain_with_coefficients.c
     strided_domain_multi_dimensions.c
+    1mmWithoutInitStmt.c
     stencil.c)
 
 add_custom_target(check COMMAND echo "Running all")

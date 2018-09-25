@@ -149,6 +149,7 @@ ScheduleNodeMatcher expansion(std::function<bool(isl::schedule_node)> callback,
                               ScheduleNodeMatcher &&child);
 
 ScheduleNodeMatcher leaf();
+ScheduleNodeMatcher leaf(isl::schedule_node &capture);
 
 ScheduleNodeMatcher anyTree(isl::schedule_node &capture);
 ScheduleNodeMatcher anyTree();
@@ -212,6 +213,7 @@ class ScheduleNodeMatcher {
 #undef DECL_FRIEND_TYPE_MATCH
 
   friend ScheduleNodeMatcher leaf();
+  friend ScheduleNodeMatcher leaf(isl::schedule_node &);
   friend ScheduleNodeMatcher anyTree();
   friend ScheduleNodeMatcher anyTree(isl::schedule_node &);
   friend ScheduleNodeMatcher anyForest();

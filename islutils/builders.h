@@ -34,6 +34,9 @@ public:
   isl::multi_union_pw_aff partialSchedule;
   std::vector<bool> coincident;
   bool permutable;
+
+  // options for codeGen.
+  isl::union_set astOptions;
 };
 
 /** \ingroup Builders

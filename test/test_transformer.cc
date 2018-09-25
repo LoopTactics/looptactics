@@ -1,11 +1,11 @@
+#include "gtest/gtest.h"
+#include <iostream>
 #include <islutils/access_patterns.h>
 #include <islutils/builders.h>
 #include <islutils/ctx.h>
 #include <islutils/locus.h>
 #include <islutils/matchers.h>
 #include <islutils/pet_wrapper.h>
-
-#include "gtest/gtest.h"
 
 using util::ScopedCtx;
 
@@ -549,4 +549,253 @@ TEST(Transformer, InjectStatement) {
   petScop.schedule() = sched;
   auto code = petScop.codegen();
   EXPECT_TRUE(code.find("someLongAndHopefullyUniqueName") != std::string::npos);
+}
+
+static isl::multi_union_pw_aff getSchedulePointTile(isl::schedule_node node,
+                                                    isl::multi_union_pw_aff t) {
+  isl::multi_union_pw_aff sched = node.band_get_partial_schedule();
+  return sched.sub(t);
+}
+
+static isl::multi_union_pw_aff getScheduleTile(isl::schedule_node node,
+                                               std::vector<int> tileSizes) {
+  assert(tileSizes.size() != 0 && "empty tileSizes array");
+  isl::space space = isl::manage(isl_schedule_node_band_get_space(node.get()));
+  unsigned dims = space.dim(isl::dim::set);
+  assert(dims == tileSizes.size() &&
+         "number of dimensions should match tileSizes size");
+
+  isl::multi_val sizes = isl::multi_val::zero(space);
+  for (unsigned i = 0; i < dims; ++i) {
+    int tileSize = tileSizes[i];
+    sizes = sizes.set_val(i, isl::val(node.get_ctx(), tileSize));
+  }
+
+  isl::multi_union_pw_aff sched = node.band_get_partial_schedule();
+  for (unsigned i = 0; i < dims; ++i) {
+
+    isl::union_pw_aff upa = sched.get_union_pw_aff(i);
+    isl::val v = sizes.get_val(i);
+    upa = upa.scale_down_val(v);
+    upa = upa.floor();
+    sched = sched.set_union_pw_aff(i, upa);
+  }
+  return sched;
+}
+
+static isl::multi_union_pw_aff swapDims(isl::multi_union_pw_aff ps,
+                                        int firstDim, int secondDim) {
+  auto scheduleFirstDim = ps.get_union_pw_aff(firstDim);
+  auto scheduleSecondDim = ps.get_union_pw_aff(secondDim);
+  ps = ps.set_union_pw_aff(secondDim, scheduleFirstDim);
+  ps = ps.set_union_pw_aff(firstDim, scheduleSecondDim);
+  return ps;
+}
+
+TEST(Transformer, MatchMatmul) {
+
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto petScop = pet::Scop::parseFile(ctx, "inputs/1mmWithoutInitStmt.c");
+  auto scop = petScop.getScop();
+
+  auto dependences = computeAllDependences(scop);
+  scop.schedule =
+      mergeIfTilable(scop.schedule.get_root(), dependences).get_schedule();
+
+  isl::schedule_node root = scop.schedule.get_root();
+
+  using namespace matchers;
+  isl::schedule_node node;
+  // clang-format off
+  auto matcher = band(
+    [&node] (isl::schedule_node n) {
+      if (isl_schedule_node_band_n_member(n.get()) < 3) {
+        return false;
+      } else {
+        node = n;
+        return true;
+      }
+    },
+    leaf());
+  // clang-format on
+
+  ASSERT_TRUE(ScheduleNodeMatcher::isMatching(matcher, root.child(0)));
+
+  isl::union_map reads = scop.reads.curry();
+  isl::union_map writes = scop.mustWrites.curry();
+
+  auto _i = placeholder(ctx);
+  auto _j = placeholder(ctx);
+  auto _k = placeholder(ctx);
+  auto _ii = placeholder(ctx);
+  auto _jj = placeholder(ctx);
+
+  auto _A = arrayPlaceholder();
+  auto _B = arrayPlaceholder();
+  auto _C = arrayPlaceholder();
+
+  auto psRead =
+      allOf(access(_A, _i, _j), access(_B, _i, _k), access(_C, _k, _j));
+  auto readMatches = match(reads, psRead);
+  auto psWrite = allOf(access(_A, _ii, _jj));
+  auto writeMatches = match(writes, psWrite);
+
+  // tmp[j][i] = alpha * A[i][k] * B[k][j] + tmp[i][j]
+  // pass the checks. this is because we do not link
+  // read and write at the moment. Placeholder are _not_
+  // reused between different calls to allOf. We can overcome
+  // this inspecting the placeholder for the write and the read.
+  // They should be equal.
+
+  ASSERT_EQ(readMatches.size(), 1u);
+  ASSERT_EQ(writeMatches.size(), 1u);
+
+  // check index for read and write are equal
+  ASSERT_TRUE(writeMatches[0][_ii].payload().inputDimPos_ ==
+              readMatches[0][_i].payload().inputDimPos_);
+  ASSERT_TRUE(writeMatches[0][_jj].payload().inputDimPos_ ==
+              readMatches[0][_j].payload().inputDimPos_);
+
+  // D[i][j] = alpha * A[i][k] * B[k][j] + tmp[i][j]
+  // pass the test. We may want to apply the same check
+  // as before also for the accessed array.
+
+  // step 1. Loop interchange.
+  // Interchange the loops in the loop nest such that
+  // j is the outermost loop followed by k and i.
+  int iPosOriginal = readMatches[0][_i].payload().inputDimPos_;
+  int jPosOriginal = readMatches[0][_j].payload().inputDimPos_;
+  int kPosOriginal = readMatches[0][_k].payload().inputDimPos_;
+
+  // transformer to interchange dimensions
+  using namespace builders;
+  ScheduleNodeBuilder swapDimensions =
+      band([&node, &iPosOriginal, &jPosOriginal, &kPosOriginal]() {
+        auto originalSchedule = node.band_get_partial_schedule();
+        auto newSchedule = originalSchedule;
+        if (jPosOriginal != 0) {
+          if (iPosOriginal == 0) {
+            newSchedule = swapDims(newSchedule, jPosOriginal, iPosOriginal);
+            iPosOriginal = jPosOriginal;
+            jPosOriginal = 0;
+          }
+          if (kPosOriginal == 0) {
+            newSchedule = swapDims(newSchedule, jPosOriginal, kPosOriginal);
+            kPosOriginal = jPosOriginal;
+            jPosOriginal = 0;
+          }
+        }
+        if (kPosOriginal != 1) {
+          newSchedule = swapDims(newSchedule, kPosOriginal, iPosOriginal);
+        }
+        return newSchedule;
+      });
+
+  node = rebuild(node, swapDimensions);
+  root = node.root();
+  petScop.schedule() = root.get_schedule();
+  std::string loopJ = "for (int c0 = 0; c0 <= 1023; c0 += 1)";
+  std::string loopK = "for (int c1 = 0; c1 <= 1023; c1 += 1)";
+  std::string loopI = "for (int c2 = 0; c2 <= 1023; c2 += 1)";
+  std::string stmt =
+      "tmp[c2][c0] = ((((alpha) * A[c2][c1]) * B[c1][c0]) + tmp[c2][c0]);";
+  auto result = petScop.codegen();
+  auto loopJPos = result.find(loopJ);
+  auto loopKPos = result.find(loopK, loopJPos + loopJ.length());
+  auto loopIPos = result.find(loopI, loopKPos + loopK.length());
+  auto stmtPos = result.find(stmt, loopIPos + loopI.length());
+  ASSERT_TRUE(loopJPos != std::string::npos);
+  ASSERT_TRUE(loopKPos != std::string::npos);
+  ASSERT_TRUE(loopIPos != std::string::npos);
+  ASSERT_TRUE(stmtPos != std::string::npos);
+  ASSERT_TRUE(loopKPos > loopJPos);
+  ASSERT_TRUE(loopIPos > loopKPos);
+  ASSERT_TRUE(stmtPos > loopIPos);
+
+  // step 2. create macro-kernel
+  // For the micro and macro kernels we assume
+  // given values for the tile size.
+  // Note: In polly the interchange is performed
+  // on the tile loops, while in the paper on the
+  // point loops we follow the paper.
+  // We tile all the three loops j p and i
+  // to create jc pc and ic and we interchange
+  // pc and ic. We use the same tile factor of 32
+  // for all the dimensions.
+  using namespace builders;
+  // set tile values manually
+  int dimOutNum = isl_schedule_node_band_n_member(node.get());
+  std::vector<int> tileSizes(dimOutNum);
+  tileSizes = {32, 32, 32};
+
+  // tile node and get partial schedule
+  auto tileSchedule = getScheduleTile(node, tileSizes);
+  auto pointSchedule = getSchedulePointTile(node, tileSchedule);
+
+  // clang-format off
+  ScheduleNodeBuilder macroKernel =
+    band(tileSchedule,
+      band(
+        [&pointSchedule, &dimOutNum]() {
+          auto newPartialSchedule =
+              swapDims(pointSchedule, dimOutNum - 2, dimOutNum - 1);
+          return newPartialSchedule;
+        }));
+  // clang-format on
+
+  node = rebuild(node, macroKernel);
+  root = node.root();
+  petScop.schedule() = root.get_schedule();
+  loopJ = "for (int c0 = 0; c0 <= 31; c0 += 1)";
+  loopK = "for (int c1 = 0; c1 <= 31; c1 += 1)";
+  loopI = "for (int c2 = 0; c2 <= 31; c2 += 1)";
+  std::string loopJc = "for (int c3 = 31 * c0; c3 <= 31 * c0 + 31; c3 += 1)";
+  std::string loopIc = "for (int c4 = 31 * c2; c4 <= 31 * c2 + 31; c4 += 1)";
+  std::string loopKc = "for (int c5 = 31 * c1; c5 <= 31 * c1 + 31; c5 += 1)";
+  stmt = "tmp[c2 + c4][c0 + c3] = ((((alpha) * A[c2 + c4][c1 + c5]) * B[c1 + "
+         "c5][c0 + c3]) + tmp[c2 + c4][c0 + c3]);";
+  result = petScop.codegen();
+  auto loopJcPos = result.find(loopJc);
+  auto loopIcPos = result.find(loopIc);
+  auto loopKcPos = result.find(loopKc);
+  ASSERT_TRUE(loopJcPos != std::string::npos);
+  ASSERT_TRUE(loopKcPos != std::string::npos);
+  ASSERT_TRUE(loopIcPos != std::string::npos);
+  ASSERT_TRUE(loopKcPos > loopIcPos);
+  ASSERT_TRUE(loopIcPos > loopJcPos);
+
+  // match micro-kernel
+  auto matcherMicroKernel = [&]() {
+    using namespace matchers;
+    return band(node, leaf());
+  }();
+
+  ASSERT_TRUE(ScheduleNodeMatcher::isMatching(matcherMicroKernel,
+                                              root.child(0).child(0)));
+
+  // create micro-kernel
+  // tile ic and jc with a tile factor of 2
+  // do not tile pc. The tiling produces two new
+  // loops ir and jr.
+  tileSizes = {2, 2, 1};
+  // tile node and get partial schedule
+  tileSchedule = getScheduleTile(node, tileSizes);
+  pointSchedule = getSchedulePointTile(node, tileSchedule);
+
+  // clang-format off
+  ScheduleNodeBuilder microKernel =
+      band(tileSchedule,
+        band([&node, &pointSchedule]() {
+          auto descr = BandDescriptor(pointSchedule);
+          descr.astOptions =
+            isl::union_set(node.get_ctx(), "{unroll[x]}");
+          return descr;
+        }));
+  // clang-format on
+
+  node = rebuild(node, microKernel);
+  root = node.root();
+  petScop.schedule() = root.get_schedule();
+  result = petScop.codegen();
+  std::cout << result << std::endl;
 }

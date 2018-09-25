@@ -24,6 +24,11 @@ BandDescriptor::applyPropertiesToBandNode(isl::schedule_node node) {
   }
   node = isl::manage(
       isl_schedule_node_band_set_permutable(node.release(), permutable));
+
+  if (!astOptions.is_null()) {
+    node = node.band_set_ast_build_options(astOptions);
+  }
+
   return node;
 }
 

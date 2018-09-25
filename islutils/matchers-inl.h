@@ -120,6 +120,12 @@ inline ScheduleNodeMatcher leaf() {
   return matcher;
 }
 
+inline ScheduleNodeMatcher leaf(isl::schedule_node &capture) {
+  ScheduleNodeMatcher matcher(capture);
+  matcher.current_ = ScheduleNodeType::Leaf;
+  return matcher;
+}
+
 inline ScheduleNodeMatcher anyTree(isl::schedule_node &capture) {
   ScheduleNodeMatcher matcher(capture);
   matcher.current_ = ScheduleNodeType::AnyTree;
