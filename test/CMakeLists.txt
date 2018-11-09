@@ -32,3 +32,6 @@ foreach(case ${TEST_NAMES})
   add_custom_target("check-${case}" COMMAND "test_${case}")
   add_dependencies(check "check-${case}")
 endforeach()
+
+add_executable("main" "main.cpp")
+target_link_libraries("main" islutils)

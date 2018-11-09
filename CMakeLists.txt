@@ -40,7 +40,11 @@ set(pet_LIB "libpet.so")
 set(pet_LIBPATH "external/install-pet/lib/")
 set(pet_INCLUDE "external/install-pet/include")
 
-link_directories(islutils ${isl_LIBPATH} ${pet_LIBPATH})
+set(boost_LIB "libboost_program_options.so")
+set(boost_LIBPATH "external/boost_1_67_0/stage/lib")
+set(boost_INCLUDE "external/boost_1_67_0/boost")
+
+link_directories(islutils ${isl_LIBPATH} ${pet_LIBPATH} ${boost_LIBPATH})
 
 add_library(islutils
 
@@ -50,7 +54,8 @@ add_library(islutils
             islutils/access_patterns.cc)
 target_include_directories(islutils PUBLIC ${CMAKE_SOURCE_DIR})
 target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})
-target_link_libraries(islutils ${isl_LIB} ${pet_LIB})
+target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE} ${boost_include})
+target_link_libraries(islutils ${isl_LIB} ${pet_LIB} ${boost_LIB})
 
 add_subdirectory(test)
 add_subdirectory(docs)

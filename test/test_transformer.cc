@@ -9,6 +9,7 @@
 
 using util::ScopedCtx;
 
+
 TEST(Transformers, ExtractMultipleScop) {
   auto ctx = ScopedCtx(pet::allocCtx());
   std::string in = "inputs/dummy.c";
