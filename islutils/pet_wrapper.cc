@@ -3,7 +3,7 @@
 #include "islutils/die.h"
 #include "islutils/operators.h"
 #include "islutils/pet_wrapper.h"
-
+#include <iostream>
 #include <vector>
 
 namespace pet {
@@ -15,6 +15,21 @@ Scop::~Scop() { pet_scop_free(scop_); }
 Scop Scop::parseFile(isl::ctx ctx, std::string filename) {
   return Scop(
       pet_scop_extract_from_C_source(ctx.get(), filename.c_str(), nullptr));
+}
+
+static isl_stat fn(struct pet_scop *scop, void *user) {
+  auto w = static_cast<ScopContainer*>(user);
+  auto s = pet::Scop(scop).getScop();
+  w->c.push_back(s);
+  isl_stat r;
+  return r;
+}
+
+ScopContainer Scop::parseMultipleScop(isl::ctx ctx, std::string filename) { 
+
+  ScopContainer res;
+  extract_multiple_scop(ctx.get(), filename.c_str(), &fn, &res);
+  return res;
 }
 
 isl::ctx Scop::getCtx() const {

@@ -3,13 +3,18 @@
 
 #include <islutils/scop.h>
 #include <islutils/type_traits.h>
-
+#include <functional>
 #include <string>
+#include <vector>
 
 class pet_scop;
 class pet_stmt;
 
 namespace pet {
+
+struct ScopContainer {
+  std::vector<Scop> c;
+};
 
 isl::ctx allocCtx();
 
@@ -54,6 +59,9 @@ public:
   Scop(const Scop &) = delete;
   Scop(Scop &&) = default;
   static Scop parseFile(isl::ctx ctx, std::string filename);
+
+  static ScopContainer parseMultipleScop(isl::ctx, std::string filename);
+
   ~Scop();
 
   // pet_scop does not feature a copy function

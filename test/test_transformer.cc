@@ -9,6 +9,14 @@
 
 using util::ScopedCtx;
 
+TEST(Transformers, ExtractMultipleScop) {
+  auto ctx = ScopedCtx(pet::allocCtx());
+  std::string in = "inputs/dummy.c";
+  pet::ScopContainer c;
+  c = pet::Scop::parseMultipleScop(ctx, in);  
+  ASSERT_TRUE(c.c.size() == 2);
+}
+  
 TEST(Transformer, Capture) {
   isl::schedule_node bandNode, filterNode1, filterNode2, filterSubtree;
   auto ctx = isl::ctx(isl_ctx_alloc());
