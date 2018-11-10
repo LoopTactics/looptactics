@@ -51,7 +51,10 @@ add_library(islutils
             islutils/matchers.cc
             islutils/builders.cc
             islutils/pet_wrapper.cc
-            islutils/access_patterns.cc)
+            islutils/access_patterns.cc
+            islutils/common.cc
+            islutils/cpu.cc
+            islutils/access_processor.cc)
 target_include_directories(islutils PUBLIC ${CMAKE_SOURCE_DIR})
 target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})
 target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE} ${boost_include})
