@@ -42,6 +42,9 @@ static bool generate_code(struct Options &options) {
 int main(int ac, char* av[]) {
 
   google::InitGoogleLogging(av[0]);
+  google::SetLogDestination(google::INFO, "./INFO.log");
+  FLAGS_alsologtostderr = 1;  
+
   Options options;
 
   try {
