@@ -33,7 +33,7 @@ void write_on_file(std::string s, std::ofstream &o) {
 std::string read_from_file(std::string in) {
   std::stringstream buffer;
   std::ifstream t(in);
-  assert(!t && "not able to open the file");
+  assert(t && "not able to open the file");
   buffer << t.rdbuf();
   return buffer.str();
 }

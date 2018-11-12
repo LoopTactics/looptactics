@@ -1,4 +1,5 @@
 #include <boost/program_options.hpp>
+#include <glog/logging.h>
 
 using namespace boost;
 #include <iostream>
@@ -40,6 +41,7 @@ static bool generate_code(struct Options &options) {
 
 int main(int ac, char* av[]) {
 
+  google::InitGoogleLogging(av[0]);
   Options options;
 
   try {
@@ -84,11 +86,9 @@ int main(int ac, char* av[]) {
     return ERROR_UNHANDLED_EXCEPTION;
   }
 
-  #ifdef NDEBUG
-    std::cout << options.inputFile << std::endl;
-    std::cout << options.outputFile << std::endl;
-    std::cout << options.target << std::endl;
-  #endif 
+  LOG(INFO) << options.inputFile;
+  LOG(INFO) << options.outputFile;
+  LOG(INFO) << options.target;
 
   return SUCCESS;
 }

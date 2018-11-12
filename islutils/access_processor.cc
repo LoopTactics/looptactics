@@ -3,7 +3,7 @@
 #include "islutils/access_patterns.h"
 
 
-void detectPattern(isl::ctx ctx, Scop scop) {
+int detectPattern(isl::ctx ctx, Scop scop) {
   
   auto dependences = computeAllDependences(scop);
   scop.schedule =
@@ -52,9 +52,41 @@ void detectPattern(isl::ctx ctx, Scop scop) {
   auto matcher = band(is2Dtranspose, leaf());
  
   if(ScheduleNodeMatcher::isMatching(matcher, root.child(0)))
-    std::cout << "transpose detected " << std::endl;
-  else std::cout << "transpose NOT detected " << std::endl;
+    return 1;
+  else return 0;
   
+}
+
+static void printIDs(std::vector<int> &scopID) {
+  size_t size = scopID.size();
+  for(size_t i=0; i<size; ++i) {
+    std::cout << "Scop ID: " << scopID[i] << std::endl;
+  }
+}
+
+std::string call_lookup(std::vector<int> &scopsID, 
+                        std::vector<Scop> scops) {
+  return "hello world";
+}
+
+void generate_code(std::vector<int> &scopID, std::vector<Scop> &scops,
+                   struct Options &options) {
+
+  assert(scopID.size() == scops.size() && "expect equal size");
+
+  auto of = get_output_file(options.inputFile, options.outputFile);
+  std::string content = read_from_file(options.inputFile);
+
+  std::string begin = "#pragma scop";
+  std::string end = "#pragma endscop";
+
+  for(size_t i=0; i<scopID.size(); ++i) {
+    std::size_t found_b = content.find(begin);
+    std::size_t found_e = content.find(end);
+    content.replace(found_b, found_e - found_b + end.size(), 
+                    call_lookup(scopID, scops));
+  }
+  write_on_file(content, of);
 }
 
 bool generate_AP(struct Options &options) {
@@ -69,10 +101,20 @@ bool generate_AP(struct Options &options) {
     // TODO: copy back the entire file.
   }
 
+  std::vector<int> scopID;
+
+  // to each detected scop is assigned an ID (int).
+  // to each ID is assigned a function call.
   size_t size = container.c.size();
   for(size_t i=0; i<size; ++i) {
-    detectPattern(ctx, container.c[i]);
+    int res;
+    res = detectPattern(ctx, container.c[i]);
+    scopID.push_back(res);
   }
+
+  printIDs(scopID); 
+
+  generate_code(scopID, container.c, options); 
 
   return true;
 }
