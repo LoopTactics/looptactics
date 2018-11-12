@@ -13,3 +13,6 @@ cmake .
 make pet
 make
 ```
+
+TODO:
+1. have a look at: https://github.com/google/glog
