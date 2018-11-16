@@ -1,0 +1,13 @@
+external/*
+test/*
+CMakeCache.txt
+CMakeFiles/
+CPackConfig.cmake
+CPackSourceConfig.cmake
+Makefile
+cmake_install.cmake
+docs/CMakeFiles/
+docs/Makefile
+docs/cmake_install.cmake
+islutils/.access_processor.cc.swp
+libislutils.a
