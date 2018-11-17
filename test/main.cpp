@@ -18,19 +18,21 @@ namespace {
 // transform the file called "input" by replacing each scops by 
 // the corresponding optimized builder if available. The result is 
 // written in a file called "output". "input" and "output" are
-// payloads in the "options" struct. At the moment this is done
-// only for the Access Processor.
+// payloads in the "options" struct.
 
 static bool generate_code(struct Options &options) {
 
   bool res = false;
   switch(options.target) {
     case 1:
-      res = generate_cpu(options);
+      res = generate_CPU(options);
       break;
     case 2:
       res = generate_AP(options);
       break;
+    //case 3:
+    //  res = generate_GPU(options);
+    //  break;
     default:
       assert(0 && "options.target not defined");
   }
@@ -41,6 +43,7 @@ static bool generate_code(struct Options &options) {
 
 int main(int ac, char* av[]) {
 
+  // log on stdout and file.
   google::InitGoogleLogging(av[0]);
   google::SetLogDestination(google::INFO, "./INFO.log");
   FLAGS_alsologtostderr = 1;  
@@ -52,9 +55,10 @@ int main(int ac, char* av[]) {
     po::options_description desc("Options");
     desc.add_options()
       ("help,h", "print help message")
-      ("input,i", po::value<string>(&options.inputFile), "input file name")
-      ("output,o", po::value<string>(&options.outputFile), "output file name")
-      ("target,t", po::value<int>(&options.target), "target we generate code for");
+      ("input,i", po::value<string>(&options.inputFile),"input file name")
+      ("output,o", po::value<string>(&options.outputFile),"output file name")
+      ("target,t", po::value<int>(&options.target),"target we generate code for")
+      ("function-call,f", po::value<bool>(&options.function_call),"use library calls");
 
     po::variables_map vm;
     try {
@@ -91,7 +95,12 @@ int main(int ac, char* av[]) {
 
   LOG(INFO) << options.inputFile;
   LOG(INFO) << options.outputFile;
-  LOG(INFO) << options.target;
+  LOG(INFO) << getStringFromTarget(options.target);
+  if(!options.function_call) {
+    LOG(INFO) << "standard optimizations without function calls";
+  } else {
+    LOG(INFO) << "optimization based on function calls";
+  }
 
   return SUCCESS;
 }

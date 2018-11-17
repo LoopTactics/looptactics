@@ -19,8 +19,8 @@ Scop Scop::parseFile(isl::ctx ctx, std::string filename) {
 
 static isl_stat fn(struct pet_scop *scop, void *user) {
   auto w = static_cast<ScopContainer*>(user);
-  auto s = pet::Scop(scop).getScop();
-  w->c.push_back(s);
+  w->c.push_back(scop);
+
   isl_stat r;
   return r;
 }

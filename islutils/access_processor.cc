@@ -64,36 +64,17 @@ static void printIDs(std::vector<int> &scopID) {
   }
 }
 
-std::string call_lookup(std::vector<int> &scopsID, 
-                        std::vector<Scop> scops) {
-  return "hello world";
-}
-
-void generate_code(std::vector<int> &scopID, std::vector<Scop> &scops,
+void generate_code(std::vector<int> &scopID, std::vector<pet::Scop> &scops,
                    struct Options &options) {
 
   assert(scopID.size() == scops.size() && "expect equal size");
-
-  auto of = get_output_file(options.inputFile, options.outputFile);
-  std::string content = read_from_file(options.inputFile);
-
-  std::string begin = "#pragma scop";
-  std::string end = "#pragma endscop";
-
-  for(size_t i=0; i<scopID.size(); ++i) {
-    std::size_t found_b = content.find(begin);
-    std::size_t found_e = content.find(end);
-    content.replace(found_b, found_e - found_b + end.size(), 
-                    call_lookup(scopID, scops));
-  }
-  write_on_file(content, of);
 }
 
 bool generate_AP(struct Options &options) {
-
+/*
   using util::ScopedCtx;
   auto ctx = ScopedCtx(pet::allocCtx());
-  pet::ScopContainer container;
+  ScopContainer container;
   container = pet::Scop::parseMultipleScop(ctx, options.inputFile);
 
   if(container.c.size() == 0) {
@@ -108,14 +89,16 @@ bool generate_AP(struct Options &options) {
   size_t size = container.c.size();
   for(size_t i=0; i<size; ++i) {
     int res;
-    res = detectPattern(ctx, container.c[i]);
+    auto pet_scop = std::move(container.c[i]);
+    std::cout << pet_scop.codegen() << std::endl;
+    res = detectPattern(ctx, pet_scop.getScop());
     scopID.push_back(res);
   }
 
   printIDs(scopID); 
 
   generate_code(scopID, container.c, options); 
-
+*/
   return true;
 }
 

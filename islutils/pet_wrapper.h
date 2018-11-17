@@ -9,12 +9,9 @@
 
 class pet_scop;
 class pet_stmt;
+class ScopContainer;
 
 namespace pet {
-
-struct ScopContainer {
-  std::vector<Scop> c;
-};
 
 isl::ctx allocCtx();
 
@@ -91,5 +88,10 @@ private:
 };
 
 } // namespace pet
+
+class ScopContainer {
+  public:
+    std::vector<struct pet_scop*> c;
+};
 
 #endif // ISLUTILS_PET_WRAPPER_H

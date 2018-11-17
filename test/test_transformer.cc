@@ -1,5 +1,6 @@
 #include "gtest/gtest.h"
 #include <iostream>
+#include <stack>
 #include <islutils/access_patterns.h>
 #include <islutils/builders.h>
 #include <islutils/ctx.h>
@@ -9,13 +10,69 @@
 
 using util::ScopedCtx;
 
+isl::schedule_node getTopmostBand(const matchers::ScheduleNodeMatcher &m,
+                                   isl::schedule_node root) {
+
+  assert(root.get() && "invalid node");
+
+  std::stack<isl::schedule_node> nodeStack;
+  nodeStack.push(root);
+
+  while(nodeStack.empty() == false) {
+    isl::schedule_node node = nodeStack.top();
+    nodeStack.pop();
+    
+    if(matchers::ScheduleNodeMatcher::isMatching(m, node)) {
+      return node;
+    }
+
+    size_t n_children =
+      static_cast<size_t>(isl_schedule_node_n_children(node.get()));
+    for(size_t i=0; i<n_children; ++i) {
+      nodeStack.push(node.child(i));
+    }
+  }
+  return nullptr;
+}
+ 
+
+TEST(Transformers, locateTopMostBand) {
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto scop =
+    pet::Scop::parseFile(ctx, "inputs/nested.c").getScop();
+  isl::schedule_node root = scop.schedule.get_root();
+  
+  isl::schedule_node parent, child;
+  auto matcher = [&]() {
+    using namespace matchers;
+    return band(parent, anyTree(child));
+  }();
+
+  isl::schedule_node node = getTopmostBand(matcher, root);
+
+  ASSERT_TRUE(node.get());
+}
+  
 
 TEST(Transformers, ExtractMultipleScop) {
   auto ctx = ScopedCtx(pet::allocCtx());
-  std::string in = "inputs/dummy.c";
-  pet::ScopContainer c;
+  std::string in = "inputs/doubleScop.c";
+  ScopContainer c;
   c = pet::Scop::parseMultipleScop(ctx, in);  
   ASSERT_TRUE(c.c.size() == 2);
+
+  auto pet_scop = pet::Scop(c.c[0]);
+  std::string transpose = "C[c0][c1] = D[c1][c0];";
+  std::string result = pet_scop.codegen();
+  auto stmt = result.find(transpose);
+  ASSERT_TRUE(stmt != std::string::npos);
+
+  auto pet_scop_following = pet::Scop(c.c[1]);
+  std::string stencil = 
+    "B[c1] = (0.33333 * ((A[c1 - 1] + A[c1]) + A[c1 + 1]));";
+  result = pet_scop_following.codegen();
+  stmt = result.find(stencil);
+  ASSERT_TRUE(stmt != std::string::npos);
 }
   
 TEST(Transformer, Capture) {

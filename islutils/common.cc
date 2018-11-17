@@ -18,6 +18,7 @@ std::ofstream get_output_file(std::string in, std::string out) {
     out.replace(out.find('.'), in.length(), extension);
   }
 
+  LOG(INFO) << "output file name :" << out; 
   of.open(out);
   return of;
 }
@@ -40,8 +41,7 @@ std::string read_from_file(std::string in) {
 
 // REBUILD
 
-inline isl::schedule_node
-rebuild(isl::schedule_node node,
+isl::schedule_node rebuild(isl::schedule_node node,
         const builders::ScheduleNodeBuilder &replacement) {
   // this may not be always legal...
   node = node.cut();
@@ -87,6 +87,7 @@ isl::schedule_node
 replaceDFSPreorderOnce(isl::schedule_node node,
                        const matchers::ScheduleNodeMatcher &pattern,
                        const builders::ScheduleNodeBuilder &replacement) {
+  std::cout << node.to_str() << std::endl;
   node = replaceOnce(node, pattern, replacement);
   for (int i = 0; i < node.n_children(); ++i) {
     node = replaceDFSPreorderOnce(node.child(i), pattern, replacement).parent();
@@ -122,6 +123,8 @@ bool canMerge(isl::schedule_node parentBand,
       .is_subset(positiveOrthant);
 }
 
+// compute deps.
+
 isl::union_map computeAllDependences(const Scop &scop) {
   // For the simplest possible dependence analysis, get rid of reference tags.
   auto reads = scop.reads.domain_factor_domain();
@@ -150,6 +153,8 @@ isl::union_map computeAllDependences(const Scop &scop) {
 
   return flowDeps.unite(falseDeps);
 }
+
+// merge bands together if possible.
 
 isl::schedule_node mergeIfTilable(isl::schedule_node node,
                                   isl::union_map dependences) {
@@ -191,3 +196,88 @@ isl::schedule_node mergeIfTilable(isl::schedule_node node,
   return replaceDFSPreorderRepeatedly(node, matcher, declarativeMerger);
 }
 
+// return the top most band node startint from "node"
+
+isl::schedule_node topmostBand(isl::schedule_node node) {
+
+  assert(node.get() && "expect valid node");
+
+  isl::schedule_node parent, child;
+
+  auto matcher = [&]() {
+    using namespace matchers;
+    return band(parent, anyTree(child));
+  }();
+
+  std::stack<isl::schedule_node> nodeStack;
+  nodeStack.push(node);
+
+  while(nodeStack.empty() == false) {
+    isl::schedule_node node = nodeStack.top();
+    nodeStack.pop();
+
+    if(matchers::ScheduleNodeMatcher::isMatching(matcher, node)) {
+      return node;
+    }
+   
+    size_t n_children = 
+      static_cast<size_t>(isl_schedule_node_n_children(node.get()));
+    for(size_t i=0; i<n_children; ++i) {
+      nodeStack.push(node.child(i));
+    }
+  }
+  
+  LOG(INFO) << "topmostBand returns nullptr, no (or no others) band node found";
+  return nullptr;
+}
+
+
+// return string representation for "target"
+std::string getStringFromTarget(int target) {
+
+  switch(target) {
+    case 1: return "CPU";
+    case 2: return "Access Processor";
+    case 3: return "GPU";
+    default: return "target not defined";
+  }
+}
+
+// tile node "node" with the given tile size.
+// call this fuction after "getScheduleTile"
+// Example:
+// auto tileSchedule = getScheduleTile(node, tileSizes);
+// auto pointSchedule = getSchedulePointTile(node, tileSchedule);
+
+isl::multi_union_pw_aff getSchedulePointTile(isl::schedule_node node,
+                                                    isl::multi_union_pw_aff t) {
+  isl::multi_union_pw_aff sched = node.band_get_partial_schedule();
+  return sched.sub(t);
+}
+
+// tile node "node" with the given tile size "tileSizes"
+
+isl::multi_union_pw_aff getScheduleTile(isl::schedule_node node,
+                                               std::vector<int> tileSizes) {
+  assert(tileSizes.size() != 0 && "empty tileSizes array");
+  isl::space space = isl::manage(isl_schedule_node_band_get_space(node.get()));
+  unsigned dims = space.dim(isl::dim::set);
+  assert(dims == tileSizes.size() &&
+         "number of dimensions should match tileSizes size");
+
+  isl::multi_val sizes = isl::multi_val::zero(space);
+  for (unsigned i = 0; i < dims; ++i) {
+    int tileSize = tileSizes[i];
+    sizes = sizes.set_val(i, isl::val(node.get_ctx(), tileSize));
+  }
+
+  isl::multi_union_pw_aff sched = node.band_get_partial_schedule();
+  for (unsigned i = 0; i < dims; ++i) {
+    isl::union_pw_aff upa = sched.get_union_pw_aff(i);
+    isl::val v = sizes.get_val(i);
+    upa = upa.scale_down_val(v);
+    upa = upa.floor();
+    sched = sched.set_union_pw_aff(i, upa);
+  }
+  return sched;
+}
