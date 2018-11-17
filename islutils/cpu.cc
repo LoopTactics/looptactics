@@ -121,10 +121,9 @@ isl::schedule_node applyTiling(isl::schedule_node node) {
         },
         builders::subtree(capturedSubtree)));
 
-  // TODO: check more this function.
-  isl::schedule_node nextBand;
-  node = topmostBand(node);
+  isl::schedule_node nextBand = topmostBand(node);
   do {
+    node = nextBand;
     if(matchers::ScheduleNodeMatcher::isMatching(matcher, node)) {
       node = rebuild(node, builder);
     }
@@ -132,9 +131,7 @@ isl::schedule_node applyTiling(isl::schedule_node node) {
     nextBand = topmostBand(nextBand);
   } while(nextBand);
 
-  // TODO: check this return.
-  return node;
-      
+  return node;      
 }
 
 // Optimize for locality. Same optimization as Polly does.
