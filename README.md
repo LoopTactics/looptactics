@@ -14,5 +14,6 @@ make pet
 make
 ```
 
-TODO:
-1. have a look at: https://github.com/google/glog
+
+Brief explanation:
+This is the matchers/builder framework to be used as a source-to-source compiler.
