@@ -2,7 +2,7 @@
 #include "islutils/common.h"
 #include <glog/logging.h>
 #include "islutils/access_patterns.h"
-
+/*
 isl::schedule function_call_optimization_CPU(isl::ctx ctx, Scop scop) {
 
   auto dependences = computeAllDependences(scop);
@@ -56,17 +56,20 @@ isl::schedule function_call_optimization_CPU(isl::ctx ctx, Scop scop) {
   auto matcher = band(is2Dtranspose, leaf());
   if(ScheduleNodeMatcher::isMatching(matcher, root.child(0))) {
     LOG(INFO) << "matched with 2D transpose";
-  
-  std::string group_id_tag = "transpose";
-  isl::id group_id = 
-    isl::manage(isl_id_alloc(ctx.get(), group_id_tag.c_str(), nullptr));
-  node = node.group(group_id);
-  return node.get_schedule();
-    
   }
+
+  int singleStatement = node.get_domain().n_set();
+  std::cout << singleStatement << std::endl;
+  
+  //std::string group_id_tag = "transpose";
+  //isl::id group_id = 
+  //  isl::manage(isl_id_alloc(ctx.get(), group_id_tag.c_str(), nullptr));
+  //node = node.group(group_id);
+  //return node.get_schedule();
+    
   return scop.schedule;
 }
-
+*/
 
 // check tiling profitability.
  
@@ -121,15 +124,10 @@ isl::schedule_node applyTiling(isl::schedule_node node) {
         },
         builders::subtree(capturedSubtree)));
 
-  isl::schedule_node nextBand = topmostBand(node);
-  do {
-    node = nextBand;
-    if(matchers::ScheduleNodeMatcher::isMatching(matcher, node)) {
-      node = rebuild(node, builder);
-    }
-    nextBand = node.child(0).child(0);
-    nextBand = topmostBand(nextBand);
-  } while(nextBand);
+
+  if(matchers::ScheduleNodeMatcher::isMatching(matcher, node)) {
+    std::cout << "possible tiling" << "\n";
+  }
 
   return node;      
 }
@@ -139,47 +137,23 @@ isl::schedule_node applyTiling(isl::schedule_node node) {
 
 isl::schedule standard_optimization_CPU(isl::ctx ctx, Scop scop) {
 
+  LOG(INFO) << "standard optimization for locality\n";
   isl::schedule_node root = scop.schedule.get_root(); 
-  auto deps = computeAllDependences(scop); 
-
-  // match all band nodes and merge them in one
-  // single band node is possible, before proceeding
-  // with optimizations.
-  isl::schedule_node node = topmostBand(root);
-  assert(isl_schedule_node_get_type(node.get()) == isl_schedule_node_band
-         && "expect band node here");
  
-  isl::schedule_node nextBand;
-  do {
-    node = mergeIfTilable(node, deps);
-    nextBand = node.child(0);
-    nextBand = topmostBand(nextBand);
-  } while(nextBand);
-
-
   // apply tiling transformation.
-  node = node.root();
-  node = applyTiling(node);
+  isl::schedule_node node = applyTiling(root.child(0));
 
   return node.root().get_schedule();  
 }
 
-// Optimize the schedule. The optimization is controlled by the 
-// flag "function_call". If asserted we try to detect the kernel
-// pattern and swap the kernel code with a function call to an
-// optimized library (i.e. ESSL for Power9). If the flag is set to
-// zero we proceed with standard optimization (i.e. tiling).
+// Optimize the schedule. Optimize the current scop
+// for locality.
 
-isl::schedule optimize_CPU(isl::ctx ctx, Scop scop, bool function_call) {
+isl::schedule optimize_CPU(isl::ctx ctx, Scop scop) {
 
+  LOG(INFO) << "optimize for CPUs\n";
   isl::schedule optimizedSchedule;
-
-  if(function_call) {
-    optimizedSchedule = function_call_optimization_CPU(ctx, scop);
-  }
-  else {
-    optimizedSchedule = standard_optimization_CPU(ctx, scop);
-  }
+  optimizedSchedule = standard_optimization_CPU(ctx, scop);
   return optimizedSchedule;
 }
 
@@ -208,11 +182,6 @@ void generate_code_CPU(std::vector<std::string> &optimizedScops,
   write_on_file(content, of);
 }
 
-std::string codegenLibrary(isl::ast_build astBuild, isl::ast_node node,
-                           pet_stmt *stmt) { 
-  return "hello";
-}
-
 // Transform the code in the file called "inputFile" member of
 // "options" by replacing all scops by corresponding cpu
 // code and write the results to a file called "outputFile"
@@ -237,6 +206,7 @@ bool generate_CPU(struct Options &options) {
   // iterate over all the scops.
   std::vector<std::string> optimizedScops;
   size_t size = container.c.size();
+  LOG(INFO) << "scops detetected " << size << "\n";
 
   for(size_t i=0; i<size; ++i) {
     pet::Scop pet_scop = pet::Scop(container.c[i]);
@@ -244,7 +214,7 @@ bool generate_CPU(struct Options &options) {
    
     // optimize code. 
     isl::schedule schedule =
-      optimize_CPU(ctx, pet_scop.getScop(), options.function_call);
+      optimize_CPU(ctx, pet_scop.getScop());
 
     LOG(INFO) << "Optimized Schedule for CPU: " << schedule.to_str();
 
@@ -255,7 +225,7 @@ bool generate_CPU(struct Options &options) {
       optimizedScop = pet_scop.codegen();
     }
     else {
-      optimizedScop = pet_scop.codegen(codegenLibrary);
+      //optimizedScop = pet_scop.codegen(codegenLibrary);
     }
     
     // save output of codegen.    
