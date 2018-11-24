@@ -10,10 +10,11 @@
 
 using util::ScopedCtx;
 
-isl::schedule_node getTopmostBand(const matchers::ScheduleNodeMatcher &m,
-                                   isl::schedule_node root) {
+std::pair<bool, isl::schedule_node> 
+  getTopmostBand(const matchers::ScheduleNodeMatcher &m, isl::schedule_node root) {
 
   assert(root.get() && "invalid node");
+  std::pair <bool, isl::schedule_node> res;
 
   std::stack<isl::schedule_node> nodeStack;
   nodeStack.push(root);
@@ -23,7 +24,8 @@ isl::schedule_node getTopmostBand(const matchers::ScheduleNodeMatcher &m,
     nodeStack.pop();
     
     if(matchers::ScheduleNodeMatcher::isMatching(m, node)) {
-      return node;
+      res = std::make_pair(true, node);
+      return res;
     }
 
     size_t n_children =
@@ -32,9 +34,36 @@ isl::schedule_node getTopmostBand(const matchers::ScheduleNodeMatcher &m,
       nodeStack.push(node.child(i));
     }
   }
-  return nullptr;
+  res = std::make_pair(false, nullptr);
+  return res;
 }
  
+
+TEST(Transformers, countBandNodes) {
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto scop =
+    pet::Scop::parseFile(ctx, "inputs/nested.c").getScop();
+  isl::schedule_node root = scop.schedule.get_root();
+  
+  isl::schedule_node parent, child;
+  auto matcher = [&]() {
+    using namespace matchers;
+    return band(parent, anyTree(child));
+  }();
+
+
+  int counter = 0;
+  std::pair<bool, isl::schedule_node> res;
+  do {
+    res = getTopmostBand(matcher, root);
+    if(res.second.get()) {
+      counter++;
+      root = res.second.child(0);
+    }
+  } while(res.first);
+
+  ASSERT_TRUE(counter == 4);
+}
 
 TEST(Transformers, locateTopMostBand) {
   auto ctx = ScopedCtx(pet::allocCtx());
@@ -48,9 +77,9 @@ TEST(Transformers, locateTopMostBand) {
     return band(parent, anyTree(child));
   }();
 
-  isl::schedule_node node = getTopmostBand(matcher, root);
+  auto res = getTopmostBand(matcher, root);
 
-  ASSERT_TRUE(node.get());
+  ASSERT_TRUE(res.second.get());
 }
   
 
