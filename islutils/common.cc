@@ -198,10 +198,12 @@ isl::schedule_node mergeIfTilable(isl::schedule_node node,
 
 // return the top most band node startint from "node"
 
-isl::schedule_node topmostBand(isl::schedule_node node) {
+std::pair<bool, isl::schedule_node> 
+  topmostBand(isl::schedule_node node) {
 
   assert(node.get() && "expect valid node");
 
+  std::pair<bool, isl::schedule_node> res;
   isl::schedule_node parent, child;
 
   auto matcher = [&]() {
@@ -217,7 +219,8 @@ isl::schedule_node topmostBand(isl::schedule_node node) {
     nodeStack.pop();
 
     if(matchers::ScheduleNodeMatcher::isMatching(matcher, node)) {
-      return node;
+      res = std::make_pair(true, node);
+      return res;
     }
    
     size_t n_children = 
@@ -227,8 +230,8 @@ isl::schedule_node topmostBand(isl::schedule_node node) {
     }
   }
   
-  LOG(INFO) << "topmostBand returns nullptr, no (or no others) band node found";
-  return nullptr;
+  res = std::make_pair(false, nullptr);
+  return res;
 }
 
 

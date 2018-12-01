@@ -51,7 +51,7 @@ replaceDFSPreorderOnce(isl::schedule_node node,
                        const builders::ScheduleNodeBuilder &replacement);
 isl::schedule_node mergeIfTilable(isl::schedule_node node,
                                   isl::union_map dependences);
-isl::schedule_node topmostBand(isl::schedule_node node);
+std::pair<bool, isl::schedule_node> topmostBand(isl::schedule_node node);
 
 std::string getStringFromTarget(int t);
 isl::multi_union_pw_aff getSchedulePointTile(isl::schedule_node node,
