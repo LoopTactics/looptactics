@@ -7,6 +7,7 @@
 #include <islutils/locus.h>
 #include <islutils/matchers.h>
 #include <islutils/pet_wrapper.h>
+#include <islutils/aff_op.h>
 
 using util::ScopedCtx;
 
@@ -894,3 +895,220 @@ TEST(Transformer, MatchMatmul) {
   result = petScop.codegen();
   std::cout << result << std::endl;
 }
+
+isl::union_map addRangeId(isl::union_map umap, const std::string &tag) {
+  auto id =
+      isl::manage(isl_id_alloc(umap.get_ctx().get(), tag.c_str(), nullptr));
+  // TODO: make this possible with matchers as well
+  auto result = isl::union_map::empty(umap.get_space());
+  umap.foreach_map([id, &result](isl::map m) {
+    result = result.add_map(m.set_tuple_id(isl::dim::out, id));
+  });
+  return result;
+}
+
+// expecting scheduled access
+isl::map make1dDLT(isl::map access, int size) {
+  using namespace aff_op;
+  access = access.coalesce();
+  auto allPoints =
+      isl::map::from_domain_and_range(access.range(), access.range());
+  isl::pw_aff min = allPoints.dim_min(0);
+  isl::pw_aff dist = allPoints.dim_max(0) - min + 1;
+  // TODO: cut off: o0 > size * (dist / size)
+
+  auto dlt = isl::map::empty(access.range().get_space().map_from_set());
+  auto a = isl::aff::var_on_domain(isl::local_space(access.range().get_space()),
+                                   isl::dim::set, 0);
+  auto _i = isl::pw_aff(a);
+  for (long s = 0; s < size; ++s) {
+    auto lhs = s + size * (_i - min - s * dist / size);
+    using namespace map_maker;
+    dlt = dlt.unite((lhs == _i)
+                        .intersect(_i >= min + s * dist / size)
+                        .intersect(_i < min + (s + 1) * dist / size));
+  }
+  std::string arrayName = dlt.range().get_tuple_id().get_name();
+  isl::id dltArrayId =
+      isl::id::alloc(dlt.get_ctx(), "_dlt_" + arrayName, nullptr);
+  return dlt.set_tuple_id(isl::dim::out, dltArrayId);
+}
+
+static __isl_give isl_multi_pw_aff *
+transformSubscriptsDLT(__isl_take isl_multi_pw_aff *subscript,
+                       __isl_keep isl_id *, void *user) {
+  auto access = isl::manage(subscript);
+  auto iteratorMap = isl::manage_copy(static_cast<isl_pw_multi_aff *>(user));
+  auto scheduledAccess = access.pullback(iteratorMap);
+
+  int dim = scheduledAccess.dim(isl::dim::set);
+  for (int i = 0; i < dim; ++i) {
+    auto pa = scheduledAccess.get_pw_aff(i);
+    auto result = isl::pw_aff(isl::set::empty(pa.domain().get_space()),
+                              isl::val::zero(pa.get_ctx()));
+    pa.foreach_piece([&result](isl::set domain, isl::aff aff) {
+      auto cst = aff.get_constant_val();
+      auto partial = isl::pw_aff(aff.set_constant_val(cst.mul_ui(4)))
+                         .intersect_domain(domain);
+      result = result.union_add(partial);
+    });
+    scheduledAccess = scheduledAccess.set_pw_aff(i, result);
+  }
+  return scheduledAccess.release();
+}
+
+static std::string codegenDLTCopies(isl::ast_build astBuild, isl::ast_node node,
+                                    pet_stmt *stmt) {
+  if (stmt) {
+    using namespace pet;
+    auto schedule = isl::map::from_union_map(astBuild.get_schedule());
+    auto iteratorMap = isl::pw_multi_aff::from_map(schedule.reverse());
+    return printPetStmt(stmt,
+                        buildRef2Expr(stmt, astBuild, transformSubscriptsDLT,
+                                      iteratorMap.get()));
+  }
+
+  auto schedule = astBuild.get_schedule();
+  auto original = schedule.reverse().range_factor_domain();
+  auto dlt = schedule.reverse().range_factor_range();
+  auto originalExpr = astBuild.access_from(
+      isl::pw_multi_aff::from_map(isl::map::from_union_map(original)));
+  auto dltExpr = astBuild.access_from(
+      isl::pw_multi_aff::from_map(isl::map::from_union_map(dlt)));
+
+  std::stringstream ss;
+  auto direction = isl::set(schedule.domain()).get_tuple_id().get_name();
+  if (direction == "from") {
+    ss << originalExpr.to_C_str() << " = " << dltExpr.to_C_str() << ";";
+  } else if (direction == "to") {
+    ss << dltExpr.to_C_str() << " = " << originalExpr.to_C_str() << ";";
+  } else {
+    ISLUTILS_DIE("unknown copy direction");
+  }
+
+  return ss.str();
+}
+
+isl::schedule_node
+replaceDFSPostorderOnce(isl::schedule_node node,
+                        const matchers::ScheduleNodeMatcher &pattern,
+                        const builders::ScheduleNodeBuilder &replacement) {
+  for (int i = 0; i < node.n_children(); ++i) {
+    node =
+        replaceDFSPostorderOnce(node.child(i), pattern, replacement).parent();
+  }
+  return replaceOnce(node, pattern, replacement);
+}
+
+TEST(Transformer, HenrettyDLTJacobi) {
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto petScop = pet::Scop::parseFile(ctx, "inputs/stencil.c");
+  auto scop = petScop.getScop();
+
+  auto dependences = computeAllDependences(scop);
+  isl::schedule_node node;
+
+  auto is3Dstencil = [&](isl::schedule_node band) {
+    using namespace matchers;
+    // A band node always have a child (may be a leaf), and the prefix schedule
+    // of that child includes the partial schedule of the node.
+    auto prefixSchedule = band.child(0).get_prefix_schedule_union_map();
+    auto scheduledReads = scop.reads.curry().apply_domain(prefixSchedule);
+    auto arr = arrayPlaceholder();
+    auto i = placeholder(ctx);
+
+    auto matches =
+        match(scheduledReads, allOf(access(dim(-1, i - 1)), access(dim(-1, i)),
+                                    access(dim(-1, i + 1))));
+    node = band;
+    return matches.size() == 1;
+  };
+
+  auto DLTbuilder = [&]() {
+    using namespace builders;
+
+    auto dltExtensionBuilder = [&]() {
+      auto prefixSchedule = node.get_prefix_schedule_union_map();
+      auto scheduledReads =
+          scop.reads.domain_factor_domain().apply_domain(prefixSchedule);
+      // Because of the matcher, we know that only one array is accessed, so
+      // untagged accesses live in the same space.
+      isl::map dltMap = make1dDLT(isl::map::from_union_map(scheduledReads), 4);
+      auto dlt = isl::union_map(dltMap);
+
+      // FIXME: what if there is a dependence on schedule?
+      return prefixSchedule.range().product(dlt.wrap()).unwrap();
+#if 0
+      auto scheduledDLT = scheduledReads.apply_range(dlt);
+      return scheduledReads.range_product(scheduledDLT);
+#endif
+    };
+
+    auto extensionBuilder = [dltExtensionBuilder]() {
+      auto DLTExtension = dltExtensionBuilder();
+      return addRangeId(DLTExtension, "to")
+          .unite(addRangeId(DLTExtension, "from"));
+    };
+
+    auto toFilterBuilder = [dltExtensionBuilder]() {
+      return addRangeId(dltExtensionBuilder(), "to").range().universe();
+    };
+
+    auto fromFilterBuilder = [dltExtensionBuilder]() {
+      return addRangeId(dltExtensionBuilder(), "from").range().universe();
+    };
+
+    auto toBandBuilder = [dltExtensionBuilder]() {
+      return isl::multi_union_pw_aff::from_union_map(
+                 addRangeId(dltExtensionBuilder(), "to")
+                     .range()
+                     .affine_hull()
+                     .wrapped_domain_map())
+          .reset_tuple_id(isl::dim::set);
+    };
+
+    auto fromBandBuilder = [dltExtensionBuilder]() {
+      return isl::multi_union_pw_aff::from_union_map(
+                 addRangeId(dltExtensionBuilder(), "from")
+                     .range()
+                     .affine_hull()
+                     .wrapped_domain_map())
+          .reset_tuple_id(isl::dim::set);
+    };
+
+    auto coreFitlerBuilder = [&node]() { return node.get_domain(); };
+
+    return extension(
+        extensionBuilder,
+        sequence(filter(toFilterBuilder, band(toBandBuilder)),
+                 filter(coreFitlerBuilder, subtree([&]() {
+                          return subtreeBuilder(node);
+                        })), // TODO: transform the actual computation
+                 filter(fromFilterBuilder, band(fromBandBuilder))));
+  }();
+
+  auto matcher = matchers::band(is3Dstencil, matchers::anyTree());
+  EXPECT_TRUE(matchers::ScheduleNodeMatcher::isMatching(
+      matcher, scop.schedule.get_root().child(0).child(0).child(0).child(0)));
+  EXPECT_TRUE(matchers::ScheduleNodeMatcher::isMatching(
+      matcher, scop.schedule.get_root().child(0).child(0).child(1).child(0)));
+
+  scop.schedule =
+      replaceDFSPostorderOnce(scop.schedule.get_root(), matcher, DLTbuilder)
+          .get_schedule();
+  petScop.schedule() = scop.schedule;
+  static_cast<isl::schedule>(petScop.schedule()).dump();
+
+  auto result = isl::union_map::empty(scop.reads.get_space());
+  scop.reads.foreach_map([&result](isl::map m) {
+    if (m.get_tuple_id(isl::dim::out).get_name() == "A") {
+      m.set_tuple_name(isl::dim::out, "TEST");
+    }
+    result = result.add_map(m);
+  });
+  scop.reads = result;
+
+  std::cout << petScop.codegen(codegenDLTCopies) << std::endl;
+}
+
+
