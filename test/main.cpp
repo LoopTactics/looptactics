@@ -25,9 +25,11 @@ static bool generate_code(struct Options &options) {
   bool res = false;
   switch(options.target) {
     case 1:
+      LOG(INFO) << "generating code for CPU" << "\n";
       res = generate_CPU(options);
       break;
     case 2:
+      LOG(INFO) << "generating code for GPU" << "\n";
       res = generate_AP(options);
       break;
     //case 3:
@@ -45,8 +47,9 @@ int main(int ac, char* av[]) {
 
   // log on stdout and file.
   google::InitGoogleLogging(av[0]);
-  google::SetLogDestination(google::INFO, "./INFO.log");
-  FLAGS_alsologtostderr = 1;  
+  google::SetLogDestination(google::INFO, "/home/parallels/Desktop/INFO.log");
+  FLAGS_alsologtostderr = 1; 
+  LOG(INFO) << "start logging\n";  
 
   Options options;
 
@@ -76,7 +79,7 @@ int main(int ac, char* av[]) {
     }
 
     if(options.target == -1) {
-      std::cout << "target not specified assuming CPU" << std::endl;
+      LOG(INFO) << "target not specified assuming CPU" << "\n";
       options.target = 1;
     }
     if(options.inputFile == "empty") {
