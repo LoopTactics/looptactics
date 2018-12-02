@@ -4,6 +4,13 @@
 #include <isl/cpp.h>
 
 //
+// overloading << for printing isl::is
+inline auto& operator<<(std::ostream &OS, isl::id i) { 
+  OS << i.to_str() << "\n";
+  return OS;
+}
+
+//
 // overloading << for printing isl::space
 inline auto& operator<<(std::ostream &OS, isl::space s) {
   OS << s.to_str() << "\n";
