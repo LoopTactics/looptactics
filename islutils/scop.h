@@ -4,6 +4,37 @@
 #include <isl/cpp.h>
 
 #include <iostream>
+#include <vector>
+
+/// context holds constraints on the parameter that ensure that
+/// this array has a valid (i.e., non-negative) size.
+/// extent holds constraints on the indices
+/// value_bounds holds constraints on the elements of the array
+/// element_size is the size in bytes of each array element
+/// element type is the type of the array elements.
+/// element_is_record is set if this type is a record type
+/// live_out is set if the arry appears in a live-out pragma
+/// uniquely_defined is set if the array is known to be assigned 
+/// only once before the read.
+/// declared is set if the array was declared somewhere inside the scop.
+/// exposed is set if the declared array is visible outside the scop.
+/// outer is set if the type of the arry elements is a record and 
+/// the fields of this record are represented by separate pet_array structures.
+
+class ScopArray {
+public:
+  isl::set context;
+  isl::set extent;
+  //isl::set value_bounds;
+  std::string element_type;
+  int element_is_record;
+  int element_size;
+  int live_out;
+  int uniquely_defined;
+  int declared;
+  int exposed;
+  int outer;
+};  
 
 /// Minimalist container for a static control part (SCoP).
 /// Contains domain, schedule and access information, where the domain is
@@ -26,6 +57,9 @@ public:
   isl::union_map mayWrites;
   isl::union_map mustWrites;
   /// \}
+  /// Arrays description
+  int n_array;
+  std::vector<ScopArray> arrays;
 
   inline void dump() const;
 };

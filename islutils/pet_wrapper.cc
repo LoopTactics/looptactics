@@ -43,6 +43,21 @@ isl::ctx Scop::getCtx() const {
   S.reads = isl::manage(pet_scop_get_tagged_may_reads(scop_));
   S.mayWrites = isl::manage(pet_scop_get_tagged_may_writes(scop_));
   S.mustWrites = isl::manage(pet_scop_get_tagged_must_writes(scop_));
+  S.n_array = scop_->n_array;
+  for(int i = 0; i < S.n_array; ++i) {
+    ScopArray a;
+    a.context = isl::manage_copy(scop_->arrays[i]->context);
+    a.extent = isl::manage_copy(scop_->arrays[i]->extent);
+    a.element_type = scop_->arrays[i]->element_type;
+    a.element_is_record = scop_->arrays[i]->element_is_record;
+    a.element_size = scop_->arrays[i]->element_size;
+    a.live_out = scop_->arrays[i]->live_out;
+    a.uniquely_defined = scop_->arrays[i]->uniquely_defined;
+    a.declared = scop_->arrays[i]->declared;
+    a.exposed = scop_->arrays[i]->exposed;
+    a.outer = scop_->arrays[i]->outer;
+    S.arrays.push_back(a);
+  } 
   return S;
 }
 

@@ -8,8 +8,145 @@
 #include <islutils/matchers.h>
 #include <islutils/pet_wrapper.h>
 #include <islutils/aff_op.h>
+#include <islutils/cout_overloading.h>
 
 using util::ScopedCtx;
+
+enum class AccessType { read, write };
+
+class GpuArrayInfo {
+  public:
+    std::string name;
+    unsigned n_index;
+    AccessType t;
+    isl::map access_map;
+};
+
+static std::string getAccessName(isl::map m) {
+  return m.range().unwrap().range().get_tuple_id().get_name();
+}
+
+static unsigned getAccessIndexes(isl::map m) {
+  return m.dim(isl::dim::out);
+}
+
+static std::vector<GpuArrayInfo> getArrayInfo(isl::union_map m, bool type) {
+
+  std::vector<GpuArrayInfo> res;
+  std::vector<isl::map> accesses;
+  m.foreach_map([&accesses](isl::map m) { accesses.push_back(m); });
+  
+  size_t s = accesses.size();
+  for(size_t i = 0; i < s; ++i) {
+    GpuArrayInfo g;
+    g.name = getAccessName(accesses[i]);
+    g.n_index = getAccessIndexes(accesses[i]);
+    if(type) {
+      g.t = AccessType::write;
+    } else {
+      g.t = AccessType::read;
+    }
+    g.access_map = accesses[i];
+    res.push_back(g);
+  } 
+  return res;
+}
+
+static isl::union_map applySchedule(isl::union_map schedule,
+                                    isl::union_map accesses) {
+  return accesses.apply_domain(schedule);
+}
+
+static std::string indent(int s) {
+  std::string res = "";
+  for(int i = 0; i < s; ++i) {
+    res += " ";
+  }
+  return res;
+}
+
+static std::string printCudaHeader(std::string &s) {
+  s+= "/* Includes system */\n";
+  s+= "#include <stdio.h>\n";
+  s+= "#include <stdlib.h>\n\n";
+  s+= "/* Includes cuda */\n";
+  s+= "#include <cublas_v2.h>\n";
+  s+= "#include <cuda_runtime.h>\n";
+  s+= "#include <helper_cuda.h>\n";
+  return s;
+}
+
+TEST(Transformers, codeGenerationGPUs) {
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto scop =
+    pet::Scop::parseFile(ctx, "inputs/gemm.c").getScop();
+  isl::schedule_node root = scop.schedule.get_root();
+  
+  isl::union_map reads = scop.reads.curry();
+  isl::union_map writes = scop.mustWrites.curry();
+  std::vector<GpuArrayInfo> readInfo = getArrayInfo(reads, 0);
+  std::vector<GpuArrayInfo> writeInfo = getArrayInfo(writes, 1);
+
+  // leaf init stmt
+  root = root.child(0).child(0).child(0)
+             .child(0).child(0);
+  isl::union_map prefixSchedule = root.get_prefix_schedule_union_map();
+  isl::union_map accessesLeafInitStmtR = applySchedule(prefixSchedule, reads);
+  isl::union_map accessesLeafInitStmtW = applySchedule(prefixSchedule, writes);
+
+  root = root.root();
+  // leaf core stmt
+  root = root.child(0).child(0).child(0)
+             .child(1).child(0).child(0);
+  prefixSchedule = root.get_prefix_schedule_union_map();
+  isl::union_map accessesLeafCoreStmtR = applySchedule(prefixSchedule, reads);
+  isl::union_map accessesLeafCoreStmtW = applySchedule(prefixSchedule, writes);
+  accessesLeafCoreStmtR = accessesLeafCoreStmtR.subtract(accessesLeafInitStmtR); 
+  accessesLeafCoreStmtW = accessesLeafCoreStmtW.subtract(accessesLeafInitStmtW);
+  std::cout << accessesLeafCoreStmtW << std::endl;
+ 
+  using namespace matchers; 
+  auto _i = placeholder(ctx);
+  auto _j = placeholder(ctx);
+  auto _k = placeholder(ctx);
+  auto _ii = placeholder(ctx);
+  auto _jj = placeholder(ctx);
+
+  auto _A = arrayPlaceholder();
+  auto _B = arrayPlaceholder();
+  auto _C = arrayPlaceholder();
+
+  auto psRead =
+      allOf(access(_A, _i, _j), access(_B, _i, _k), access(_C, _k, _j));
+  auto readMatches = match(accessesLeafCoreStmtR, psRead);
+  ASSERT_EQ(readMatches.size(), 1u);
+  auto psWrite = allOf(access(_A, _ii, _jj));
+  auto writeMatches = match(accessesLeafCoreStmtW, psWrite);
+  ASSERT_EQ(writeMatches.size(), 1u);
+
+  // check index for read and write are equal
+  ASSERT_TRUE(writeMatches[0][_ii].payload().inputDimPos_ ==
+              readMatches[0][_i].payload().inputDimPos_);
+  ASSERT_TRUE(writeMatches[0][_jj].payload().inputDimPos_ ==
+              readMatches[0][_j].payload().inputDimPos_);
+
+  // cuda code-generation as done in ppcg.
+  std::string cudaCode;
+  printCudaHeader(cudaCode);
+  std::cout << cudaCode << std::endl;
+  
+}
+
+TEST(Transformers, checkPetArrayExtraction) {
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto scop =
+    pet::Scop::parseFile(ctx, "inputs/one-dimensional-init.c").getScop();
+  ASSERT_EQ(scop.n_array, 1u);
+
+  for(int i = 0; i < scop.n_array; ++i) {
+    ASSERT_EQ(scop.arrays[i].element_type, "float");
+  }
+}
 
 std::pair<bool, isl::schedule_node> 
   getTopmostBand(const matchers::ScheduleNodeMatcher &m, isl::schedule_node root) {
