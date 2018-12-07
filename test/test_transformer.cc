@@ -14,11 +14,22 @@ using util::ScopedCtx;
 
 enum class AccessType { read, write };
 
+/// name holds the array name.
+/// n_index the number of dimension(s) involved in the array
+/// AccessType: is a read or a write access?
+/// element_type: float, double or int?
+/// extent holds constraints on the indices
+/// access_map the access map.
+
 class GpuArrayInfo {
   public:
+
     std::string name;
     unsigned n_index;
     AccessType t;
+    std::string element_type;
+    isl::set extent;
+
     isl::map access_map;
 };
 
@@ -30,7 +41,8 @@ static unsigned getAccessIndexes(isl::map m) {
   return m.dim(isl::dim::out);
 }
 
-static std::vector<GpuArrayInfo> getArrayInfo(isl::union_map m, bool type) {
+static std::vector<GpuArrayInfo> getArrayInfo(Scop scop, 
+                                              isl::union_map m, bool type) {
 
   std::vector<GpuArrayInfo> res;
   std::vector<isl::map> accesses;
@@ -47,6 +59,13 @@ static std::vector<GpuArrayInfo> getArrayInfo(isl::union_map m, bool type) {
       g.t = AccessType::read;
     }
     g.access_map = accesses[i];
+    
+    for(int j = 0; j < scop.n_array; ++j) {
+      if(g.name.compare(scop.arrays[j].extent.get_tuple_id().get_name()) == 0) {
+        g.extent = scop.arrays[j].extent;
+        g.element_type = scop.arrays[j].element_type;
+      }
+    }
     res.push_back(g);
   } 
   return res;
@@ -65,7 +84,7 @@ static std::string indent(int s) {
   return res;
 }
 
-static std::string printCudaHeader(std::string &s) {
+static void printCudaHeader(std::string &s) {
   s+= "/* Includes system */\n";
   s+= "#include <stdio.h>\n";
   s+= "#include <stdlib.h>\n\n";
@@ -73,7 +92,13 @@ static std::string printCudaHeader(std::string &s) {
   s+= "#include <cublas_v2.h>\n";
   s+= "#include <cuda_runtime.h>\n";
   s+= "#include <helper_cuda.h>\n";
-  return s;
+}
+
+static void printCuBLASHandle(std::string &s) {
+  s+= "// First, create a cuBLAS handle:\n";
+  s+= "cublasStatus_t cublasStat = cublasCreate(&handle);\n";
+  s+= "// Set the math mode to allow cuBLAS to use Tensor Cores:\n";
+  s+= "cublasStat = cublasSetMathMode(handle, CUBLAS_TENSOR_OP_MATH);\n"
 }
 
 TEST(Transformers, codeGenerationGPUs) {
@@ -84,8 +109,8 @@ TEST(Transformers, codeGenerationGPUs) {
   
   isl::union_map reads = scop.reads.curry();
   isl::union_map writes = scop.mustWrites.curry();
-  std::vector<GpuArrayInfo> readInfo = getArrayInfo(reads, 0);
-  std::vector<GpuArrayInfo> writeInfo = getArrayInfo(writes, 1);
+  std::vector<GpuArrayInfo> readInfo = getArrayInfo(scop, reads, 0);
+  std::vector<GpuArrayInfo> writeInfo = getArrayInfo(scop, writes, 1);
 
   // leaf init stmt
   root = root.child(0).child(0).child(0)
@@ -103,7 +128,6 @@ TEST(Transformers, codeGenerationGPUs) {
   isl::union_map accessesLeafCoreStmtW = applySchedule(prefixSchedule, writes);
   accessesLeafCoreStmtR = accessesLeafCoreStmtR.subtract(accessesLeafInitStmtR); 
   accessesLeafCoreStmtW = accessesLeafCoreStmtW.subtract(accessesLeafInitStmtW);
-  std::cout << accessesLeafCoreStmtW << std::endl;
  
   using namespace matchers; 
   auto _i = placeholder(ctx);
@@ -133,6 +157,7 @@ TEST(Transformers, codeGenerationGPUs) {
   // cuda code-generation as done in ppcg.
   std::string cudaCode;
   printCudaHeader(cudaCode);
+  printCuBLASHandle(cudaCode);
   std::cout << cudaCode << std::endl;
   
 }

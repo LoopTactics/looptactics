@@ -4,7 +4,14 @@
 #include <isl/cpp.h>
 
 //
-// overloading << for printing isl::is
+// overloading << for printing isl::val
+inline auto& operator<<(std::ostream &OS, isl::val v) {
+  OS << v.to_str() << "\n";
+  return OS;
+}
+
+//
+// overloading << for printing isl::id
 inline auto& operator<<(std::ostream &OS, isl::id i) { 
   OS << i.to_str() << "\n";
   return OS;
