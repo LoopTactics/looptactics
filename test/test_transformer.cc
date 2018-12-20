@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 #include <iostream>
 #include <stack>
+#include <sstream>
 #include <islutils/access_patterns.h>
 #include <islutils/builders.h>
 #include <islutils/ctx.h>
@@ -10,9 +11,60 @@
 #include <islutils/aff_op.h>
 #include <islutils/cout_overloading.h>
 
+namespace conversion {
+
+template < typename T > std::string to_string( const T& n ) {
+        std::ostringstream stm ;
+        stm << n ;
+        return stm.str() ;
+}
+
+} // end namespace conversion
+
+
 using util::ScopedCtx;
 
-enum class AccessType { read, write };
+//enum class AccessType { read, write };
+
+// lhs left hand side
+// rhs righ hand side
+// both lhs + rhs 
+// not yet assigned
+
+//enum class ArrayType { lhs, rhs, not_assigned };
+
+//inline const std::string toString(ArrayType t) {
+//  
+//  switch(t) {
+//    case ArrayType::lhs :
+//      return "lhs";
+//    case ArrayType::rhs :
+//      return "rhs";
+//    case ArrayType::not_assigned :
+//      return "not assigned";
+//    default :
+//      return "Unknown";
+//  }
+//}
+
+
+/// Parameters of the matrix multiplication operands.
+///
+/// Parameters, which describe access relations that represent operands of the
+/// matrix multiplication.
+
+class MatMulInfo {
+  public:
+
+    std::string A = "null";
+    std::string B = "null";
+    std::string ReadFromC = "null";
+    std::string WriteToC = "null";
+
+    int i = -1;
+    int j = -1;
+    int k = -1;
+};
 
 /// name holds the array name.
 /// n_index the number of dimension(s) involved in the array
@@ -26,62 +78,95 @@ class GpuArrayInfo {
 
     std::string name;
     unsigned n_index;
-    AccessType t;
     std::string element_type;
     isl::set extent;
+    std::vector<isl::map> accesses;
 
-    isl::map access_map;
+    //ArrayType type = ArrayType::not_assigned;
+};
+
+// payload for codegen.
+struct payloadCodegen {
+  std::vector<GpuArrayInfo> gpuArrays;
+  std::vector<MatMulInfo> mmi;
 };
 
 static std::string getAccessName(isl::map m) {
-  return m.range().unwrap().range().get_tuple_id().get_name();
+  return m.range().get_tuple_id().get_name();
+}
+
+static std::string getAccessName(isl::set s) {
+  return s.get_tuple_id().get_name();
 }
 
 static unsigned getAccessIndexes(isl::map m) {
   return m.dim(isl::dim::out);
 }
 
-static std::vector<GpuArrayInfo> getArrayInfo(Scop scop, 
-                                              isl::union_map m, bool type) {
+static unsigned getAccessIndexes(isl::set s) {
+  return s.dim(isl::dim::out);
+}
+
+// get array description from pet.
+static isl::union_map applySchedule(isl::union_map schedule,
+                                    isl::union_map accesses);
+
+static std::vector<GpuArrayInfo> collectArrayInfo(Scop scop) {
 
   std::vector<GpuArrayInfo> res;
-  std::vector<isl::map> accesses;
-  m.foreach_map([&accesses](isl::map m) { accesses.push_back(m); });
-  
-  size_t s = accesses.size();
-  for(size_t i = 0; i < s; ++i) {
-    GpuArrayInfo g;
-    g.name = getAccessName(accesses[i]);
-    g.n_index = getAccessIndexes(accesses[i]);
-    if(type) {
-      g.t = AccessType::write;
-    } else {
-      g.t = AccessType::read;
-    }
-    g.access_map = accesses[i];
-    
+
+  isl::union_set arrays;
+  isl::union_map accesses;
+
+  std::vector<isl::set> arraysAsSet; 
+  std::vector<isl::map> accessesAsMap;
+
+  isl::union_map reads = scop.reads;
+  accesses = reads;
+  arrays = reads.range();
+  isl::union_map writes = scop.mustWrites;
+  accesses = accesses.unite(writes);
+
+  arrays = arrays.unite(writes.range()); 
+
+  arrays = arrays.coalesce();
+  accesses = accesses.coalesce();
+  arrays.foreach_set([&arraysAsSet](isl::set s) { arraysAsSet.push_back(s); });
+  accesses.foreach_map([&accessesAsMap](isl::map m) { accessesAsMap.push_back(m); });
+   
+  for(size_t i = 0; i < arraysAsSet.size(); ++i) {
+    GpuArrayInfo ga;
+    ga.name = getAccessName(arraysAsSet[i]);
     for(int j = 0; j < scop.n_array; ++j) {
-      if(g.name.compare(scop.arrays[j].extent.get_tuple_id().get_name()) == 0) {
-        g.extent = scop.arrays[j].extent;
-        g.element_type = scop.arrays[j].element_type;
+      std::string arrayName = getAccessName(scop.arrays[j].extent);
+      if(arrayName.compare(ga.name) == 0) {
+        ga.n_index = getAccessIndexes(arraysAsSet[i]);
+        ga.element_type = scop.arrays[j].element_type;
+        ga.extent = scop.arrays[j].extent;
+        //for(size_t u = 0; u < accessesAsMap.size(); ++u) {
+        //  if(getAccessName(accessesAsMap[u]).compare(ga.name)) {
+        //    ga.accesses.push_back(accessesAsMap[u]);
+        //  }
+        //}
+      } 
+    }
+    res.push_back(ga);
+  }
+
+  for(size_t i = 0; i < res.size(); ++i) {
+    for(size_t j = 0; j < accessesAsMap.size(); ++j) {
+      if(getAccessName(accessesAsMap[j]).compare(res[i].name) == 0) {
+        res[i].accesses.push_back(accessesAsMap[j]);
       }
     }
-    res.push_back(g);
   } 
+
   return res;
 }
 
 static isl::union_map applySchedule(isl::union_map schedule,
                                     isl::union_map accesses) {
   return accesses.apply_domain(schedule);
-}
-
-static std::string indent(int s) {
-  std::string res = "";
-  for(int i = 0; i < s; ++i) {
-    res += " ";
-  }
-  return res;
 }
 
 static void printCudaHeader(std::string &s) {
@@ -94,23 +179,1028 @@ static void printCudaHeader(std::string &s) {
   s+= "#include <helper_cuda.h>\n";
 }
 
-static void printCuBLASHandle(std::string &s) {
-  s+= "// First, create a cuBLAS handle:\n";
-  s+= "cublasStatus_t cublasStat = cublasCreate(&handle);\n";
-  s+= "// Set the math mode to allow cuBLAS to use Tensor Cores:\n";
-  s+= "cublasStat = cublasSetMathMode(handle, CUBLAS_TENSOR_OP_MATH);\n"
+static std::string createIndent(int tab) {
+  std::string result;
+  for(int i = 0; i < tab; ++i) {
+    result += " ";
+  }
+  return result;
 }
 
-TEST(Transformers, codeGenerationGPUs) {
+static std::string macroCuBLASHandleInit(int tab) {
+  std::string s;
+  std::string indent = createIndent(tab);
+  s+= "\n";
+  s+= indent + "// First, create a cuBLAS handle:\n";
+  s+= indent + "cublasStatus_t cublasStat = cublasCreate(&handle);\n";
+  s+= indent + "if (cublasStat != CUBLAS_STATUS_SUCCESS) {\n";
+  s+= indent + createIndent(2) + "return 0;\n";
+  s+= indent + "}\n";
+  s+= indent + "// Set the math mode to allow cuBLAS to use Tensor Cores:\n";
+  s+= indent + "cublasStat = cublasSetMathMode(handle, CUBLAS_TENSOR_OP_MATH);";
+  return s;
+}
+
+static std::string macroCuBLASHandleTearDown(int tab) {
+  std::string s;
+  std::string indent = createIndent(tab);
+  s+= "\n";
+  s+= indent + "/* Shutdown */\n";
+  s+= indent + "cublasStat = cublasDestroy(handle);\n";
+  return s;
+}
+
+/// print declaration for the device array.
+static std::string declareDeviceArray(GpuArrayInfo g) {
+  
+  std::string result = "";
+  result += g.element_type + " ";
+  result += "*dev_";
+  result += g.name;
+  result += ";\n";
+  return result;
+}
+
+/// does the gpu array need to be allocated on the device?
+/// If it is a read-only scalar, then it will be passed
+/// as argument to the function call.
+static bool requireAllocation(GpuArrayInfo g) {
+  
+  if(g.n_index == 0) {
+    return false;
+  }
+  return true;
+}
+
+/// print a declaration for the device array corresponding to
+/// "array"
+static std::string declareDeviceArrays(struct payloadCodegen *p, int tab) {
+  
+  std::string result = "\n";
+  auto arrays = p->gpuArrays;
+
+  for(size_t i = 0; i < arrays.size(); ++i) {
+    // skip scalar accesses.
+    if(requireAllocation(arrays[i]) == false) {
+      continue;
+    }
+    else {
+      result += createIndent(tab) + declareDeviceArray(arrays[i]);
+    }
+  }
+  return result;
+}
+
+/// return arrays size
+static std::string getNumberOfElementArray(GpuArrayInfo g) {
+  
+  isl::set extent = g.extent;
+  std::vector<int> bounds;
+
+  for(size_t i = 0; i < g.n_index; ++i) {
+
+    auto allPoints = 
+      isl::map::from_domain_and_range(extent, extent);
+    isl::pw_aff min = allPoints.dim_min(i);
+    isl::pw_aff max = allPoints.dim_max(i);
+
+    EXPECT_TRUE(min.n_piece() == 1); 
+    EXPECT_TRUE(max.n_piece() == 1);
+
+    isl::val min_val;
+    isl::val max_val;
+ 
+    min.foreach_piece([&](isl::set s, isl::aff aff) -> void {
+      min_val = aff.get_constant_val(); 
+    });
+    max.foreach_piece([&](isl::set s, isl::aff aff) -> void {
+      max_val = aff.get_constant_val();
+    });
+
+    max_val = max_val.sub(min_val);
+    int bound = atoi(max_val.to_str().c_str());
+    bounds.push_back(bound);
+  }
+
+  unsigned numberOfElement = 1; 
+  for(size_t i = 0; i < bounds.size(); ++i) {
+    numberOfElement *= static_cast<unsigned>(bounds[i]);
+  }
+
+  return conversion::to_string(numberOfElement);
+}
+
+/// print arrays allocation
+static std::string allocateDeviceArrays(struct payloadCodegen *p, int tab) {
+
+  std::string result = "\n";
+  auto arrays = p->gpuArrays;
+
+  for(size_t i = 0; i < arrays.size(); ++i) {
+    //skip sclar accesses.
+    if(requireAllocation(arrays[i]) == false) {
+      continue;
+    }
+    else {
+      result += createIndent(tab) + "if (cudaMalloc(reinterpret_cast<void **>(&dev_"
+             + arrays[i].name + ")" + ", " + "sizeof(dev_" + arrays[i].name 
+             + "[0]) * " + getNumberOfElementArray(arrays[i]) + ") != cudaSuccess) {\n";
+      result += createIndent(tab + 2) + "return 0;\n";
+      result += createIndent(tab) + "}\n";
+    }
+  }
+  return result;
+}
+
+/// print stmt for copying to device.
+static std::string copyToDeviceArrays(struct payloadCodegen *p, int tab) {
+
+  auto arrays = p->gpuArrays;
+  std::string result = "\n";
+
+  for(size_t i = 0; i < arrays.size(); ++i) {
+    if(requireAllocation(arrays[i]) == false) {
+      continue;
+    } 
+    else {
+      result += createIndent(tab) + "cublasStat = cublasSetVector(";
+      result += getNumberOfElementArray(arrays[i]);
+      result += ", ";
+      result += "sizeof(" + arrays[i].name + "[0]" + ")";
+      result += ", ";
+      result += arrays[i].name;
+      result += ", ";
+      result += "1";
+      result += ", ";
+      result += "dev_" + arrays[i].name;
+      result += ", ";
+      result += "1);\n";
+    }
+  }
+
+  return result;
+}
+
+/// print code for initializing the device for the execution.
+/// This includes declaring locally defined variables as well as
+/// declaring and allocating the required copies of arrays on device.
+static std::string copyToDevice(struct payloadCodegen *p, int tab) {
+
+  std::string result = "\n";
+  result += declareDeviceArrays(p, tab);
+  result += allocateDeviceArrays(p, tab);
+  result += copyToDeviceArrays(p, tab);
+  return result;
+}
+
+static std::string copyFromDeviceArray(struct payloadCodegen *p, int tab) {
+
+  auto arrays = p->gpuArrays;
+  std::vector<MatMulInfo> mmiBatched = p->mmi;
+  std::string result;
+
+  // always return the last write access 
+  // may not be always correct.
+  MatMulInfo mmi = mmiBatched[0];
+  for(size_t i = 0; i < arrays.size(); ++i) {
+    if(arrays[i].name.compare(mmi.WriteToC) == 0) {
+      result += createIndent(tab) + "cublasStat = cublasGetVector(";
+      result += getNumberOfElementArray(arrays[i]);
+      result += ", ";
+      result += "sizeof(" + arrays[i].name + "[0]" + ")";
+      result += ", ";
+      result += "dev_" + arrays[i].name;
+      result += ", ";
+      result += "1";
+      result += ", ";
+      result += arrays[i].name;
+      result += ", ";
+      result += "1);\n";
+    }
+  }
+  return result;
+}
+
+static std::string copyFromDevice(struct payloadCodegen *p, int tab) {
+
+  std::string result = "\n";
+  result += copyFromDeviceArray(p, tab);
+  return result;
+} 
+
+/// Add nodes for copying to and from the device after node "node".
+//static isl::schedule_node addInitAndClearDevice(isl::schedule_node node) {
+//
+//  isl::space space;
+//  isl::union_set domain;
+//  isl::schedule_node graft;
+//
+//  space = isl::space(node.get_ctx(), 0, 0);
+//  space = space.set_tuple_name(isl::dim::set, "copy_to_device");
+//  domain = isl::union_set(isl::set::universe(space));
+//  graft = isl::schedule_node::from_domain(domain);
+//
+//  node = node.graft_before(graft);
+//
+//  space = isl::space(node.get_ctx(), 0, 0);
+//  space = space.set_tuple_name(isl::dim::set, "copy_from_device");
+//  domain = isl::union_set(isl::set::universe(space));
+//  graft = isl::schedule_node::from_domain(domain);
+//
+//  node = node.graft_after(graft);
+//  
+//  return node;
+//}
+
+/// Add nodes for copying to the device before "node"
+static isl::schedule_node addCopyToDevice(isl::schedule_node node) {
+
+  isl::space space;
+  isl::union_set domain;
+  isl::schedule_node graft;
+
+  space = isl::space(node.get_ctx(), 0, 0);
+  space = space.set_tuple_name(isl::dim::set, "copy_to_device");
+  domain = isl::union_set(isl::set::universe(space));
+  graft = isl::schedule_node::from_domain(domain);
+
+  node = node.graft_before(graft);
+
+  return node;
+}
+
+/// Add nodes for copying from the device after "node"
+static isl::schedule_node addCopyFromDevice(isl::schedule_node node) {
+
+  isl::space space;
+  isl::union_set domain;
+  isl::schedule_node graft;
+
+  space = isl::space(node.get_ctx(), 0, 0);
+  space = space.set_tuple_name(isl::dim::set, "copy_from_device");
+  domain = isl::union_set(isl::set::universe(space));
+  graft = isl::schedule_node::from_domain(domain);
+
+  node = node.graft_after(graft);
+
+  return node;
+}
+
+
+/// Add nodes to delimiting a kernel that will be swapped with a function
+/// call to cuBLAS.
+static isl::schedule_node addKernelBoundaries(isl::schedule_node node) {
+
+  isl::space space;
+  isl::union_set domain;
+  isl::schedule_node graft;
+
+  space = isl::space(node.get_ctx(), 0, 0);
+  space = space.set_tuple_name(isl::dim::set, "kernel_start");
+  domain = isl::union_set(isl::set::universe(space));
+  graft = isl::schedule_node::from_domain(domain);
+
+  node = node.graft_before(graft);
+
+  space = isl::space(node.get_ctx(), 0, 0);
+  space = space.set_tuple_name(isl::dim::set, "kernel_end");
+  domain = isl::union_set(isl::set::universe(space));
+  graft = isl::schedule_node::from_domain(domain);
+
+  node = node.graft_after(graft);
+
+  return node;
+}
+
+/// Add node for inserting cuBLAS handles.
+//static isl::schedule_node addCuBLASHandles(isl::schedule_node node) {
+//
+//  isl::space space;
+//  isl::union_set domain;
+//  isl::schedule_node graft;
+//
+//  space = isl::space(node.get_ctx(), 0, 0);
+//  space = space.set_tuple_name(isl::dim::set, "cuBLAS_manage_init");
+//  domain = isl::union_set(isl::set::universe(space));
+//  graft = isl::schedule_node::from_domain(domain);
+//
+//  node = node.graft_before(graft);
+//
+//  space = isl::space(node.get_ctx(), 0, 0);
+//  space = space.set_tuple_name(isl::dim::set, "cuBLAS_tear_down");
+//  domain = isl::union_set(isl::set::universe(space));
+//  graft = isl::schedule_node::from_domain(domain);
+//
+//  node = node.graft_after(graft);
+//  
+//  return node;
+//}
+
+/// Add node for inserting cuBLAS handles - start-up
+static isl::schedule_node addCuBLASHandleStartUp(isl::schedule_node node) {
+
+  isl::space space;
+  isl::union_set domain;
+  isl::schedule_node graft;
+
+  space = isl::space(node.get_ctx(), 0, 0);
+  space = space.set_tuple_name(isl::dim::set, "cuBLAS_manage_init");
+  domain = isl::union_set(isl::set::universe(space));
+  graft = isl::schedule_node::from_domain(domain);
+
+  node = node.graft_before(graft);
+  return node;
+}
+
+/// Add node for inserting cuBLAS handles - tear-down
+static isl::schedule_node addCuBLASHandleTearDown(isl::schedule_node node) {
+  
+  isl::space space;
+  isl::union_set domain;
+  isl::schedule_node graft;
+
+  space = isl::space(node.get_ctx(), 0, 0);
+  space = space.set_tuple_name(isl::dim::set, "cuBLAS_tear_down");
+  domain = isl::union_set(isl::set::universe(space));
+  graft = isl::schedule_node::from_domain(domain);
+
+  node = node.graft_after(graft);
+  return node;
+}
+
+static std::string codeGenGPU(isl::ast_build astBuild, isl::ast_node node,
+                              pet_stmt *stmt, void *user) {
+
+  auto t = static_cast<struct payloadCodegen*>(user);
+  
+  auto schedule = astBuild.get_schedule();
+  auto name = isl::set(schedule.domain()).get_tuple_id().get_name();
+  if(name == "cuBLAS_manage_init") {
+    return macroCuBLASHandleInit(2);
+  }
+  if(name == "cuBLAS_tear_down") {
+    return macroCuBLASHandleTearDown(2);
+  }
+  if(name == "kernel_start") {
+    return "kernel_start";
+  }
+  if(name == "kernel_end") {
+    return "kernel_end";
+  }
+  if(name == "copy_from_device") {
+    return copyFromDevice(t,2);
+  }
+  if(name == "copy_to_device") {
+    return copyToDevice(t,2);
+  }
+  else {
+    return "I will be removed :(";
+  }
+}
+
+// mark the array with id "t" with the mark "m"
+//void assignTypeArray(std::string t, ArrayType m, std::vector<GpuArrayInfo> &gv) {
+//
+//  for(size_t i = 0; i < gv.size(); ++i) {
+//    if(gv[i].name.compare(t) !=0) {
+//      continue;
+//    }
+//    else {
+//      if(gv[i].type == ArrayType::not_assigned) {
+//        gv[i].type = ArrayType::lhs;
+//      }
+//      else {
+//        std::cout << "not defined yet" << std::endl;
+//        ASSERT_TRUE(0);
+//      }
+//    }
+//  }
+//}
+
+
+std::pair<isl::map, bool> 
+findAccess(std::vector<GpuArrayInfo> &gv, int x, int y, isl::union_map s) {
+
+  std::vector<isl::map> allAccesses;
+  for(size_t i = 0; i < gv.size(); ++i) {
+    for(size_t j = 0; j < gv[i].accesses.size(); ++j) {
+      allAccesses.push_back(gv[i].accesses[j]);
+    }
+  }
+
+  std::vector<int> indexesDiscovered;
+
+  for(size_t i = 0; i < allAccesses.size(); ++i) {
+    isl::union_map scheduledAccess = isl::union_map(allAccesses[i]);
+    scheduledAccess.apply_domain(s);
+    isl::map m = isl::map::from_union_map(scheduledAccess);
+    isl::pw_multi_aff multiAff = isl::pw_multi_aff::from_map(m);
+    
+    if(m.dim(isl::dim::out) != 2) {
+      continue;
+    }
+    if(m.dim(isl::dim::in) != 3) {
+      continue;
+    }
+    // skip if sched and access to not belong to the same 
+    // stmt (not a good implementation).
+    isl::map schedAsMap = isl::map::from_union_map(s);
+    if(m.domain().unwrap().domain().get_tuple_id().get_name()
+       .compare(schedAsMap.get_tuple_id(isl::dim::in).get_name()) != 0) {
+      continue;
+    }
+
+    for(size_t ot = 0; ot < m.dim(isl::dim::out); ++ot) {
+      isl::pw_aff pwa = multiAff.get_pw_aff(ot);
+      pwa.foreach_piece([&](isl::set s, isl::aff a) -> void {
+        for(size_t in = 0; in < m.dim(isl::dim::in); ++in) {
+          isl::val v = a.get_coefficient_val(isl::dim::in, in);
+          if(v.is_one()) {
+            indexesDiscovered.push_back(in);
+          }
+        }
+      });
+    }
+
+    if(indexesDiscovered[0] == x && indexesDiscovered[1] == y) {
+      return std::make_pair(m, true);
+    }
+    indexesDiscovered.erase(indexesDiscovered.begin(), 
+                            indexesDiscovered.end());
+  }
+
+  return std::make_pair(nullptr, false);
+}
+
+void fillMMI(std::vector<GpuArrayInfo> &gv, MatMulInfo &MMI, isl::union_map sched) {
+ 
+  isl::map readFromC = findAccess(gv, MMI.i, MMI.j, sched).first;
+  
+  isl::map A = findAccess(gv, MMI.i, MMI.k, sched).first;
+
+  isl::map B = findAccess(gv, MMI.k, MMI.j, sched).first;
+
+  MMI.ReadFromC = getAccessName(readFromC);
+  MMI.A = getAccessName(A);
+  MMI.B = getAccessName(B);
+}
+
+std::vector<int> 
+getRowsNumber(std::vector<std::string> ids, std::vector<GpuArrayInfo> gp) {
+  
+  std::vector<int> rows;
+  for(size_t j = 0; j < ids.size(); ++j) {
+
+    for(size_t i = 0; i < gp.size(); ++i) {
+      if(gp[i].name.compare(ids[j]) != 0) {
+        continue;
+      }
+      else {
+ 
+        isl::set extent = gp[i].extent;
+        EXPECT_TRUE(extent.dim(isl::dim::out) == 2);
+
+        auto allPoints =
+          isl::map::from_domain_and_range(extent, extent);
+        isl::pw_aff min = allPoints.dim_min(0);
+        isl::pw_aff max = allPoints.dim_max(0);
+
+        EXPECT_TRUE(min.n_piece() == 1);
+        EXPECT_TRUE(max.n_piece() == 1);
+
+        isl::val min_val;
+        isl::val max_val;
+
+        min.foreach_piece([&](isl::set s, isl::aff aff) -> void {
+          min_val = aff.get_constant_val();
+        });
+        max.foreach_piece([&](isl::set s, isl::aff aff) -> void {
+          max_val = aff.get_constant_val();
+        });
+
+        max_val = max_val.sub(min_val);
+        rows.push_back(atoi(max_val.to_str().c_str()));
+      }
+    }
+  }
+  return rows;   
+}
+
+std::vector<int> 
+getColumnsNumber(std::vector<std::string> ids, std::vector<GpuArrayInfo> gp) {
+  
+  std::vector<int> columns;
+  for(size_t j = 0; j < ids.size(); ++j) {
+
+    for(size_t i = 0; i < gp.size(); ++i) {
+      if(gp[i].name.compare(ids[j])  != 0) {
+        continue;
+      }
+      else {
+        isl::set extent = gp[i].extent;
+        EXPECT_TRUE(extent.dim(isl::dim::out) == 2);
+   
+        auto allPoints =
+          isl::map::from_domain_and_range(extent, extent);
+        isl::pw_aff min = allPoints.dim_min(1);
+        isl::pw_aff max = allPoints.dim_max(1);
+
+        isl::val min_val;
+        isl::val max_val;
+
+        min.foreach_piece([&](isl::set s, isl::aff aff) -> void {
+          min_val = aff.get_constant_val();
+        });
+        max.foreach_piece([&](isl::set s, isl::aff aff) -> void {
+          max_val = aff.get_constant_val();
+        });
+
+        max_val = max_val.sub(min_val);
+        columns.push_back(atoi(max_val.to_str().c_str()));
+      }
+    }
+  }
+  return columns;
+}
+
+std::vector<int> 
+getLeadingDimension(std::vector<std::string> ids, std::vector<GpuArrayInfo> gp) {
+  return getRowsNumber(ids, gp);
+}
+
+std::vector<std::string> getConstantInnerMostLoop(std::vector<GpuArrayInfo> gp) {
+  
+  std::vector<std::string> res;
+  for(size_t i = 0; i < gp.size(); ++i) {
+    if(gp[i].n_index != 0) {
+      continue;
+    }
+    if(gp[i].accesses[0].dim(isl::dim::in) != 3) {
+      continue;
+    }
+    else {
+      res.push_back(gp[i].name);
+    }
+  }
+  return res;
+}
+
+std::vector<std::string> getConstantInitStmt(std::vector<GpuArrayInfo> gp) {
+  
+  std::vector<std::string> res;
+  for(size_t i = 0; i < gp.size(); ++i) {
+    if(gp[i].n_index != 0) { 
+      continue;
+    }
+    if(gp[i].accesses[0].dim(isl::dim::in) != 2) {
+      continue;
+    }
+    else {
+      res.push_back(gp[i].name);
+    }
+  }
+  return res;
+}
+
+std::string insertCallToCUBALS(std::string c, struct payloadCodegen *p) {
+
+  auto arrays = p->gpuArrays;
+  std::vector<MatMulInfo> MMIBatched = p->mmi;
+
+  // contains id for "A" array(s)
+  std::vector<std::string> aArrays;
+  for(size_t i = 0; i < MMIBatched.size(); ++i) {
+    aArrays.push_back(MMIBatched[i].A);
+  }
+  // contains id for "ReadFromC" array(s)
+  std::vector<std::string> readFromCArrays;
+  for(size_t i = 0; i < MMIBatched.size(); ++i) {
+    readFromCArrays.push_back(MMIBatched[i].ReadFromC);
+  }
+  // contains id for "B" array(s)
+  std::vector<std::string> bArrays;
+  for(size_t i = 0; i < MMIBatched.size(); ++i) {
+    bArrays.push_back(MMIBatched[i].B);
+  }
+  // contains id for "WriteToC" array(s)
+  std::vector<std::string> writeToCArrays;
+  for(size_t i = 0; i < MMIBatched.size(); ++i) {
+    writeToCArrays.push_back(MMIBatched[i].WriteToC);
+  }
+
+  // m: number of rows of matrix op(A) and op(C)
+  std::vector<int> mAs = getRowsNumber(aArrays, arrays);
+  std::vector<int> mCs = getRowsNumber(readFromCArrays, arrays);
+  EXPECT_TRUE(mAs == mCs);
+  EXPECT_TRUE(
+    std::adjacent_find(mAs.begin(), mAs.end(), std::not_equal_to<int>()) == mAs.end());
+  EXPECT_TRUE(
+    std::adjacent_find(mCs.begin(), mCs.end(), std::not_equal_to<int>()) == mCs.end());
+
+  // n: number of columns of matrix op(B) and op(C)
+  std::vector<int> nBs = getColumnsNumber(bArrays, arrays);
+  std::vector<int> nCs = getColumnsNumber(readFromCArrays, arrays);
+  EXPECT_TRUE(nBs == nCs);
+  EXPECT_TRUE(
+    std::adjacent_find(nBs.begin(), nBs.end(), std::not_equal_to<int>()) == nBs.end());
+  EXPECT_TRUE(
+    std::adjacent_find(nCs.begin(), nCs.end(), std::not_equal_to<int>()) == nCs.end());
+
+  // k: number of columns of matrix op(B) and op(A)
+  std::vector<int> kBs = getColumnsNumber(bArrays, arrays);
+  std::vector<int> kAs = getColumnsNumber(aArrays, arrays);
+  EXPECT_TRUE(kBs == kAs);
+  EXPECT_TRUE(
+    std::adjacent_find(kBs.begin(), kBs.end(), std::not_equal_to<int>()) == kBs.end());
+  EXPECT_TRUE(
+    std::adjacent_find(kAs.begin(), kAs.end(), std::not_equal_to<int>()) == kAs.end());
+
+  // alpha scaling factor for A*B
+  std::vector<std::string> alphas = getConstantInnerMostLoop(arrays);
+  // beta scaling factor for C
+  std::vector<std::string> betas = getConstantInitStmt(arrays);
+
+  // lda leading dimension(s) of two-dimensional array used to store the matrix A
+  std::vector<int> ldas = getLeadingDimension(aArrays, arrays);
+  EXPECT_TRUE(
+    std::adjacent_find(ldas.begin(), ldas.end(), std::not_equal_to<int>()) == ldas.end());
+
+  // ldb leading dimension(s) of two-dimensional array used to store the matrix B
+  std::vector<int> ldbs = getLeadingDimension(bArrays, arrays);
+  EXPECT_TRUE(
+    std::adjacent_find(ldbs.begin(), ldbs.end(), std::not_equal_to<int>()) == ldbs.end());
+
+  // ldc leading dimension(s) of two-dimensional array used to store the matrix C
+  std::vector<int> ldcs = getLeadingDimension(readFromCArrays, arrays);
+  EXPECT_TRUE(
+    std::adjacent_find(ldcs.begin(), ldcs.end(), std::not_equal_to<int>()) == ldcs.end());
+
+  std::string fCall;
+
+  if(MMIBatched.size() == 1) {
+
+    fCall += createIndent(2) + "cublasStat = \n ";
+    fCall += createIndent(4) + "cublasGemmEx(handle,\n"; 
+    fCall += createIndent(18) + "CUBLAS_OP_N, \n";
+    fCall += createIndent(18) + "CUBLAS_OP_N, \n";
+    fCall += createIndent(18) + conversion::to_string(mAs[0]) + ", \n";
+    fCall += createIndent(18) + conversion::to_string(nBs[0]) + ", \n";
+    fCall += createIndent(18) + conversion::to_string(kBs[0]) + ", \n";
+    if(alphas.empty()) {
+      fCall += createIndent(18) + "1" + ", \n";
+    }
+    else {
+      fCall += createIndent(18) + "&" + alphas[0] + ", \n";
+    }
+    fCall += createIndent(18) + MMIBatched[0].A + ", \n";
+    fCall += createIndent(18) + "CUDA_R_16F" + ", \n";
+    fCall += createIndent(18) + conversion::to_string(ldas[0]) + ", \n";
+    fCall += createIndent(18) + MMIBatched[0].B + ", \n";
+    fCall += createIndent(18) + "CUDA_R_16F" + ", \n";
+    fCall += createIndent(18) + conversion::to_string(ldbs[0]) + ", \n";
+    if(betas.empty()) {
+      fCall += createIndent(18) + "1" + ", \n";
+    }
+    else {
+      fCall += createIndent(18) + "&" + betas[0] + ", \n";
+    }
+    fCall += createIndent(18) + MMIBatched[0].WriteToC + ", \n";
+    fCall += createIndent(18) + "CUDA_R_16F" + ", \n";
+    fCall += createIndent(18) + conversion::to_string(ldcs[0]) + ", \n";
+    fCall += createIndent(18) + "CUDA_R_32F" + ", \n";
+    fCall += createIndent(18) + "CUBLAS_GEMM_DEFAULT);";  
+  }
+  else {
+    std::string sizeAsString = conversion::to_string(MMIBatched.size());
+
+    // array of pointers to "aArray"
+    fCall += "const void *Aarray[" + sizeAsString + "] = {";
+    for(size_t i = 0; i < aArrays.size(); ++i) {
+      if(i == aArrays.size() -1) {
+        fCall += aArrays[i] + "};" + "\n";
+      }
+      else {
+        fCall += aArrays[i] + ", ";
+      }
+    }
+
+    // array of pointers to "bArray"
+    fCall += createIndent(2) + "const void *Barray[" + sizeAsString + "] = {";
+    for(size_t i = 0; i < bArrays.size(); ++i) {
+      if(i == bArrays.size() -1) {
+        fCall += bArrays[i] + "};" + "\n";
+      }
+      else {
+        fCall += bArrays[i] + ", ";
+      }
+    }
+
+    // array of pointers to "writeToCArrays"
+    fCall += createIndent(2) + "const void *Carray[" + sizeAsString + "] = {";
+    for(size_t i = 0; i < writeToCArrays.size(); ++i) {
+      if(i == writeToCArrays.size() -1) {
+        fCall += writeToCArrays[i] + "};" + "\n";
+      }
+      else {
+        fCall += writeToCArrays[i] + ", ";
+      }
+    }
+
+    fCall += createIndent(2) + "cublasStat = \n";
+    fCall += createIndent(4) + "cublasGemmBatchedEx(handle,\n";
+    fCall += createIndent(18) + "CUBLAS_OP_N, \n";
+    fCall += createIndent(18) + "CUBLAS_OP_N, \n";
+    // the batch is considered to be uniform i.e. all instances
+    // have the same dimension (m, n, k)
+    fCall += createIndent(18) + conversion::to_string(mAs[0]) + ", \n";
+    fCall += createIndent(18) + conversion::to_string(nBs[0]) + ", \n";
+    fCall += createIndent(18) + conversion::to_string(kBs[0]) + ", \n";
+    if(alphas.empty()) {
+      fCall += createIndent(18) + "1" + ", \n";
+    }
+    else {
+      fCall += createIndent(18) + "&" + alphas[0] + ", \n";
+    }
+    fCall += createIndent(18) + "Aarray,\n";
+    fCall += createIndent(18) + "CUDA_R_16F" + ", \n"; 
+    fCall += createIndent(18) + conversion::to_string(ldas[0]) + ", \n";
+    fCall += createIndent(18) + "Barray,\n";
+    fCall += createIndent(18) + "CUDA_R_16F" + ", \n";
+    fCall += createIndent(18) + conversion::to_string(ldbs[0]) + ", \n";
+    if(betas.empty()) {
+      fCall += createIndent(18) + "1" + ", \n";
+    }
+    else {
+      fCall += createIndent(18) + "&" + betas[0] + ", \n";
+    }
+    fCall += createIndent(18) + "Carray,\n";
+    fCall += createIndent(18) + "CUDA_R_16F" + ", \n";
+    fCall += createIndent(18) + conversion::to_string(ldbs[0]) + ", \n";
+    fCall += createIndent(18) + conversion::to_string(MMIBatched.size()) + ", \n";
+    fCall += createIndent(18) + "CUDA_R_32F" + ", \n"; 
+    fCall += createIndent(18) + "CUBLAS_GEMM_DEFAULT);";
+  }
+
+  std::string startK = "kernel_start";
+  std::string endK = "kernel_end";
+  c.replace(c.find(startK),
+            c.find(endK) - c.find(startK) + endK.size(), fCall);
+  return c;
+}
+
+
+// forward declaration for test codeGenerationGPUs.
+isl::union_map addRangeId(isl::union_map umap, const std::string &tag);
+static inline isl::schedule_node
+rebuild(isl::schedule_node node,
+        const builders::ScheduleNodeBuilder &replacement);
+
+TEST(Transformers, codeGenPayload) {
   auto ctx = ScopedCtx(pet::allocCtx());
+  auto petScop = 
+    pet::Scop::parseFile(ctx, "inputs/gemm.c");
   auto scop =
-    pet::Scop::parseFile(ctx, "inputs/gemm.c").getScop();
+    petScop.getScop();
+  isl::schedule_node root = scop.schedule.get_root();
+  petScop.schedule() = root.get_schedule();
+  std::cout << petScop.codegenPayload() << std::endl;
+}
+
+std::vector<isl::schedule_node>
+findPatterns(const matchers::ScheduleNodeMatcher &m,
+             isl::schedule_node root) {
+
+  std::vector<isl::schedule_node> rootMatched;
+  std::stack<isl::schedule_node> nodeStack;
+  nodeStack.push(root);
+
+  while(nodeStack.empty() == false) {
+    root = nodeStack.top();
+    nodeStack.pop();
+
+    if(matchers::ScheduleNodeMatcher::isMatching(m, root)) {
+      rootMatched.push_back(root);
+    }
+  
+    size_t n_children =
+      static_cast<size_t>(isl_schedule_node_n_children(root.get()));
+    for(size_t i = 0; i < n_children; i++) {
+      nodeStack.push(root.child(i));
+    }
+  }
+
+  return rootMatched;
+}
+
+
+TEST(Transformers, codeGenerationGPUs_matcher) {
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto petScop = pet::Scop::parseFile(ctx, "inputs/gemm.c");
+  auto scop =
+    petScop.getScop();
+  isl::schedule_node root = scop.schedule.get_root();
+ 
+  using namespace matchers;
+
+  auto is1Dim = [&](isl::schedule_node band) {
+    
+    return true;
+  };
+
+  auto matcher =
+    band(is1Dim,
+      band(is1Dim,
+        sequence(
+          filter(leaf()),
+          filter(band(is1Dim,leaf())))));
+
+  auto gemm = findPatterns(matcher, root);
+  EXPECT_TRUE(gemm.size() == 1);
+  
+  scop = pet::Scop::parseFile(ctx, "inputs/2mm.c").getScop();
+  root = scop.schedule.get_root();
+  auto twoMM = findPatterns(matcher, root);
+  EXPECT_TRUE(twoMM.size() == 2);
+
+  scop = pet::Scop::parseFile(ctx, "inputs/3mm.c").getScop();
+  root = scop.schedule.get_root();
+  auto threeMM = findPatterns(matcher, root);
+  EXPECT_TRUE(threeMM.size() == 3);
+}
+
+/// DFS function to apply a function "fun" repeatedly.
+isl::schedule_node
+applyRepeatedly(isl::schedule_node node,
+                  const matchers::ScheduleNodeMatcher &pattern,
+                  std::function<isl::schedule_node(isl::schedule_node)> func) {
+  while (matchers::ScheduleNodeMatcher::isMatching(pattern, node)) {
+    node = func(node);
+  }
+  return node;
+}
+
+isl::schedule_node
+applyDFSPreorderRepeatedly(isl::schedule_node node,
+                             const matchers::ScheduleNodeMatcher &pattern,
+                             std::function<isl::schedule_node(isl::schedule_node)> func) {
+  node = applyRepeatedly(node, pattern, func);
+  for (int i = 0; i < node.n_children(); ++i) {
+    node = applyDFSPreorderRepeatedly(node.child(i), pattern, func)
+               .parent();
+  }
+  return node;
+}
+
+isl::schedule_node
+applyOnce(isl::schedule_node node,
+            const matchers::ScheduleNodeMatcher &pattern,
+            std::function<isl::schedule_node(isl::schedule_node)> func) {
+  if (matchers::ScheduleNodeMatcher::isMatching(pattern, node)) {
+    node = func(node);
+  }
+  return node;
+}
+
+isl::schedule_node
+applyDFSPreorderOnce(isl::schedule_node node,
+                       const matchers::ScheduleNodeMatcher &pattern,
+                       std::function<isl::schedule_node(isl::schedule_node)> func) {
+  node = applyOnce(node, pattern, func);
+  for (int i = 0; i < node.n_children(); ++i) {
+    node = applyDFSPreorderOnce(node.child(i), pattern, func).parent();
+  }
+  return node;
+}
+
+TEST(Transformers, codeGenerationGPUs_flow_doubleGEMM) {
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto petScop = pet::Scop::parseFile(ctx, "inputs/2mm.c");
+  auto scop = petScop.getScop();
+
+  isl::schedule_node root = scop.schedule.get_root();
+  isl::union_map reads = scop.reads.curry();
+  isl::union_map writes = scop.mustWrites.curry();
+
+  // matmul matcher and call back function.
+  // the callback should check that every band is 
+  // single dimensional. We also check for a matmul
+  // with initialization statement.
+  using namespace matchers;
+  auto is1Dim = [&] (isl::schedule_node band) {
+    return true;
+  };
+  auto matcherGEMM =
+    band(is1Dim,
+      band(is1Dim,
+        sequence(
+          filter(leaf()),
+          filter(band(is1Dim, leaf())))));
+
+  std::vector<isl::schedule_node> matches = findPatterns(matcherGEMM, root);
+  EXPECT_TRUE(matches.size() == 2);
+
+  // collect global array info from the entire scop.
+  std::vector<GpuArrayInfo> arrayInfo = collectArrayInfo(scop);
+
+  // for each matmul detected we obtain the accesses that belong to 
+  // the core statement. On these accesses we run the matchers to make
+  // sure the pattern is the matmul one.
+  // Currently, we are not looking at the stride, but this is a trivial 
+  // extension of the current flow, since the stride can be checked with
+  // the matchers as well.
+  std::vector<MatMulInfo> MMIBatched;
+  for(size_t matmulIndex = 0; matmulIndex < matches.size(); ++matmulIndex) {
+    isl::schedule_node leafInit = 
+      matches[matmulIndex].child(0).child(0).child(0).child(0);
+    isl::schedule_node leafCore = 
+      matches[matmulIndex].child(0).child(0).child(1).child(0).child(0);
+    isl::union_map prefixSchedule = leafInit.get_prefix_schedule_union_map();
+    isl::union_map accessesLeafInitStmtR = applySchedule(prefixSchedule, reads);
+    isl::union_map accessesLeafInitStmtW = applySchedule(prefixSchedule, writes);
+    prefixSchedule = leafCore.get_prefix_schedule_union_map();
+    isl::union_map accessesLeafCoreStmtR = applySchedule(prefixSchedule, reads);
+    isl::union_map accessesLeafCoreStmtW = applySchedule(prefixSchedule, writes);
+    accessesLeafCoreStmtR = accessesLeafCoreStmtR.subtract(accessesLeafInitStmtR);
+    accessesLeafCoreStmtW = accessesLeafCoreStmtW.subtract(accessesLeafInitStmtW);
+
+    using namespace matchers;
+    auto _i = placeholder(ctx);
+    auto _j = placeholder(ctx);
+    auto _k = placeholder(ctx);
+    auto _ii = placeholder(ctx);
+    auto _jj = placeholder(ctx);
+
+    auto _A = arrayPlaceholder();
+    auto _B = arrayPlaceholder();
+    auto _C = arrayPlaceholder();
+
+    auto psRead =
+      allOf(access(_A, _i, _j), access(_B, _i, _k), access(_C, _k, _j));
+    auto readMatches = match(accessesLeafCoreStmtR, psRead);
+    ASSERT_EQ(readMatches.size(), 1u);
+    auto psWrite = allOf(access(_A, _ii, _jj));
+    auto writeMatches = match(accessesLeafCoreStmtW, psWrite);
+    ASSERT_EQ(writeMatches.size(), 1u);
+
+    // check index for read and write are equal
+    ASSERT_TRUE(writeMatches[0][_ii].payload().inputDimPos_ ==
+                readMatches[0][_i].payload().inputDimPos_);
+    ASSERT_TRUE(writeMatches[0][_jj].payload().inputDimPos_ ==
+                readMatches[0][_j].payload().inputDimPos_);
+
+    std::vector<isl::space> v_space = writeMatches[0][_ii].candidateSpaces();
+    ASSERT_TRUE(v_space.size() == 1);
+
+    // fill the MMI structure.
+    MatMulInfo MMI;
+    MMI.WriteToC =
+      v_space[0].range().unwrap().range().get_tuple_name(isl::dim::out);
+    MMI.i = writeMatches[0][_ii].payload().inputDimPos_;
+    MMI.j = writeMatches[0][_jj].payload().inputDimPos_;
+    MMI.k = readMatches[0][_k].payload().inputDimPos_;
+    fillMMI(arrayInfo, MMI, prefixSchedule.intersect_domain(leafCore.get_domain()));
+    MMIBatched.push_back(MMI);
+  }
+
+  ASSERT_TRUE(MMIBatched[0].WriteToC.compare("D") == 0);
+  ASSERT_TRUE(MMIBatched[0].ReadFromC.compare("D") == 0);
+  ASSERT_TRUE(MMIBatched[0].A.compare("tmp") == 0);
+  ASSERT_TRUE(MMIBatched[0].B.compare("C") == 0);
+  ASSERT_TRUE(MMIBatched[1].WriteToC.compare("tmp") == 0);
+  ASSERT_TRUE(MMIBatched[1].ReadFromC.compare("tmp") == 0);
+  ASSERT_TRUE(MMIBatched[1].A.compare("A") == 0);
+  ASSERT_TRUE(MMIBatched[1].B.compare("B") == 0);
+
+  // insert marking node for init, clean and copy to/from device.
+  root = matches[0].parent().parent();
+  root = addCuBLASHandleStartUp(root);
+  root = addCuBLASHandleTearDown(root);
+  root = addCopyToDevice(root);
+  root = addCopyFromDevice(root);
+  root = addKernelBoundaries(root); 
+  petScop.schedule() = root.get_schedule();
+  //static_cast<isl::schedule>(petScop.schedule()).dump();
+
+  payloadCodegen p = {arrayInfo, MMIBatched};
+
+  std::string codeGen = petScop.codegenPayload(codeGenGPU, &p);
+  codeGen = insertCallToCUBALS(codeGen, &p);
+  std::cout << codeGen << std::endl;
+
+}
+
+TEST(Transformers, codeGenerationGPUs_flow_singleGEMM) {
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto petScop = pet::Scop::parseFile(ctx, "inputs/gemm.c");
+  auto scop =
+    petScop.getScop();
   isl::schedule_node root = scop.schedule.get_root();
   
   isl::union_map reads = scop.reads.curry();
   isl::union_map writes = scop.mustWrites.curry();
-  std::vector<GpuArrayInfo> readInfo = getArrayInfo(scop, reads, 0);
-  std::vector<GpuArrayInfo> writeInfo = getArrayInfo(scop, writes, 1);
+  std::vector<GpuArrayInfo> arrayInfo = collectArrayInfo(scop);
+
+  ASSERT_TRUE(arrayInfo.size() == 5);
 
   // leaf init stmt
   root = root.child(0).child(0).child(0)
@@ -154,12 +1244,50 @@ TEST(Transformers, codeGenerationGPUs) {
   ASSERT_TRUE(writeMatches[0][_jj].payload().inputDimPos_ ==
               readMatches[0][_j].payload().inputDimPos_);
 
-  // cuda code-generation as done in ppcg.
-  std::string cudaCode;
-  printCudaHeader(cudaCode);
-  printCuBLASHandle(cudaCode);
-  std::cout << cudaCode << std::endl;
+
+  std::vector<isl::space> v_space = writeMatches[0][_ii].candidateSpaces();
+  ASSERT_TRUE(v_space.size() == 1);
+
+  // layout info for matmul.
+  MatMulInfo MMI;
+
+  MMI.WriteToC = 
+    v_space[0].range().unwrap().range().get_tuple_name(isl::dim::out);
+
+
+  MMI.i = writeMatches[0][_ii].payload().inputDimPos_;
+  MMI.j = writeMatches[0][_jj].payload().inputDimPos_;
+  MMI.k = readMatches[0][_k].payload().inputDimPos_;
+ 
+  fillMMI(arrayInfo, MMI, prefixSchedule);    
+ 
+  ASSERT_TRUE(MMI.A.compare("A") == 0); 
+  ASSERT_TRUE(MMI.B.compare("B") == 0);
+  ASSERT_TRUE(MMI.ReadFromC.compare("C") == 0);
+  ASSERT_TRUE(MMI.WriteToC.compare("C") == 0);
   
+  // go to matmul node.
+  isl::schedule_node node = root.root().child(0);
+  isl::union_set domain = node.get_domain();
+  bool singleStatement = (domain.n_set() == 1);
+  ASSERT_EQ(singleStatement, false);
+
+  node = addCuBLASHandleStartUp(node);
+  node = addCuBLASHandleTearDown(node);
+  node = addCopyToDevice(node);
+  node = addCopyFromDevice(node);
+  node = addKernelBoundaries(node);
+
+  petScop.schedule() = node.get_schedule();
+  static_cast<isl::schedule>(petScop.schedule()).dump();
+
+  std::vector<MatMulInfo> MMIBatched;
+  MMIBatched.push_back(MMI);
+  payloadCodegen p = {arrayInfo, MMIBatched};
+
+  std::string codeGen = petScop.codegenPayload(codeGenGPU, &p);
+  codeGen = insertCallToCUBALS(codeGen, &p);
+  std::cout << codeGen << std::endl;
 }
 
 TEST(Transformers, checkPetArrayExtraction) {
@@ -173,77 +1301,77 @@ TEST(Transformers, checkPetArrayExtraction) {
   }
 }
 
-std::pair<bool, isl::schedule_node> 
-  getTopmostBand(const matchers::ScheduleNodeMatcher &m, isl::schedule_node root) {
-
-  assert(root.get() && "invalid node");
-  std::pair <bool, isl::schedule_node> res;
-
-  std::stack<isl::schedule_node> nodeStack;
-  nodeStack.push(root);
-
-  while(nodeStack.empty() == false) {
-    isl::schedule_node node = nodeStack.top();
-    nodeStack.pop();
-    
-    if(matchers::ScheduleNodeMatcher::isMatching(m, node)) {
-      res = std::make_pair(true, node);
-      return res;
-    }
-
-    size_t n_children =
-      static_cast<size_t>(isl_schedule_node_n_children(node.get()));
-    for(size_t i=0; i<n_children; ++i) {
-      nodeStack.push(node.child(i));
-    }
-  }
-  res = std::make_pair(false, nullptr);
-  return res;
-}
+//std::pair<bool, isl::schedule_node> 
+//  getTopmostBand(const matchers::ScheduleNodeMatcher &m, isl::schedule_node root) {
+//
+//  assert(root.get() && "invalid node");
+//  std::pair <bool, isl::schedule_node> res;
+//
+//  std::stack<isl::schedule_node> nodeStack;
+//  nodeStack.push(root);
+//
+//  while(nodeStack.empty() == false) {
+//    isl::schedule_node node = nodeStack.top();
+//    nodeStack.pop();
+//    
+//    if(matchers::ScheduleNodeMatcher::isMatching(m, node)) {
+//      res = std::make_pair(true, node);
+//      return res;
+//    }
+//
+//    size_t n_children =
+//      static_cast<size_t>(isl_schedule_node_n_children(node.get()));
+//    for(size_t i=0; i<n_children; ++i) {
+//      nodeStack.push(node.child(i));
+//    }
+//  }
+//  res = std::make_pair(false, nullptr);
+//  return res;
+//}
  
 
-TEST(Transformers, countBandNodes) {
-  auto ctx = ScopedCtx(pet::allocCtx());
-  auto scop =
-    pet::Scop::parseFile(ctx, "inputs/nested.c").getScop();
-  isl::schedule_node root = scop.schedule.get_root();
-  
-  isl::schedule_node parent, child;
-  auto matcher = [&]() {
-    using namespace matchers;
-    return band(parent, anyTree(child));
-  }();
+//TEST(Transformers, countBandNodes) {
+//  auto ctx = ScopedCtx(pet::allocCtx());
+//  auto scop =
+//    pet::Scop::parseFile(ctx, "inputs/nested.c").getScop();
+//  isl::schedule_node root = scop.schedule.get_root();
+//  
+//  isl::schedule_node parent, child;
+//  auto matcher = [&]() {
+//    using namespace matchers;
+//    return band(parent, anyTree(child));
+//  }();
+//
+//
+//  int counter = 0;
+//  std::pair<bool, isl::schedule_node> res;
+//  do {
+//    res = getTopmostBand(matcher, root);
+//    if(res.second.get()) {
+//      counter++;
+//      root = res.second.child(0);
+//    }
+//  } while(res.first);
+//
+//  ASSERT_TRUE(counter == 4);
+//}
 
-
-  int counter = 0;
-  std::pair<bool, isl::schedule_node> res;
-  do {
-    res = getTopmostBand(matcher, root);
-    if(res.second.get()) {
-      counter++;
-      root = res.second.child(0);
-    }
-  } while(res.first);
-
-  ASSERT_TRUE(counter == 4);
-}
-
-TEST(Transformers, locateTopMostBand) {
-  auto ctx = ScopedCtx(pet::allocCtx());
-  auto scop =
-    pet::Scop::parseFile(ctx, "inputs/nested.c").getScop();
-  isl::schedule_node root = scop.schedule.get_root();
-  
-  isl::schedule_node parent, child;
-  auto matcher = [&]() {
-    using namespace matchers;
-    return band(parent, anyTree(child));
-  }();
-
-  auto res = getTopmostBand(matcher, root);
-
-  ASSERT_TRUE(res.second.get());
-}
+//TEST(Transformers, locateTopMostBand) {
+//  auto ctx = ScopedCtx(pet::allocCtx());
+//  auto scop =
+//    pet::Scop::parseFile(ctx, "inputs/nested.c").getScop();
+//  isl::schedule_node root = scop.schedule.get_root();
+//  
+//  isl::schedule_node parent, child;
+//  auto matcher = [&]() {
+//    using namespace matchers;
+//    return band(parent, anyTree(child));
+//  }();
+//
+//  auto res = getTopmostBand(matcher, root);
+//
+//  ASSERT_TRUE(res.second.get());
+//}
   
 
 TEST(Transformers, ExtractMultipleScop) {
