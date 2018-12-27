@@ -4,6 +4,13 @@
 #include <isl/cpp.h>
 
 //
+// overloading << for isl::pw_multi_aff 
+inline auto& operator<<(std::ostream &OS, isl::pw_multi_aff pwa) {
+  OS << pwa.to_str() << "\n";
+  return OS;
+}
+
+//
 // overloading << for printing isl::val
 inline auto& operator<<(std::ostream &OS, isl::val v) {
   OS << v.to_str() << "\n";
