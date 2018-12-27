@@ -49,6 +49,8 @@ std::string printScheduledPetStmt(isl::ast_build astBuild, isl::ast_node node,
                                   pet_stmt *stmt);
 std::string printPetAndCustomComments(isl::ast_build build, isl::ast_node node,
                                       pet_stmt *stmt);
+std::string printPetAndCustomCommentsWithPayload(isl::ast_build build, isl::ast_node node,
+                                      pet_stmt *stmt, void *user);
 
 class Scop {
 public:
@@ -74,6 +76,9 @@ public:
   std::string codegen(
       std::function<std::string(isl::ast_build, isl::ast_node, pet_stmt *stmt)>
           custom = printPetAndCustomComments) const;
+  std::string codegenPayload(
+      std::function<std::string(isl::ast_build, isl::ast_node, pet_stmt *stmt, void *user)>
+          custom = printPetAndCustomCommentsWithPayload, void *user = nullptr ) const;
 
   /// Find a statement by its identifier.
   pet_stmt *stmt(isl::id id) const;

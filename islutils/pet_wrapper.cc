@@ -84,6 +84,15 @@ struct ScopAndStmtsWrapper {
   std::function<std::string(isl::ast_build, isl::ast_node, pet_stmt *)>
       stmtCodegen;
 };
+
+struct ScopAndStmtsWrapperWithPayload {
+  const Scop &scop;
+  std::vector<StmtDescr> &stmts;
+  std::function<std::string(isl::ast_build, isl::ast_node, pet_stmt *, void *user)>
+      stmtCodegen;
+  void *user;
+};
+
 } // namespace
 
 // Transform an array subscript of a reference from Domain[...] -> Access[...]
@@ -187,12 +196,16 @@ std::string printPetAndCustomComments(isl::ast_build build, isl::ast_node node,
               : printIdAsComment(node);
 }
 
+std::string printPetAndCustomCommentsWithPayload(isl::ast_build build, isl::ast_node node,
+                                                 pet_stmt *stmt, void *user) {
+  return printPetAndCustomComments(build, node, stmt);
+}
+
 static __isl_give isl_printer *
 printStatement(__isl_take isl_printer *p,
                __isl_take isl_ast_print_options *options,
                __isl_keep isl_ast_node *node, void *user) {
   auto wrapper = static_cast<ScopAndStmtsWrapper *>(user);
-
   isl_ast_print_options_free(options);
   isl::id occurrenceId = isl::manage_copy(node).get_annotation();
   const StmtDescr &descr = findStmtDescriptor(*wrapper, occurrenceId);
@@ -238,6 +251,73 @@ std::string Scop::codegen(
   isl_printer_free(prn);
   return result;
 }
+
+// Find a statement descriptor by its occurrence identifier.
+// The descriptor is expected to exist.
+static const StmtDescr &findStmtDescriptorPayload(const ScopAndStmtsWrapperWithPayload &wrapper,
+                                           isl::id id) {
+  for (const auto &descr : wrapper.stmts) {
+    if (descr.occurrenceId == id) {
+      return descr;
+    }
+  }
+  ISLUTILS_DIE("could not find statement");
+  static StmtDescr dummy;
+  return dummy;
+}
+
+static __isl_give isl_printer *
+printStatementPayload(__isl_take isl_printer *p,
+               __isl_take isl_ast_print_options *options,
+               __isl_keep isl_ast_node *node, void *user) {
+  auto wrapper = static_cast<ScopAndStmtsWrapperWithPayload *>(user);
+
+  isl_ast_print_options_free(options);
+  isl::id occurrenceId = isl::manage_copy(node).get_annotation();
+  const StmtDescr &descr = findStmtDescriptorPayload(*wrapper, occurrenceId);
+
+  if (!wrapper->stmtCodegen) {
+    ISLUTILS_DIE("no statement codegen function provided");
+  }
+
+  std::string str =
+      wrapper->stmtCodegen(descr.astBuild, isl::manage_copy(node), descr.stmt, wrapper->user);
+  p = isl_printer_start_line(p);
+  p = isl_printer_print_str(p, str.c_str());
+  return isl_printer_end_line(p);
+}
+
+// Generate code for the scop given its current schedule and a given payload.
+std::string Scop::codegenPayload(
+    std::function<std::string(isl::ast_build, isl::ast_node, pet_stmt *, void *user)>
+        custom, void *user) const {
+  auto ctx = getCtx();
+  auto build = isl::ast_build::from_context(getScop().context);
+
+  // Construct the list of statement descriptors with partial schedules while
+  // building the AST.
+  std::vector<StmtDescr> statements;
+  ScopAndStmtsWrapperWithPayload wrapper{*this, statements, custom, user};
+  build = isl::manage(
+      isl_ast_build_set_at_each_domain(build.release(), at_domain, &wrapper));
+  auto astNode = build.node_from_schedule(isl::manage_copy(scop_->schedule));
+
+  // Print the AST as C code using statement descriptors to emit access
+  // expressions.
+  isl_printer *prn = isl_printer_to_str(ctx.get());
+  prn = isl_printer_set_output_format(prn, ISL_FORMAT_C);
+  // options are consumed by ast_node_print
+  isl_ast_print_options *options = isl_ast_print_options_alloc(ctx.get());
+  options =
+      isl_ast_print_options_set_print_user(options, printStatementPayload, &wrapper);
+  prn = isl_ast_node_print(astNode.get(), prn, options);
+  char *resultStr = isl_printer_get_str(prn);
+  auto result = std::string(resultStr);
+  free(resultStr);
+  isl_printer_free(prn);
+  return result;
+}
+
 
 static isl::id getStmtId(const pet_stmt *stmt) {
   isl::set domain = isl::manage_copy(stmt->domain);
