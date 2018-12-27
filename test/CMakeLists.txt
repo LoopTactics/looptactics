@@ -5,9 +5,13 @@ set(TEST_NAMES
     matcher
     builders
     transformer
-    access)
+    access
+    parser)
 
 set(TEST_INPUTS
+    3mm.c
+    2mm.c
+    gemm.c
     one-dimensional-init.c
     1mm_fused.c
     nested.c
