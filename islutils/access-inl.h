@@ -452,6 +452,31 @@ allOf(PlaceholderList<CandidatePayload, PatternPayload> arg, Args... args) {
   return ps;
 }
 
+/// overloading for build an object used to match all of the access patterns
+/// provided as argumnets in a std::vector. Individual patterns can be constructed
+/// by calling "access(...)".
+template <typename CandidatePayload, typename PatternPayload>
+PlaceholderSet<CandidatePayload, PatternPayload>
+allOf(std::vector<PlaceholderList<CandidatePayload, PatternPayload>> placeholderLists) {
+
+  PlaceholderSet<CandidatePayload, PatternPayload> ps;
+  for (const auto &pl : placeholderLists) {
+    if (pl.empty()) {
+      continue;
+    }
+
+    size_t index = containerSize(ps);
+    ps.placeholderGroups_.emplace_back();
+    for (const auto &p : pl) {
+      ps.placeholders_.push_back(p);
+      ps.placeholderGroups_.back().push_back(index);
+      ++index;
+    }
+  }
+  setupFolds(ps, ps.placeholderFolds_);
+  return ps;
+}  
+
 template <typename CandidatePayload, typename PatternPayload, typename... Args>
 PlaceholderGroupedSet<CandidatePayload, PatternPayload>
 allOf(ArrayPlaceholderList<CandidatePayload, PatternPayload> arg,
