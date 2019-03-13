@@ -40,14 +40,16 @@ set(pet_LIB "libpet.so")
 set(pet_LIBPATH "external/install-pet/lib/")
 set(pet_INCLUDE "external/install-pet/include")
 
-set(boost_LIB "libboost_program_options.so")
-set(boost_LIBPATH "external/boost_1_67_0/stage/lib")
-set(boost_INCLUDE "external/boost_1_67_0/boost")
+#set(boost_LIB "libboost_program_options.so")
+#set(boost_LIBPATH "external/boost_1_67_0/stage/lib")
+#set(boost_INCLUDE "external/boost_1_67_0/boost")
 
-set(glog_LIB "libglog.so")
-set(glog_LIBPATH "/usr/local/lib/")
+#set(glog_LIB "libglog.so")
+#set(glog_LIBPATH "/usr/local/lib/")
 
-link_directories(islutils ${isl_LIBPATH} ${pet_LIBPATH} ${boost_LIBPATH} ${glog_LIBPATH})
+#link_directories(islutils ${isl_LIBPATH} ${pet_LIBPATH} ${boost_LIBPATH} ${glog_LIBPATH})
+
+link_directories(islutils ${isl_LIBPATH} ${pet_LIBPATH})
 
 add_library(islutils
 
@@ -60,8 +62,11 @@ add_library(islutils
             islutils/access_processor.cc)
 target_include_directories(islutils PUBLIC ${CMAKE_SOURCE_DIR})
 target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})
-target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE} ${boost_include})
-target_link_libraries(islutils ${isl_LIB} ${pet_LIB} ${boost_LIB} ${glog_LIB})
+target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})
+target_link_libraries(islutils ${isl_LIB} ${pet_LIB})
+
+#target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE} ${boost_include})
+#target_link_libraries(islutils ${isl_LIB} ${pet_LIB} ${boost_LIB} ${glog_LIB})
 
 add_subdirectory(test)
 add_subdirectory(docs)
