@@ -43,6 +43,9 @@
 #else
 #include <memory>
 #endif
+#ifdef HAVE_LLVM_OPTION_ARG_H
+#include <llvm/Option/Arg.h>
+#endif
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/ManagedStatic.h>
 #include <llvm/Support/Host.h>
@@ -90,6 +93,7 @@
 
 #include <pet.h>
 
+#include "clang_compatibility.h"
 #include "id.h"
 #include "options.h"
 #include "scan.h"
@@ -100,6 +104,9 @@
 using namespace std;
 using namespace clang;
 using namespace clang::driver;
+#ifdef HAVE_LLVM_OPTION_ARG_H
+using namespace llvm::opt;
+#endif
 
 #ifdef HAVE_ADT_OWNINGPTR_H
 #define unique_ptr	llvm::OwningPtr
@@ -661,8 +668,8 @@ struct PetASTConsumer : public ASTConsumer {
 		if (scops.list.size() == 0)
 			return;
 
-		start = SM.getFileOffset(fd->getLocStart());
-		end = SM.getFileOffset(fd->getLocEnd());
+		start = SM.getFileOffset(begin_loc(fd));
+		end = SM.getFileOffset(end_loc(fd));
 
 		for (it = scops.list.begin(); it != scops.list.end(); ++it) {
 			ScopLoc loc = *it;
@@ -702,6 +709,8 @@ struct PetASTConsumer : public ASTConsumer {
 					    isl_union_map_copy(vb),
 					    independent);
 				scop = ps.scan(fd);
+				if (!scop)
+					continue;
 				call_fn(scop);
 				continue;
 			}
@@ -766,7 +775,7 @@ struct MyDiagnosticPrinter : public TextDiagnosticPrinter {
 	virtual void HandleDiagnostic(DiagnosticsEngine::Level level,
 					const DiagnosticInfo &info) {
 		if (info.getID() == diag::ext_implicit_function_decl &&
-		    info.getNumArgs() == 1 &&
+		    info.getNumArgs() >= 1 &&
 		    info.getArgKind(0) == DiagnosticsEngine::ak_identifierinfo &&
 		    is_implicit(info.getArgIdentifier(0), pencil))
 			/* ignore warning */;

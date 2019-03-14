@@ -24,7 +24,6 @@ ExternalProject_Add(pet
      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/pet
      BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/build-pet
      INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/install-pet
-     UPDATE_COMMAND ./autogen.sh
      CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --with-isl-prefix=${CMAKE_CURRENT_SOURCE_DIR}/external/install-isl --with-isl=system
      BUILD_COMMAND make
      EXCLUDE_FROM_ALL 1
@@ -57,9 +56,7 @@ add_library(islutils
             islutils/builders.cc
             islutils/pet_wrapper.cc
             islutils/access_patterns.cc
-            islutils/common.cc
-            islutils/cpu.cc
-            islutils/access_processor.cc)
+            islutils/common.cc)
 target_include_directories(islutils PUBLIC ${CMAKE_SOURCE_DIR})
 target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})
 target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})

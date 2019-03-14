@@ -1374,26 +1374,26 @@ TEST(Transformers, checkPetArrayExtraction) {
 //}
   
 
-TEST(Transformers, ExtractMultipleScop) {
-  auto ctx = ScopedCtx(pet::allocCtx());
-  std::string in = "inputs/doubleScop.c";
-  ScopContainer c;
-  c = pet::Scop::parseMultipleScop(ctx, in);  
-  ASSERT_TRUE(c.c.size() == 2);
-
-  auto pet_scop = pet::Scop(c.c[0]);
-  std::string transpose = "C[c0][c1] = D[c1][c0];";
-  std::string result = pet_scop.codegen();
-  auto stmt = result.find(transpose);
-  ASSERT_TRUE(stmt != std::string::npos);
-
-  auto pet_scop_following = pet::Scop(c.c[1]);
-  std::string stencil = 
-    "B[c1] = (0.33333 * ((A[c1 - 1] + A[c1]) + A[c1 + 1]));";
-  result = pet_scop_following.codegen();
-  stmt = result.find(stencil);
-  ASSERT_TRUE(stmt != std::string::npos);
-}
+//TEST(Transformers, ExtractMultipleScop) {
+//  auto ctx = ScopedCtx(pet::allocCtx());
+//  std::string in = "inputs/doubleScop.c";
+//  ScopContainer c;
+//  c = pet::Scop::parseMultipleScop(ctx, in);  
+//  ASSERT_TRUE(c.c.size() == 2);
+//
+//  auto pet_scop = pet::Scop(c.c[0]);
+//  std::string transpose = "C[c0][c1] = D[c1][c0];";
+//  std::string result = pet_scop.codegen();
+//  auto stmt = result.find(transpose);
+//  ASSERT_TRUE(stmt != std::string::npos);
+//
+//  auto pet_scop_following = pet::Scop(c.c[1]);
+//  std::string stencil = 
+//    "B[c1] = (0.33333 * ((A[c1 - 1] + A[c1]) + A[c1 + 1]));";
+// result = pet_scop_following.codegen();
+//  stmt = result.find(stencil);
+//  ASSERT_TRUE(stmt != std::string::npos);
+//}
   
 TEST(Transformer, Capture) {
   isl::schedule_node bandNode, filterNode1, filterNode2, filterSubtree;
