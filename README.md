@@ -16,9 +16,15 @@ make
 
 If it does not find clang headers try:
 ```sh
-export CPLUS_INCLUDE_PATH= /whereLLVMisLocated/llvm_build/tools/clang/include/
-export CPLUS_INCLUDE_PATH=/whereLLVMisLocated/llvm/tools/clang/include/:$CPLUS_INCLUDE_PATH
+update me.
 ```
 
 Brief explanation:
 This is the matchers/builder framework to be used as a source-to-source compiler.
+
+Issues:
+Not working with Clang/LLVM 9.0
+
+Tested:
+Clang/LLVM 7.0
+gcc 5.4.0 20160609
