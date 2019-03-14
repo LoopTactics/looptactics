@@ -1,6 +1,9 @@
 [submodule "external/isl"]
 	path = external/isl
 	url = http://repo.or.cz/isl.git
+[submodule "external/pet/isl"]
+  path = external/pet/isl
+  url = http://repo.or.cz/isl.git
 [submodule "external/googletest"]
 	path = external/googletest
 	url = https://github.com/google/googletest.git
