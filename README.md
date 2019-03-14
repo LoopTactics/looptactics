@@ -16,7 +16,9 @@ make
 
 If it does not find clang headers try:
 ```sh
-update me.
+PATH=/whereLLVMisInstalled/bin
+LD_LIBRARY_PATH=/whereLLVMisInstalled/lib
+CPLUS_INCLUDE_PATH=/whereLLVMisInstalled/include
 ```
 
 Brief explanation:
