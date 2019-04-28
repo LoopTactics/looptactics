@@ -18,7 +18,6 @@ std::ofstream get_output_file(std::string in, std::string out) {
     out.replace(out.find('.'), in.length(), extension);
   }
 
-  LOG(INFO) << "output file name :" << out; 
   of.open(out);
   return of;
 }

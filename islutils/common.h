@@ -3,7 +3,6 @@
 
 #include <cassert>
 #include <fstream>
-#include <glog/logging.h>
 #include <islutils/builders.h>
 #include <islutils/ctx.h>
 #include <islutils/matchers.h>

@@ -1,6 +1,9 @@
 [submodule "external/isl"]
 	path = external/isl
 	url = http://repo.or.cz/isl.git
+[submodule "external/haystack"]
+  path = external/haystack
+  url = https://github.com/spcl/haystack.git
 [submodule "external/pet/isl"]
   path = external/pet/isl
   url = http://repo.or.cz/isl.git
