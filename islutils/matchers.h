@@ -252,6 +252,53 @@ hasSibling(const ScheduleNodeMatcher &siblingMatcher);
 std::function<bool(isl::schedule_node)>
 hasDescendant(const ScheduleNodeMatcher &descendantMatcher);
 
+/// And between callbacks function.
+/// You can use it as below:
+/// ~~~~~
+/// band(_and([](isl::schedule_node n) { 
+///               / * callback 1 */      
+///               return true; 
+///           },
+///           [](isl::schedule_node n) {
+///               /* callback 2 */
+///               return true;
+///           }),leaf());
+/// ~~~~~~
+template <typename... Args>
+std::function<bool(isl::schedule_node)>
+_and(Args... args) {
+
+  std::vector<std::function<bool(isl::schedule_node)>> vec = {args...};
+
+  return [vec](isl::schedule_node node) {
+    std::function<bool(isl::schedule_node)> tmp = vec[0];
+    bool result = tmp(node);
+    for (size_t i = 1; i < vec.size(); i++) {
+      tmp = vec[i];
+      result = result and tmp(node);
+    }
+    return result;
+  };
+}
+
+/// Or between callbacks functions.
+template <typename... Args>
+std::function<bool(isl::schedule_node)>
+_or(Args... args) {
+
+  std::vector<std::function<bool(isl::schedule_node)>> vec = {args...};
+
+  return [vec](isl::schedule_node node) {
+    std::function<bool(isl::schedule_node)> tmp = vec[0];
+    bool result = tmp(node);
+    for (size_t i = 1; i < vec.size(); i++) {
+      tmp = vec[i];
+      result = result or tmp(node);
+    }
+    return result;
+  };
+}
+  
 } // namespace matchers
 
 #include "matchers-inl.h"

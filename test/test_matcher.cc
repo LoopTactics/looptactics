@@ -86,6 +86,50 @@ TEST(TreeMatcher, AnyMatchesLeaf) {
   EXPECT_TRUE(ScheduleNodeMatcher::isMatching(matcher, node.child(0)));
 }
 
+TEST(TreeMatcher, OrOperatorCallback) {
+ 
+  using namespace matchers;
+  // clang-format off
+  auto matcher =
+    band(_or([](isl::schedule_node n) { 
+                return false; 
+              },
+              [](isl::schedule_node n) {
+                return true; 
+             }),
+      sequence(
+        filter(
+          leaf()),
+        filter(
+          band(anyTree()))));
+  // clang-format off
+
+  auto node = makeGemmTree();
+  EXPECT_TRUE(ScheduleNodeMatcher::isMatching(matcher, node.child(0)));
+}
+
+TEST(TreeMatcher, AndOperatorCallback) {
+
+  using namespace matchers;
+  // clang-format off
+  auto matcher =
+    band(_and([](isl::schedule_node n) {  
+                  return true;
+                },
+                [](isl::schedule_node n) {
+                  return true;
+                }),
+      sequence(
+        filter(
+          leaf()),
+        filter(
+          band(anyTree()))));
+  // clang-format off
+  
+  auto node = makeGemmTree();
+  EXPECT_TRUE(ScheduleNodeMatcher::isMatching(matcher, node.child(0)));
+}
+                
 TEST(TreeMatcher, LeafMatchesLeaf) {
   using namespace matchers;
   // clang-format off
