@@ -255,9 +255,9 @@ hasDescendant(const ScheduleNodeMatcher &descendantMatcher);
 /// And between callbacks function.
 /// You can use it as below:
 /// ~~~~~
-/// band(_and([](isl::schedule_node n) { 
-///               / * callback 1 */      
-///               return true; 
+/// band(_and([](isl::schedule_node n) {
+///               / * callback 1 */
+///               return true;
 ///           },
 ///           [](isl::schedule_node n) {
 ///               /* callback 2 */
@@ -265,8 +265,7 @@ hasDescendant(const ScheduleNodeMatcher &descendantMatcher);
 ///           }),leaf());
 /// ~~~~~~
 template <typename... Args>
-std::function<bool(isl::schedule_node)>
-_and(Args... args) {
+std::function<bool(isl::schedule_node)> _and(Args... args) {
 
   std::vector<std::function<bool(isl::schedule_node)>> vec = {args...};
 
@@ -283,8 +282,7 @@ _and(Args... args) {
 
 /// Or between callbacks functions.
 template <typename... Args>
-std::function<bool(isl::schedule_node)>
-_or(Args... args) {
+std::function<bool(isl::schedule_node)> _or(Args... args) {
 
   std::vector<std::function<bool(isl::schedule_node)>> vec = {args...};
 
@@ -298,7 +296,7 @@ _or(Args... args) {
     return result;
   };
 }
-  
+
 } // namespace matchers
 
 #include "matchers-inl.h"
