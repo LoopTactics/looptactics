@@ -54,15 +54,16 @@ template <typename CandidatePayload, typename PatternPayload>
 inline bool hasNoDuplicateAssignments(
     const std::vector<DimCandidate<CandidatePayload>> &combination,
     const PlaceholderSet<CandidatePayload, PatternPayload> &ps) {
-  return areFoldsValid(combination, ps.placeholderFolds_,
-                       [](const DimCandidate<CandidatePayload> &left,
-                          const DimCandidate<CandidatePayload> &right) {
-                         return left.isEqualModuloMap(right);
-                       },
-                       [](const DimCandidate<CandidatePayload> &left,
-                          const DimCandidate<CandidatePayload> &right) {
-                         return !left.isEqualModuloMap(right);
-                       });
+  return areFoldsValid(
+      combination, ps.placeholderFolds_,
+      [](const DimCandidate<CandidatePayload> &left,
+         const DimCandidate<CandidatePayload> &right) {
+        return left.isEqualModuloMap(right);
+      },
+      [](const DimCandidate<CandidatePayload> &left,
+         const DimCandidate<CandidatePayload> &right) {
+        return !left.isEqualModuloMap(right);
+      });
 }
 
 // All placeholders in a group are either not yet matched, or matched the same
@@ -176,17 +177,18 @@ bool PlaceholderGroupedSet<CandidatePayload, PatternPayload>::
   return static_cast<const PlaceholderSet<CandidatePayload, PatternPayload> &>(
              *this)
              .isSuitableCombination(combination) &&
-         areFoldsValid(this->placeholderGroups_, placeholderGroupFolds_,
-                       [&combination](const std::vector<size_t> &group1,
-                                      const std::vector<size_t> &group2) {
-                         return compareGroupsBelongToSameArray(
-                             group1, group2, combination, true);
-                       },
-                       [&combination](const std::vector<size_t> &group1,
-                                      const std::vector<size_t> &group2) {
-                         return compareGroupsBelongToSameArray(
-                             group1, group2, combination, false);
-                       });
+         areFoldsValid(
+             this->placeholderGroups_, placeholderGroupFolds_,
+             [&combination](const std::vector<size_t> &group1,
+                            const std::vector<size_t> &group2) {
+               return compareGroupsBelongToSameArray(group1, group2,
+                                                     combination, true);
+             },
+             [&combination](const std::vector<size_t> &group1,
+                            const std::vector<size_t> &group2) {
+               return compareGroupsBelongToSameArray(group1, group2,
+                                                     combination, false);
+             });
 }
 
 template <typename CandidatePayload, typename PatternPayload>
@@ -452,12 +454,13 @@ allOf(PlaceholderList<CandidatePayload, PatternPayload> arg, Args... args) {
   return ps;
 }
 
-/// overloading for build an object used to match all of the access patterns
-/// provided as argumnets in a std::vector. Individual patterns can be constructed
-/// by calling "access(...)".
+/// Overloading for build an object used to match all of the access patterns
+/// provided as argumnets in a std::vector. Individual patterns can be
+/// constructed by calling "access(...)".
 template <typename CandidatePayload, typename PatternPayload>
 PlaceholderSet<CandidatePayload, PatternPayload>
-allOf(std::vector<PlaceholderList<CandidatePayload, PatternPayload>> placeholderLists) {
+allOf(std::vector<PlaceholderList<CandidatePayload, PatternPayload>>
+          placeholderLists) {
 
   PlaceholderSet<CandidatePayload, PatternPayload> ps;
   for (const auto &pl : placeholderLists) {
@@ -475,8 +478,11 @@ allOf(std::vector<PlaceholderList<CandidatePayload, PatternPayload>> placeholder
   }
   setupFolds(ps, ps.placeholderFolds_);
   return ps;
-}  
+}
 
+/// Build an object used to match all of the access patterns provided as
+/// arguments. Individual patterns can be constructed by calling "access(...)".
+/// In this case we also take into accoun the ArrayPlaceholder.
 template <typename CandidatePayload, typename PatternPayload, typename... Args>
 PlaceholderGroupedSet<CandidatePayload, PatternPayload>
 allOf(ArrayPlaceholderList<CandidatePayload, PatternPayload> arg,
@@ -494,10 +500,31 @@ allOf(ArrayPlaceholderList<CandidatePayload, PatternPayload> arg,
   return pgs;
 }
 
+/// Overloading for building an object used to match all of the access patterns
+/// provided as arguments. Individual patterns can be constructed by calling
+/// "access(...)". In this case we also take into accoun the ArrayPlaceholder.
+template <typename CandidatePayload, typename PatternPayload, typename... Args>
+PlaceholderGroupedSet<CandidatePayload, PatternPayload>
+allOf(std::vector<ArrayPlaceholderList<CandidatePayload, PatternPayload>>
+          arrayPl) {
+
+  std::vector<PlaceholderList<CandidatePayload, PatternPayload>> pl = {};
+  for (size_t i = 0; i < arrayPl.size(); i++)
+    pl.push_back(arrayPl[i].list);
+
+  auto pgs = PlaceholderGroupedSet<CandidatePayload, PatternPayload>(allOf(pl));
+  std::vector<ArrayPlaceholder> ap = {};
+  for (size_t i = 0; i < arrayPl.size(); i++)
+    ap.push_back(arrayPl[i].array);
+  setupFolds(ap, pgs.placeholderGroupFolds_);
+  return pgs;
+}
+
 template <typename CandidatePayload, typename PatternPayload>
 template <typename PPayload>
-MatchCandidates<CandidatePayload> Match<CandidatePayload, PatternPayload>::
-operator[](const Placeholder<CandidatePayload, PPayload> &pl) const {
+MatchCandidates<CandidatePayload>
+    Match<CandidatePayload, PatternPayload>::operator[](
+        const Placeholder<CandidatePayload, PPayload> &pl) const {
   // If pattern_cast from PatterPayload to PPayload cannot be instantiated,
   // Placeholder<CandidatePayload, PPayload> cannot be a valid key to lookup
   // match results.
