@@ -166,11 +166,11 @@ inline std::string operator-(std::string &lhs, const std::string &rhs) {
 }
 
 /// Remove pattern p from string s in a recursive way
-static std::string removeFromStringRecursive(std::string s, std::string p) {
-  while(s.find(p) != std::string::npos)
-    s.erase(s.find(p), p.length());
-  return s;
-}
+//static std::string removeFromStringRecursive(std::string s, std::string p) {
+//  while(s.find(p) != std::string::npos)
+//    s.erase(s.find(p), p.length());
+//  return s;
+//}
     
 /// split string s based in pattern regexAsString.
 /// The function returns substrings
@@ -260,7 +260,7 @@ void handlePattern(std::string pattern) {
   // split the string based on ','. The size 
   // of the resulting vector will be the number of
   // dimensions in the loop.
-  unsigned int dims = split(loopKeyword, ",").size();
+  //unsigned int dims = split(loopKeyword, ",").size();
   auto accessInfo = getAccessesInfo(pattern);  
 }
 
@@ -316,6 +316,7 @@ inline std::ostream& operator<< (std::ostream &OS, Tiling t) {
   for (size_t i = 0; i < t.idPointLoop.size(); i++)
     OS << t.idPointLoop[i] << " ";
   OS << "\n";
+  return OS;
 }
   
 bool handleTiling(std::string pattern) {
@@ -567,16 +568,75 @@ applyDFSPreorderOnce(isl::schedule_node node,
 std::vector<AccessInfo> getReadAccesses(std::vector<AccessInfo> &AI) {
   std::vector<AccessInfo> res = {};
   for (size_t i = 0; i < AI.size(); i++) {
-    if (
+    if (AI[i].accessType == AccessType::READ) {
+      res.push_back(AI[i]);
+    }
+  }
+  return res;
+}
+
+std::vector<AccessInfo> getWriteAccesses(std::vector<AccessInfo> &AI) {
+  std::vector<AccessInfo> res = {}; 
+  for (size_t i = 0; i < AI.size(); i++) {
+    if (AI[i].accessType == AccessType::WRITE) {
+      res.push_back(AI[i]);
+    }
+  }
+  return res;
+}
+
+//using namespace matchers;
+
+//template <typename CandidatePayload, typename PatternPayload>
+//class PlaceholderSet {
+//  public:
+//    Placeholder<CandidatePayload,PatternPayload> p;
+//    std::string id;
+//};
+
+//template <typename CandidatePayload, typename PatternPayload>
+//using PlaceholderSet =
+//  std::vector<std::map<std::string, Placeholder<CandidatePayload,PatternPayload>>>;
+
+//class ArrayPlaceholderSet { 
+//  public:
+//    ArrayPlaceholder ap;
+//    std::string id;
+//};
+
+//template<class T>
+//int getIndex (std::string t, std::vector<T> &p) {
+//  for (size_t i = 0; i < p.size(); i++) 
+//    if (p[i].id == t)
+//      return i;
+//  assert(0 && "index not found");
+//  return -1;
+//}
+
+
+template <typename T>
+class Pset {
+  public:
+    T t;
+    std::string id;
+};
      
-
-
 TEST(Parser, DetectPatternFromSpec) {
 
+  using namespace matchers;
   using namespace util;
   auto ctx = ScopedCtx(pet::allocCtx());
   auto petScop = pet::Scop::parseFile(ctx, "inputs/1mmWithoutInitStmt.c");
   auto scop = petScop.getScop();
+
+  using P = Placeholder<SingleInputDim,UnfixedOutDimPattern<SimpleAff>>;
+  using A = ArrayPlaceholder;
+  using ACC = ArrayPlaceholderList<SingleInputDim, FixedOutDimPattern<SimpleAff>>;
+
+  // unique placeholder and arrayPlaceholder.
+  std::vector<Pset<P>> vectorPlaceholderSet = {};
+  std::vector<Pset<A>> vectorArrayPlaceholderSet = {};
+  std::vector<ACC> vectorAccesses = {};
 
   isl::union_map reads = scop.reads.curry();
   isl::union_map writes = scop.mustWrites.curry();
@@ -601,38 +661,50 @@ TEST(Parser, DetectPatternFromSpec) {
   }
   EXPECT_TRUE(arrayIds.size() == 3);
   EXPECT_TRUE(inductionIds.size() == 3);
-  // build placeholder and arrayPlaceholder
-  
-  using namespace matchers;
 
-  typedef Placeholder<SingleInputDim,UnfixedOutDimPattern<SimpleAff>> Placeholder;
-  struct PlaceholderSet {
-    Placeholder p;
-    std::string id;
-  };
-  struct ArrayPlaceholderSet {
-    ArrayPlaceholder ap;
-    std::string id;
-  };
-  typedef ArrayPlaceholderList<SingleInputDim, FixedOutDimPattern<SimpleAff>> Access;
-  std::vector<Access> accessList = {};
+  // instantiate placeholders and arrayPlaceholder.
+  for (size_t i = 0; i < inductionIds.size(); i++) {
+    Pset<P> tmp = {placeholder(ctx), inductionIds[i]};
+    std::cout << "assigend id to placeholder is :" << inductionIds[i] << "\n";
+    vectorPlaceholderSet.push_back(tmp);
+  }
+  for (size_t i = 0; i < arrayIds.size(); i++) {
+    Pset<A> tmp = {arrayPlaceholder(), arrayIds[i]};
+    std::cout << "assigned id to arrayPlaceholder is :" << arrayIds[i] << "\n";
+    vectorArrayPlaceholderSet.push_back(tmp);
+  }
 
+  // get reads accesses.
   auto accessesRead = getReadAccesses(accesses);
+  EXPECT_TRUE(accessesRead.size() == 3);
+  std::cout << accessesRead << std::endl;
 
-  //std::vector<PlaceholderSet> vectorPlaceholderSet = {};  
-  //std::vector<ArrayPlaceholderSet> vectorArrayPlaceholderSet = {};
-  //for (size_t i = 0; i < inductionIds.size(); i++) {
-  //  PlaceholderSet tmp = {placeholder(ctx), inductionIds[i]};
-  //  vectorPlaceholderSet.push_back(tmp);
-  //}
-  //for (size_t i = 0; i < arrayIds.size(); i++) {
-  //  ArrayPlaceholderSet tmp = {arrayPlaceholder(), arrayIds[i]};
-  //  vectorArrayPlaceholderSet.push_back(tmp);
-  //}  
- 
-  // C[i][j] += A[i][k] * B[k][j]
-   
-   
+  // prepare placeholder and arrayPlaceholder.
+  vectorAccesses.push_back(access(vectorArrayPlaceholderSet[0].t,
+                                  vectorPlaceholderSet[0].t,
+                                  vectorPlaceholderSet[1].t));  
+  vectorAccesses.push_back(access(vectorArrayPlaceholderSet[1].t,
+                                  vectorPlaceholderSet[0].t,
+                                  vectorPlaceholderSet[2].t));
+  vectorAccesses.push_back(access(vectorArrayPlaceholderSet[2].t,
+                                  vectorPlaceholderSet[2].t,
+                                  vectorPlaceholderSet[1].t));
+  auto psRead = allOf(vectorAccesses);
+  auto readMatches = match(scop.reads.curry(), psRead);
+
+  auto _i = placeholder(ctx);
+  auto _j = placeholder(ctx);
+  auto _k = placeholder(ctx);
+  auto _A = arrayPlaceholder();
+  auto _B = arrayPlaceholder();
+  auto _C = arrayPlaceholder();
+  
+  auto psReadOrig = 
+    allOf(access(_A, _i, _j), access(_B, _i, _k), access(_C, _k, _j));
+  auto readMatchesOrig = match(scop.reads.curry(), psReadOrig);             
+  
+  EXPECT_EQ(readMatches[0][vectorPlaceholderSet[0].t].payload().inputDimPos_,
+            readMatchesOrig[0][_i].payload().inputDimPos_); 
 }
 
 
