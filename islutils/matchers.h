@@ -105,6 +105,8 @@ ScheduleNodeMatcher band(isl::schedule_node &capture,
 ScheduleNodeMatcher band(ScheduleNodeMatcher &&child);
 ScheduleNodeMatcher band(std::function<bool(isl::schedule_node)> callback,
                          ScheduleNodeMatcher &&child);
+ScheduleNodeMatcher band(std::function<bool(isl::schedule_node)> callback,
+                         isl::schedule_node &capture, ScheduleNodeMatcher &&child);
 
 ScheduleNodeMatcher context(isl::schedule_node &capture,
                             ScheduleNodeMatcher &&child);
@@ -199,6 +201,9 @@ class ScheduleNodeMatcher {
   friend ScheduleNodeMatcher name(isl::schedule_node &,                        \
                                   ScheduleNodeMatcher &&);                     \
   friend ScheduleNodeMatcher name(std::function<bool(isl::schedule_node)>,     \
+                                  ScheduleNodeMatcher &&);                     \
+  friend ScheduleNodeMatcher name(std::function<bool(isl::schedule_node)>,     \
+                                  isl::schedule_node &,                        \
                                   ScheduleNodeMatcher &&);
 
   DECL_FRIEND_TYPE_MATCH(band)
@@ -218,6 +223,8 @@ class ScheduleNodeMatcher {
   friend ScheduleNodeMatcher anyTree(isl::schedule_node &);
   friend ScheduleNodeMatcher anyForest();
   friend ScheduleNodeMatcher anyForest(std::vector<isl::schedule_node> &);
+  friend ScheduleNodeMatcher band(std::function<bool(isl::schedule_node)> callback,
+                         isl::schedule_node &capture, ScheduleNodeMatcher &&child);
 
 private:
   explicit ScheduleNodeMatcher(isl::schedule_node &capture)

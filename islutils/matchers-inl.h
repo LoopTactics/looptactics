@@ -100,7 +100,19 @@ DEF_TYPE_MATCHER(set, ScheduleNodeType::Set)
     ScheduleNodeMatcher matcher = name(std::move(child));                      \
     matcher.nodeCallback_ = callback;                                          \
     return matcher;                                                            \
-  }
+  }                                                                            \
+                                                                               \
+  inline ScheduleNodeMatcher name(                                             \
+    std::function<bool(isl::schedule_node)> callback,                          \
+    isl::schedule_node &capture,                                               \
+    ScheduleNodeMatcher &&child) {                                             \
+      ScheduleNodeMatcher matcher(capture);                                    \
+      matcher.current_ = type;                                                 \
+      matcher.children_.emplace_back(child);                                   \
+      matcher.capture_ = capture;                                              \
+      return matcher;                                                          \
+  }   
+      
 
 DEF_TYPE_MATCHER(band, ScheduleNodeType::Band)
 DEF_TYPE_MATCHER(context, ScheduleNodeType::Context)
@@ -112,7 +124,7 @@ DEF_TYPE_MATCHER(mark, ScheduleNodeType::Mark)
 DEF_TYPE_MATCHER(expansion, ScheduleNodeType::Expansion)
 
 #undef DEF_TYPE_MATCHER
-
+  
 inline ScheduleNodeMatcher leaf() {
   static isl::schedule_node dummyCapture;
   ScheduleNodeMatcher matcher(dummyCapture);
