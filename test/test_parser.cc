@@ -434,7 +434,7 @@ std::vector<std::string> getUniqueInductionIds(std::vector<AccessInfo> &AI) {
   return I;
 }
 
-std::vector<std::string> getArrayIds(std::vector<AccessInfo> &AI) {
+std::vector<std::string> getUniqueArrayIds(std::vector<AccessInfo> &AI) {
 
   std::vector<std::string> A = {};
   for (size_t i = 0; i < AI.size(); i++) {
@@ -585,43 +585,94 @@ std::vector<AccessInfo> getWriteAccesses(std::vector<AccessInfo> &AI) {
   return res;
 }
 
-//using namespace matchers;
-
-//template <typename CandidatePayload, typename PatternPayload>
-//class PlaceholderSet {
-//  public:
-//    Placeholder<CandidatePayload,PatternPayload> p;
-//    std::string id;
-//};
-
-//template <typename CandidatePayload, typename PatternPayload>
-//using PlaceholderSet =
-//  std::vector<std::map<std::string, Placeholder<CandidatePayload,PatternPayload>>>;
-
-//class ArrayPlaceholderSet { 
-//  public:
-//    ArrayPlaceholder ap;
-//    std::string id;
-//};
-
-//template<class T>
-//int getIndex (std::string t, std::vector<T> &p) {
-//  for (size_t i = 0; i < p.size(); i++) 
-//    if (p[i].id == t)
-//      return i;
-//  assert(0 && "index not found");
-//  return -1;
-//}
-
-
+// template class to store a placeholder and its id
+// or a arrayPlaceholder and its id.
 template <typename T>
 class Pset {
   public:
     T t;
     std::string id;
 };
+
+int getIndex(std::string s, std::vector<std::string> v) {
+  for (int i = 0; i < v.size(); i++) 
+    if (s == v[i])
+      return i;
+  assert(0 && "index not found");
+  return -1;
+}
+
+class PatternInfo {
+  public:
+    // structural properties.
+    unsigned int bandDims;
+    // access properties.
+    std::vector<AccessInfo> accesses;
+    
+  public:
+    PatternInfo () = delete;
+    PatternInfo(const PatternInfo &) = delete;
+    PatternInfo(std::string);
+};
+
+PatternInfo::PatternInfo(std::string s) {
+  assert(s.find("pattern") == std::string::npos && "not able to find keyword");
+  accesses = getAccessesInfo(s); 
+  bandDims = 3; //assumed for now.
+}
+
+TEST(Parser, DetectMatmulFromSpec) {
+
+  using namespace util;
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto petScop = pet::Scop::parseFile(ctx, "inputs/1mmWithoutInitStmt.c");
+  auto scop = petScop.getScop();
+
+  PatternInfo patternTy("C[i][j] += A[i][k] - B[k][j]");
+
+  using namespace matchers;
+  // clang-format off
+  auto matcher =
+    band(_and(
+        [&](isl::schedule_node n) {
+          if (isl_schedule_node_band_n_member(n.get()) != patternTy.bandDims)
+            return false;
+          return true;
+        },
+        [&](isl::schedule_node n) {
+          // 1. restrict the read using domain (TODO)
+          isl::union_map reads = scop.reads.curry();
+          // 2. getUnique inductionIds and ArrayIds
+          std::vector<std::string> uniqueInductionIds =
+            getUniqueInductionIds(patternTy.accesses);
+          std::vector<std::string> uniqueArrayIds =
+            getUniqueArrayIds(patternTy.accesses);
+          // 3. create placeholders and arrayPlaceholders
+          using P = Placeholder<SingleInputDim,UnfixedOutDimPattern<SimpleAff>>;
+          using A = ArrayPlaceholder; 
+          using ACC = ArrayPlaceholderList<SingleInputDim, FixedOutDimPattern<SimpleAff>>;
+          std::vector<Pset<P>> vectorPlaceholderSet = {};
+          std::vector<Pset<A>> vectorArrayPlaceholderSet = {};
+          std::vector<ACC> vectorAccesses = {};
+          // 4. instantiate the placeholders and arrayPlaceholders.
+          for (size_t i = 0; i < uniqueInductionIds.size(); i++) {
+            Pset<P> tmp = {placeholder(ctx), uniqueInductionIds[i]};
+            vectorPlaceholderSet.push_back(tmp);
+          }
+          for (size_t i = 0; i < uniqueArrayIds.size(); i++) {
+            Pset<A> tmp = {arrayPlaceholder(), uniqueArrayIds[i]};
+            vectorArrayPlaceholderSet.push_back(tmp);
+          }
+          return true;
+        }), anyTree());
+  // clang-format on
+
+  scop.schedule = collapseBands(scop.schedule);
+  isl::schedule_node root = scop.schedule.get_root();
+  EXPECT_TRUE(matchers::ScheduleNodeMatcher::isMatching(matcher, root.child(0)));
+} 
      
-TEST(Parser, DetectPatternFromSpec) {
+TEST(Parser, DetectAccessFromSpec) {
 
   using namespace matchers;
   using namespace util;
@@ -651,7 +702,7 @@ TEST(Parser, DetectPatternFromSpec) {
   // i.e., for C[i][j] +] A[i][k] * B[k][j]
   // uniqueArrayIds is {C, A, B};
   // uniqueInductionIds is {i, j, k}
-  auto arrayIds = getArrayIds(accesses);
+  auto arrayIds = getUniqueArrayIds(accesses);
   auto inductionIds = getUniqueInductionIds(accesses);
   for (size_t i = 0; i < arrayIds.size(); i++) {
     std::cout << "array :" << arrayIds[i] << std::endl;  
@@ -680,6 +731,8 @@ TEST(Parser, DetectPatternFromSpec) {
   std::cout << accessesRead << std::endl;
 
   // prepare placeholder and arrayPlaceholder.
+  // TODO: How to generalize this?
+  /*
   vectorAccesses.push_back(access(vectorArrayPlaceholderSet[0].t,
                                   vectorPlaceholderSet[0].t,
                                   vectorPlaceholderSet[1].t));  
@@ -689,6 +742,19 @@ TEST(Parser, DetectPatternFromSpec) {
   vectorAccesses.push_back(access(vectorArrayPlaceholderSet[2].t,
                                   vectorPlaceholderSet[2].t,
                                   vectorPlaceholderSet[1].t));
+  */
+  // end.
+
+  // TODO: how to generalize this to multiple arrays?
+  // This works only for 2d ones.
+  for (size_t i = 0; i < accessesRead.size(); i++) {
+    assert(accessesRead[i].inductions.size() == 2 && "Only 2D arrays");
+    vectorAccesses.push_back(access(
+      vectorArrayPlaceholderSet[getIndex(accessesRead[i].arrayId, arrayIds)].t,
+      vectorPlaceholderSet[getIndex(accessesRead[i].inductions[0], inductionIds)].t,
+      vectorPlaceholderSet[getIndex(accessesRead[i].inductions[1], inductionIds)].t));
+  }
+
   auto psRead = allOf(vectorAccesses);
   auto readMatches = match(scop.reads.curry(), psRead);
 
@@ -705,6 +771,10 @@ TEST(Parser, DetectPatternFromSpec) {
   
   EXPECT_EQ(readMatches[0][vectorPlaceholderSet[0].t].payload().inputDimPos_,
             readMatchesOrig[0][_i].payload().inputDimPos_); 
+  EXPECT_EQ(readMatches[0][vectorPlaceholderSet[1].t].payload().inputDimPos_,
+            readMatchesOrig[0][_j].payload().inputDimPos_);
+  EXPECT_EQ(readMatches[0][vectorPlaceholderSet[2].t].payload().inputDimPos_,
+            readMatchesOrig[0][_k].payload().inputDimPos_);
 }
 
 
