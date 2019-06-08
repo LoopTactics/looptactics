@@ -27,6 +27,10 @@ This is the matchers/builder framework to be used as a source-to-source compiler
 Issues:
 Not working with Clang/LLVM 9.0
 
-Tested:
-Clang/LLVM 7.0
-gcc 5.4.0 20160609
+Tested in:
+```
+clang version 6.0.0-1ubuntu2 (tags/RELEASE_600/final)
+Target: x86_64-pc-linux-gnu
+Thread model: posix
+InstalledDir: /usr/bin
+```
