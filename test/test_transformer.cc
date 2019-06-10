@@ -11,6 +11,8 @@
 #include <islutils/aff_op.h>
 #include <islutils/cout_overloading.h>
 #include <islutils/access.h>
+#include <thread>
+#include <fstream>
 
 namespace conversion {
 
@@ -1559,6 +1561,7 @@ TEST_F(Schedule, MergeBandsDeclarative) {
   expectSingleBand(node);
 }
 
+
 static isl::union_map computeAllDependences(const Scop &scop) {
   // For the simplest possible dependence analysis, get rid of reference tags.
   auto reads = scop.reads.domain_factor_domain();
@@ -2480,6 +2483,247 @@ TEST(Transformer, HenrettyDLTJacobi) {
   scop.reads = result;
 
   std::cout << petScop.codegen(codegenDLTCopies) << std::endl;
+}
+
+isl::schedule_node getMergedTree(isl::schedule_node root) {
+
+  isl::schedule_node parent, child, grandchild;
+  // Note that the lambda is called immediately and is only necessary for
+  // compound initialization (matchers are not copyable).
+  auto matcher = [&]() {
+    using namespace matchers;
+    // clang-format off
+    return band(parent,
+             band(child,
+               anyTree(grandchild)));
+    // clang-format on
+  }();
+
+  // Use lambdas to lazily initialize the builder with the nodes and values yet
+  // to be captured by the matcher.
+  auto declarativeMerger = builders::ScheduleNodeBuilder();
+  {
+    using namespace builders;
+    auto schedule = [&]() {
+      return parent.band_get_partial_schedule().flat_range_product(
+          child.band_get_partial_schedule());
+    };
+    auto st = [&]() { return subtreeBuilder(grandchild); };
+    declarativeMerger = band(schedule, subtree(st));
+  }
+
+  // Keep transforming the tree while possible.
+  auto node = root;
+  while (matchers::ScheduleNodeMatcher::isMatching(matcher, node)) {
+    node = node.cut();
+    node = declarativeMerger.insertAt(node);
+  }
+  return node;
+}
+
+static isl::multi_union_pw_aff getTileSchedule(isl::schedule_node node,
+                                               std::vector<int> tileSizes) {
+  assert(tileSizes.size() != 0 && "empty tileSizes array");
+  isl::space space = isl::manage(isl_schedule_node_band_get_space(node.get()));
+  unsigned dims = space.dim(isl::dim::set);
+  assert(dims == tileSizes.size() &&
+         "number of dimensions should match tileSizes size");
+
+  isl::multi_val sizes = isl::multi_val::zero(space);
+  for (unsigned i = 0; i < dims; ++i) {
+    int tileSize = tileSizes[i];
+    sizes = sizes.set_val(i, isl::val(node.get_ctx(), tileSize));
+  }
+
+  isl::multi_union_pw_aff sched = node.band_get_partial_schedule();
+  for (unsigned i = 0; i < dims; ++i) {
+
+    isl::union_pw_aff upa = sched.get_union_pw_aff(i);
+    isl::val v = sizes.get_val(i);
+    upa = upa.scale_down_val(v);
+    upa = upa.floor();
+    sched = sched.set_union_pw_aff(i, upa);
+  }
+  return sched;
+}
+
+static isl::multi_union_pw_aff getPointSchedule(isl::schedule_node node,
+                                                std::vector<int> tileSizes) {
+  auto tileSchedule = getTileSchedule(node, tileSizes);
+  auto sched = node.band_get_partial_schedule();
+  return sched.sub(tileSchedule);
+}
+
+TEST(Transform, MergeAndTransform) {
+
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto petScop = pet::Scop::parseFile(ctx, "inputs/1mmWithoutInitStmt.c");
+  auto scop = petScop.getScop();
+  
+  isl::schedule_node newRoot = 
+    getMergedTree(scop.schedule.get_root()).parent();
+  
+  // Generic matcher/builder for tiling.
+  int dims = 3;
+  std::vector<int> tileSizes = {32,32,32};
+
+  // callback to check loop dims.
+  auto isNDimm = [dims](isl::schedule_node band) {
+    unsigned loopDims =
+      isl_schedule_node_band_n_member(band.get());
+    if (loopDims != dims)
+      return false; 
+    return true;
+  };
+  // matcher
+  isl::schedule_node loop, child;
+  auto matcher = [&]() {
+    using namespace matchers;
+    return band(isNDimm, loop, anyTree(child));
+  }();
+  // decl. builder
+  auto builder = builders::ScheduleNodeBuilder();
+  {
+    using namespace builders;
+    auto schedule_point = [&]() {
+      auto descr = BandDescriptor(getTileSchedule(loop, tileSizes));
+      descr.permutable = 1;
+      return descr;
+    };
+    auto schedule_tile = [&]() {
+      auto descr = BandDescriptor(getPointSchedule(loop, tileSizes));
+      descr.permutable = 1;
+      return descr;
+    };
+    auto st = [&]() { return subtreeBuilder(child); };
+    builder = band(schedule_point, band(schedule_tile, subtree(st)));
+  }
+  
+  if (matchers::ScheduleNodeMatcher::isMatching(matcher, newRoot.child(0)))
+    newRoot = rebuild(newRoot.child(0), builder);
+  std::cout << newRoot.to_str() << "\n";
+  newRoot =
+    getMergedTree(newRoot.parent());
+  std::cout << newRoot.root().to_str() << std::endl;
+}
+
+isl::schedule_node simplifyTree(isl::schedule_node root) {
+
+  isl::schedule_node parent, child, grandchild;
+  auto matcher = [&]() {
+    using namespace matchers;
+    // clang-format off
+    return band(parent,
+      band(child,
+        anyTree(grandchild)));
+    //clang-format on
+  }();
+    
+  auto merger = builders::ScheduleNodeBuilder();
+  {
+    using namespace builders;
+    // clang-format off
+    auto computeSched = [&]() {
+      isl::multi_union_pw_aff sched =
+        parent.band_get_partial_schedule().flat_range_product(
+          child.band_get_partial_schedule());
+      return sched;
+    };
+    // clang-format on
+    auto st = [&]() { return subtreeBuilder(grandchild); };
+    merger = band(computeSched, subtree(st));
+  }
+
+  root = replaceDFSPreorderRepeatedly(root, matcher, merger);
+
+  return root.root();
+}
+
+static isl::multi_union_pw_aff getSchedulePointTile(isl::schedule_node node,
+                                              std::vector<int> &s) {
+
+  auto tile_schedule = getScheduleTile(node, s);
+  auto sched = node.band_get_partial_schedule();
+  return sched.sub(tile_schedule);
+}
+
+TEST(Transformer, simpleTuner) {
+
+  std::vector<int> tile_factor{1, 32, 64, 128, 256, 512, 1024};
+
+  for (int i = 0; i < tile_factor.size(); i++) {
+
+    auto ctx = ScopedCtx(pet::allocCtx());
+    auto petScop =
+      pet::Scop::parseFile(ctx, "inputs/mvt.c");
+
+    isl::schedule_node root = 
+      simplifyTree(petScop.getScop().schedule.get_root());
+
+    isl::schedule_node band_node, continuation;
+    auto matcher = [&]() {
+      using namespace matchers; 
+      return band(band_node, anyTree(continuation));
+    }();
+
+    std::vector<int> tile_sizes{tile_factor[i], tile_factor[i]};
+    auto builder = builders::ScheduleNodeBuilder();
+    {
+      using namespace builders;
+      auto st = [&]() { return subtreeBuilder(continuation); };
+      auto updateScheduleTile = [&]() { return getScheduleTile(band_node, tile_sizes); };
+      auto updateSchedulePoint = [&]() { return getSchedulePointTile(band_node, tile_sizes); };
+      builder = band(updateScheduleTile, band(updateSchedulePoint, subtree(st)));
+    }
+
+    root = root.child(0).child(0).child(0);
+    if (matchers::ScheduleNodeMatcher::isMatching(matcher, root)) {
+      root = root.cut();
+      root = builder.insertAt(root);
+    }
+    root = root.parent().next_sibling().child(0);
+    if (matchers::ScheduleNodeMatcher::isMatching(matcher, root)) {
+      root = root.cut();
+      root = builder.insertAt(root);
+    }
+    petScop.schedule() = root.root().get_schedule();
+    std::string code = petScop.codegen();
+
+    std::ifstream mvt_file_polybench("inputs/polybench-c-3.2/linear-algebra/kernels/mvt/mvt.c");
+    std::string program = "#define min(a,b) (((a)<(b))?(a):(b))\n";
+    if (mvt_file_polybench.is_open()) {
+      std::string line;
+      bool lock = false;
+      while (getline(mvt_file_polybench, line)) {
+        if (line.find("#pragma scop") != std::string::npos) {
+          lock = true;
+          program += "#pragma scop\n" + code;
+        }
+        if (line.find("#pragma endscop") != std::string::npos) {
+          lock = false;
+        }
+        if (!lock)
+          program += line + "\n";
+      }
+      mvt_file_polybench.close();
+    }
+  
+    std::ofstream output_file("inputs/polybench-c-3.2/linear-algebra/kernels/mvt/mvt_c.c");
+    if (output_file.is_open()) {
+      output_file << program;
+      output_file.close();
+    }
+
+    std::string compilation_string = "gcc -I inputs/polybench-c-3.2/utilities ";
+    compilation_string += "-I inputs/polybench-c-3.2/linear-algebra/kernels/mvt/ ";
+    compilation_string += "inputs/polybench-c-3.2/utilities/polybench.c ";
+    compilation_string += "inputs/polybench-c-3.2/linear-algebra/kernels/mvt/mvt_c.c ";
+    compilation_string += "-DPOLYBENCH_TIME -DLARGE_DATASET -o mvt ";
+    system(compilation_string.c_str());
+    std::cout << "tile_factor " << tile_factor[i] << "\n";
+    system("./mvt");
+
+  } // end for
 }
 
 

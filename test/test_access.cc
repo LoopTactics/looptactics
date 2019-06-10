@@ -3,6 +3,8 @@
 #include "islutils/ctx.h"
 #include "islutils/pet_wrapper.h"
 
+#include <iostream>
+
 #include "gtest/gtest.h"
 
 using util::ScopedCtx;
@@ -615,3 +617,72 @@ TEST(AccessMatcher, GroupFoldsAPI) {
   EXPECT_EQ(match(umapSame, psDiff).size(), 0);
   EXPECT_EQ(match(umapDiff, psDiff).size(), 2);
 }
+
+TEST(AccessMatcher, syrk) {
+
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto petScop = pet::Scop::parseFile(ctx, "inputs/syrk.c");
+  auto scop = petScop.getScop();
+
+  auto root = scop.schedule.get_root();
+  root = 
+    root.child(0).child(0).next_sibling().child(0).child(0).child(0).child(0);
+  std::cout << root.to_str() << "\n";
+  auto prefixSchedule =
+    root.get_prefix_schedule_union_map();
+
+  isl::union_map reads = scop.reads.curry();
+  //std::cout << "non sched: " << reads.to_str() << "\n";
+
+  auto schedReads = reads.apply_domain(prefixSchedule);
+  //std::cout << "sched:" << schedReads.to_str() << "\n";
+
+  auto _i = placeholder(ctx);
+  auto _j = placeholder(ctx);
+  auto _k = placeholder(ctx);
+  auto _A = arrayPlaceholder();
+  auto _B = arrayPlaceholder();
+  
+  auto psRead = 
+    allOf(access(_A, _i, _j), access(_B, _i, _k), access(_B, _j, _k));  
+  auto readMatches = match(schedReads, psRead);
+
+  ASSERT_EQ(readMatches.size(), 1u);
+
+  std::cout << "i:" << readMatches[0][_i].payload().inputDimPos_ << "\n";
+  std::cout << "j:" << readMatches[0][_j].payload().inputDimPos_ << "\n";
+  std::cout << "k:" << readMatches[0][_k].payload().inputDimPos_ << "\n";
+
+}
+
+/*
+TEST(AccessMatcher, GEMM) {
+
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto petScop = pet::Scop::parseFile(ctx, "inputs/1mmWithoutInitStmtNew.c");
+  auto scop = petScop.getScop();
+
+  isl::union_map reads = scop.reads.curry();  
+  auto _i = placeholder(ctx);
+  auto _j = placeholder(ctx);
+  auto _k = placeholder(ctx);
+  
+  auto _A = arrayPlaceholder(); 
+  auto _B = arrayPlaceholder();
+  auto _C = arrayPlaceholder();
+
+  auto psRead =
+    allOf(access(_A, _i, _j), access(_B, _i, _k), access(_B, _i, _k));
+  auto readMatches = match(reads, psRead);
+
+  ASSERT_EQ(readMatches.size(), 1u);
+
+  std::cout << "i:" << readMatches[0][_i].payload().inputDimPos_ << "\n";
+  std::cout << "j:" << readMatches[0][_j].payload().inputDimPos_ << "\n";
+  std::cout << "k:" << readMatches[0][_k].payload().inputDimPos_ << "\n";
+}
+*/
+
+
+
+

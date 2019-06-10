@@ -301,6 +301,26 @@ class Tiling {
     std::vector<std::string> idPointLoop;
 };
 
+class Permutation {
+  public:
+    std::vector<std::string> oldIndexOrder;
+    std::vector<std::string> newIndexOrder;
+};
+
+/// overloading for printin Permuation
+inline std::ostream& operator<< (std::ostream &OS, Permutation p) {
+  OS << "permuation transformation: \n";
+  OS << "old index order :";
+  for (size_t i = 0; i < p.oldIndexOrder.size(); i++) 
+    OS << p.oldIndexOrder[i] << " ";
+  OS << "\n";
+  OS << "new index order :";
+  for (size_t i = 0; i < p.newIndexOrder.size(); i++)
+    OS << p.newIndexOrder[i] << " ";
+  OS << "\n";
+  return OS;
+}
+
 /// overloading for printing Tiling
 inline std::ostream& operator<< (std::ostream &OS, Tiling t) {
   OS << "tile transformation: \n";
@@ -318,8 +338,47 @@ inline std::ostream& operator<< (std::ostream &OS, Tiling t) {
   OS << "\n";
   return OS;
 }
+
+Permutation handlePermutation(std::string pattern) {
+
+  Permutation p;
   
-bool handleTiling(std::string pattern) {
+  // remove white spaces.
+  pattern.erase(std::remove_if(pattern.begin(), pattern.end(), isspace), pattern.end());
+  // identify keyword loop (/* loop dims */)
+  std::smatch match;
+  std::regex keywordLoop(R"(loop\(([a-z,1-9]+,){1,}[a-z,1-9]+\))");
+  if (!std::regex_search(pattern, match, keywordLoop)) {
+    std::cout << "keyword detection failed\n";
+    std::cout << pattern << std::endl;
+    assert(0 && "keyword detection failed for loop");
+  }
+  std::string loopKeyWord = match[0];
+  // remove 'loop( ** )' from loopKeyWord.
+  loopKeyWord = loopKeyWord - "loop";
+  loopKeyWord = loopKeyWord - "(";
+  loopKeyWord = loopKeyWord - ")";
+  // split based on ',';
+  // FIXME: make some sanity checks.
+  // 1. on the string format.
+  // 2. each element cannot be repeated.
+  p.oldIndexOrder = split(loopKeyWord, ",");
+  std::regex keywordPermutation(R"(permutation\(([a-z,1-9]+,){1,}[a-z,1-9]+\))");
+  if (!std::regex_search(pattern, match, keywordPermutation)) {
+    std::cout << "keyword detection failed for permutation\n";
+    assert(0 && "keyword detection failed for permutation");
+  }
+  std::string permutationKeyWord = match[0];  
+  // remove 'permutation( **)' from permuationKeyWord
+  permutationKeyWord = permutationKeyWord - "permutation";
+  permutationKeyWord = permutationKeyWord - ")";
+  permutationKeyWord = permutationKeyWord - "(";
+  p.newIndexOrder = split(permutationKeyWord, ",");
+  std::cout << p << std::endl;
+  return p;
+}
+  
+Tiling handleTiling(std::string pattern) {
 
   Tiling t;
 
@@ -330,7 +389,7 @@ bool handleTiling(std::string pattern) {
   std::regex keywordLoop(R"(loop\(([a-z]+,){1,}[a-z]+\))");
   if (!std::regex_search(pattern, match, keywordLoop)) {
     std::cout << "keyword detection failed\n";
-    return false;
+    assert(0 && "keyword detection failed\n");
   }
   std::string loopKeyword = match[0];
   // remove from pattern the keyword loopKeyword.
@@ -344,13 +403,13 @@ bool handleTiling(std::string pattern) {
   // dimensions in the loop.
   unsigned int dims = split(loopKeyword, ",").size();
   if (dims == 0)
-    return false;
+    assert(0 && "loop dims == 0");
   
   // identify keyword tile_size(/* tile sizes */)
   std::regex keywordTileSize(R"(tile_size\(([1-9]+,){1,}[1-9]+\))");
   if (!std::regex_search(pattern, match, keywordTileSize)) {
     std::cout << "keyword detection failed (tile_size)\n";
-    return false;
+    assert(0 && "keyword detection failed for tile_size\n");
   }
   std::string tileSizeKeyword = match[0];
   // remove from pattern the keyword tileSizeKeyword.
@@ -365,13 +424,13 @@ bool handleTiling(std::string pattern) {
     t.tileSizes.push_back(std::stoi(tileSizes[i]));
   }
   if (t.tileSizes.size() != dims) 
-    return false;
+    assert(0 && "tile.size() should be equal to loop dims\n");
 
   // identify keyword tile_loop (/* id tiles loop */)
   std::regex keywordTileLoopId(R"(tile_loop\(([a-z,A-Z,1-9]+,){1,}[a-z,A-Z,1-9]+\))");
   if (!std::regex_search(pattern, match, keywordTileLoopId)) {
     std::cout << "keyword detection failed (tile_loop)\n";
-    return false;
+    assert(0 && "keyword detection failed for tile_loop\n");
   }
   std::string tileLoopIdKeyword = match[0];
   // remove from pattern the keyword tileLoopIdKeyword
@@ -383,14 +442,14 @@ bool handleTiling(std::string pattern) {
   std::vector<std::string> idTileLoop =
     split(tileLoopIdKeyword, ","); 
   if (idTileLoop.size() != dims)
-    return false;
+    assert(0 && "idTileLoop should be equal to loop dims\n");
   t.idTileLoop = std::move(idTileLoop);
 
   // identify the keyword point_loop (/* id point loop */)
   std::regex keywordPointLoopId(R"(point_loop\(([a-z,A-Z,1-9]+,){1,}[a-z,A-Z,1-9]+\))");
   if (!std::regex_search(pattern, match, keywordPointLoopId)) {
     std::cout << "keyword detection failed (point_loop)\n";
-    return false;
+    assert(0 && "keyword detection failed for point_loop\n");
   }
   std::string pointLoopKeyword = match[0];
   // remove from pattern the keyword pointLoopKeyword
@@ -402,11 +461,11 @@ bool handleTiling(std::string pattern) {
   std::vector<std::string> idPointLoop =
     split(pointLoopKeyword, ",");
   if (idPointLoop.size() != dims)
-    return false;
+    assert(0 && "idPointLoop should be equal to loop dims\n");
   t.idPointLoop = std::move(idPointLoop);
   
   std::cout << t << std::endl;
-  return true;
+  return t;
 }
   
 TEST(Parser, Tiling) {
@@ -418,7 +477,8 @@ TEST(Parser, Tiling) {
 
   std::string s1 =
     "loop(i,j,k) tile_size(32,32,32) / point_loop(i1, j1, k1) tile_loop(i2, j2, k2)";
-  EXPECT_TRUE(handleTiling(s1));
+  auto t = handleTiling(s1);
+  //EXPECT_TRUE(handleTiling(s1));
 }
 
 std::vector<std::string> getUniqueInductionIds(std::vector<AccessInfo> &AI) {
@@ -565,6 +625,41 @@ applyDFSPreorderOnce(isl::schedule_node node,
   return node;
 }
 
+// perform the tiling transformation.
+
+static isl::multi_union_pw_aff getTileSchedule(isl::schedule_node node,
+                                               const std::vector<int> &tileSizes) {
+  assert(tileSizes.size() != 0 && "empty tileSizes array");
+  isl::space space = isl::manage(isl_schedule_node_band_get_space(node.get()));
+  unsigned dims = space.dim(isl::dim::set);
+  assert(dims == tileSizes.size() &&
+         "number of dimensions should match tileSizes size");
+
+  isl::multi_val sizes = isl::multi_val::zero(space);
+  for (unsigned i = 0; i < dims; ++i) {
+    int tileSize = tileSizes[i];
+    sizes = sizes.set_val(i, isl::val(node.get_ctx(), tileSize));
+  }
+
+  isl::multi_union_pw_aff sched = node.band_get_partial_schedule();
+  for (unsigned i = 0; i < dims; ++i) {
+
+    isl::union_pw_aff upa = sched.get_union_pw_aff(i);
+    isl::val v = sizes.get_val(i);
+    upa = upa.scale_down_val(v);
+    upa = upa.floor();
+    sched = sched.set_union_pw_aff(i, upa);
+  }
+  return sched;
+}
+
+static isl::multi_union_pw_aff getPointSchedule(isl::schedule_node node,
+                                                const std::vector<int> & tileSizes) {
+  auto tileSchedule = getTileSchedule(node, tileSizes);
+  auto sched = node.band_get_partial_schedule();
+  return sched.sub(tileSchedule);
+}
+
 std::vector<AccessInfo> getReadAccesses(std::vector<AccessInfo> &AI) {
   std::vector<AccessInfo> res = {};
   for (size_t i = 0; i < AI.size(); i++) {
@@ -602,6 +697,11 @@ int getIndex(std::string s, std::vector<std::string> v) {
   return -1;
 }
 
+// class describing the structural and access pattern
+// properties that need to be detected by loop tactics.
+// 
+// bandDims is the only structural property 
+// accesses is a vector of accesses.
 class PatternInfo {
   public:
     // structural properties.
@@ -618,6 +718,9 @@ class PatternInfo {
 PatternInfo::PatternInfo(std::string s) {
   assert(s.find("pattern") == std::string::npos && "not able to find keyword");
   accesses = getAccessesInfo(s); 
+  // FIXME: this is assumed for now
+  // but can be obtained from the 
+  // transformation script.
   bandDims = 3; //assumed for now.
 }
 
@@ -631,12 +734,15 @@ TEST(Parser, DetectMatmulFromSpec) {
   PatternInfo patternTy("C[i][j] += A[i][k] - B[k][j]");
 
   using namespace matchers;
+  isl::schedule_node target, continuation;
   // clang-format off
   auto matcher =
     band(_and(
         [&](isl::schedule_node n) {
-          if (isl_schedule_node_band_n_member(n.get()) != patternTy.bandDims)
+          if (isl_schedule_node_band_n_member(n.get()) != patternTy.bandDims) {
+            std::cout << "bands test failed\n";
             return false;
+          }
           return true;
         },
         [&](isl::schedule_node n) {
@@ -663,13 +769,84 @@ TEST(Parser, DetectMatmulFromSpec) {
             Pset<A> tmp = {arrayPlaceholder(), uniqueArrayIds[i]};
             vectorArrayPlaceholderSet.push_back(tmp);
           }
+          // 5. get the reads accesses read from the string.
+          std::vector<AccessInfo> readsP = getReadAccesses(patternTy.accesses);
+          // 6. bind readsP with placeholder and arrayPlaceholder
+          // TODO: this works only with 2D arrays.
+          for (size_t i = 0; i < readsP.size(); i++) {
+            assert(readsP[i].inductions.size() == 2 && "only 2D arrays");
+            vectorAccesses.push_back(access(
+              vectorArrayPlaceholderSet[
+                getIndex(readsP[i].arrayId, uniqueArrayIds)].t,
+              vectorPlaceholderSet[
+                getIndex(readsP[i].inductions[0], uniqueInductionIds)].t,
+              vectorPlaceholderSet[
+                getIndex(readsP[i].inductions[1], uniqueInductionIds)].t));
+          }
+          auto psRead = allOf(vectorAccesses);
+          auto readMatches = match(reads, psRead);
+          if (readMatches.size() != 1) {
+            std::cout << "access test failed\n";
+            return false;
+          }
           return true;
-        }), anyTree());
+        }), target, anyTree(continuation));
   // clang-format on
 
   scop.schedule = collapseBands(scop.schedule);
   isl::schedule_node root = scop.schedule.get_root();
   EXPECT_TRUE(matchers::ScheduleNodeMatcher::isMatching(matcher, root.child(0)));
+
+  // loop tiling.
+
+  std::string s2 = 
+    "loop(i,j,k) tile_size(32,32,32) / point_loop(i1, j1, k1) tile_loop(i2, j2, k2)"; 
+  Tiling ty = handleTiling(s2);
+
+  // builder for tiling.
+  auto builder = builders::ScheduleNodeBuilder(); 
+  {
+    using namespace builders;
+    auto schedule_point = [&]() {
+      // FIXME: check how to create the band node such that
+      // the current node properties are preserved.
+      auto descr = BandDescriptor(getTileSchedule(target, ty.tileSizes));  
+      descr.permutable = 1;
+      return descr;
+    };
+    auto schedule_tile = [&]() {
+      // FIXME: see above
+      auto descr = BandDescriptor(getPointSchedule(target, ty.tileSizes));
+      descr.permutable = 1;
+      return descr;
+    };
+    auto st = [&]() { return subtreeBuilder(continuation); };
+    auto m = [&]() {
+      // the mark node keeps the named loop order.
+      std::string loopId = " ";
+      for (size_t i = 0; i < ty.idTileLoop.size(); i++)
+        loopId += ty.idTileLoop[i] + " ";
+      for (size_t i = 0; i < ty.idPointLoop.size(); i++)
+        loopId += ty.idPointLoop[i] + " ";
+      return isl::id::alloc(target.get_ctx(), loopId, nullptr); 
+    };
+    builder = mark(m, band(schedule_point, band(schedule_tile, subtree(st))));
+  }
+  
+  root = rebuild(root.child(0), builder);
+  scop.schedule = collapseBands(root.get_schedule());
+  root = scop.schedule.get_root();
+
+  // loop permutation.
+  // re-run the matcher (FIXME: how can we avoid this??)
+  // FIXME we need to skip the mark node. Instead of using the mark node.
+  // we can store the tiling information in the patterTy class, that changes
+  // as we perform optimizations.
+  patternTy.bandDims += 3;
+  EXPECT_TRUE(matchers::ScheduleNodeMatcher::isMatching(matcher, root.child(0).child(0)));
+  std::string s3 = 
+    "loop(i1,j1,k1,i2,j2,k2) interchange permutation(j1,k1,i1,j2,i2,k2)";
+  Permutation py = handlePermutation(s3);
 } 
      
 TEST(Parser, DetectAccessFromSpec) {
@@ -776,20 +953,4 @@ TEST(Parser, DetectAccessFromSpec) {
   EXPECT_EQ(readMatches[0][vectorPlaceholderSet[2].t].payload().inputDimPos_,
             readMatchesOrig[0][_k].payload().inputDimPos_);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
