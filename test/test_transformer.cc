@@ -101,11 +101,11 @@ static std::string getAccessName(isl::map m) {
 static std::string getAccessName(isl::set s) {
   return s.get_tuple_id().get_name();
 }
-
+/*
 static unsigned getAccessIndexes(isl::map m) {
   return m.dim(isl::dim::out);
 }
-
+*/
 static unsigned getAccessIndexes(isl::set s) {
   return s.dim(isl::dim::out);
 }
@@ -172,15 +172,15 @@ static isl::union_map applySchedule(isl::union_map schedule,
   return accesses.apply_domain(schedule);
 }
 
-static void printCudaHeader(std::string &s) {
-  s+= "/* Includes system */\n";
-  s+= "#include <stdio.h>\n";
-  s+= "#include <stdlib.h>\n\n";
-  s+= "/* Includes cuda */\n";
-  s+= "#include <cublas_v2.h>\n";
-  s+= "#include <cuda_runtime.h>\n";
-  s+= "#include <helper_cuda.h>\n";
-}
+//static void printCudaHeader(std::string &s) {
+//  s+= "/* Includes system */\n";
+//  s+= "#include <stdio.h>\n";
+//  s+= "#include <stdlib.h>\n\n";
+//  s+= "/* Includes cuda */\n";
+//  s+= "#include <cublas_v2.h>\n";
+//  s+= "#include <cuda_runtime.h>\n";
+//  s+= "#include <helper_cuda.h>\n";
+//}
 
 static std::string createIndent(int tab) {
   std::string result;
@@ -2569,7 +2569,7 @@ TEST(Transform, MergeAndTransform) {
 
   // callback to check loop dims.
   auto isNDimm = [dims](isl::schedule_node band) {
-    unsigned loopDims =
+    int loopDims =
       isl_schedule_node_band_n_member(band.get());
     if (loopDims != dims)
       return false; 
@@ -2651,7 +2651,7 @@ TEST(Transformer, simpleTuner) {
 
   std::vector<int> tile_factor{1, 32, 64, 128, 256, 512, 1024};
 
-  for (int i = 0; i < tile_factor.size(); i++) {
+  for (size_t i = 0; i < tile_factor.size(); i++) {
 
     auto ctx = ScopedCtx(pet::allocCtx());
     auto petScop =
@@ -2719,9 +2719,11 @@ TEST(Transformer, simpleTuner) {
     compilation_string += "inputs/polybench-c-3.2/utilities/polybench.c ";
     compilation_string += "inputs/polybench-c-3.2/linear-algebra/kernels/mvt/mvt_c.c ";
     compilation_string += "-DPOLYBENCH_TIME -DLARGE_DATASET -o mvt ";
-    system(compilation_string.c_str());
+    auto comp_result = system(compilation_string.c_str());
     std::cout << "tile_factor " << tile_factor[i] << "\n";
-    system("./mvt");
+    auto exec_result = system("./mvt");
+    std::cout << comp_result << std::endl;
+    std::cout << exec_result << std::endl;
 
   } // end for
 }

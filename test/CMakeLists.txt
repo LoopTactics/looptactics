@@ -6,6 +6,7 @@ set(TEST_NAMES
     builders
     transformer
     access
+    parser_new
     parser)
 
 set(TEST_INPUTS

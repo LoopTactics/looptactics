@@ -58,11 +58,15 @@ add_library(islutils
             islutils/builders.cc
             islutils/pet_wrapper.cc
             islutils/util.cc
-            islutils/access_patterns.cc)
+            islutils/access_patterns.cc
+            islutils/parser.cc)
 target_include_directories(islutils PUBLIC ${CMAKE_SOURCE_DIR})
 target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})
 target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})
 target_link_libraries(islutils ${isl_LIB} ${pet_LIB})
+
+add_executable(main main.cc)
+target_link_libraries(main islutils)
 
 add_subdirectory(test)
 add_subdirectory(docs)
