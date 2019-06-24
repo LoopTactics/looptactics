@@ -690,7 +690,7 @@ class Pset {
 };
 
 int getIndex(std::string s, std::vector<std::string> v) {
-  for (int i = 0; i < v.size(); i++) 
+  for (size_t i = 0; i < v.size(); i++) 
     if (s == v[i])
       return i;
   assert(0 && "index not found");
