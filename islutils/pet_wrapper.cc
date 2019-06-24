@@ -17,6 +17,7 @@ Scop Scop::parseFile(isl::ctx ctx, std::string filename) {
       pet_scop_extract_from_C_source(ctx.get(), filename.c_str(), nullptr));
 }
 
+/*
 static isl_stat fn(struct pet_scop *scop, void *user) {
   auto w = static_cast<ScopContainer*>(user);
   w->c.push_back(scop);
@@ -31,6 +32,7 @@ ScopContainer Scop::parseMultipleScop(isl::ctx ctx, std::string filename) {
   extract_multiple_scop(ctx.get(), filename.c_str(), &fn, &res);
   return res;
 }
+*/
 
 isl::ctx Scop::getCtx() const {
   return isl::ctx(isl_schedule_get_ctx(scop_->schedule));

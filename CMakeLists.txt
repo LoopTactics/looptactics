@@ -29,16 +29,16 @@ ExternalProject_Add(pet
      EXCLUDE_FROM_ALL 1
 )
 
-ExternalProject_Add(haystack
-  PREFIX external/haystack
-  SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/haystack
-  BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/build-haystack
-  INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/install-haystack
-  UPDATE_COMMAND ./get_submodules.sh COMMAND ./autogen.sh
-  CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR>
-  BUILD_COMMAND make -j4
-  EXCLUDE_FROM_ALL 1
-)
+#ExternalProject_Add(haystack
+#  PREFIX external/haystack
+#  SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/haystack
+#  BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/build-haystack
+#  INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/install-haystack
+#  UPDATE_COMMAND ./get_submodules.sh COMMAND ./autogen.sh
+#  CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR>
+#  BUILD_COMMAND make -j4
+#  EXCLUDE_FROM_ALL 1
+#)
 
 add_subdirectory(external/googletest EXCLUDE_FROM_ALL)
 
@@ -57,8 +57,8 @@ add_library(islutils
             islutils/matchers.cc
             islutils/builders.cc
             islutils/pet_wrapper.cc
-            islutils/access_patterns.cc
-            islutils/common.cc)
+            islutils/util.cc
+            islutils/access_patterns.cc)
 target_include_directories(islutils PUBLIC ${CMAKE_SOURCE_DIR})
 target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})
 target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})
