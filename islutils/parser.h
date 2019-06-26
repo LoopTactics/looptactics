@@ -19,11 +19,6 @@ namespace Error {
   };
 } // end namespace error
 
-
-namespace Driver {
-  std::stringstream ss;
-} // end namespace driver
-
 namespace Lexer {
 
   enum class Token_value {
@@ -33,8 +28,8 @@ namespace Lexer {
     SPACE,
   };
 
-  Token_value curr_tok;
-  std::string string_value;
+  //Token_value curr_tok;
+  //std::string string_value;
 
   Token_value get_token();
   void print_token();
@@ -48,28 +43,14 @@ namespace Parser {
       std::string name_;
       std::set<std::string> induction_vars_;
   };
-  std::vector<Array> arrays;
+  //std::vector<Array> arrays;
 
   void expr(bool get);
   Array get_array();
   void get_inductions(bool get, std::set<std::string> &c);
   using namespace Lexer;
   using namespace Error;
-
-  std::ostream &operator<<(std::ostream &os, const std::vector<Array> &a) {
-
-    std::cout << "{ \n";
-    for (size_t i = 0; i < a.size(); i++) {
-      std::cout << a[i].name_ << " ";
-      auto set = a[i].induction_vars_;
-      for(auto it = set.begin(); it != set.end(); it++) {
-        std::cout << *it << " ";
-      }
-      std::cout << "\n";
-    }
-    std::cout << "} \n";
-    return os;
-  }
+  std::vector<Array> parse(const std::string &string_to_be_parsed);
 
 } // end namespace Parser
 

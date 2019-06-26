@@ -1,6 +1,28 @@
 #include "islutils/parser.h"
 
+namespace Lexer {
+  
+  using namespace std;
+  Token_value curr_tok;
+  string string_value;
+} // end namespace Lexer
+
+namespace Parser {
+  
+  using namespace std;
+  vector<Array> arrays;
+} // end namespace Parser
+
+namespace Driver {
+  
+  using namespace std;
+  stringstream ss;
+} // end namespace Driver
+  
+
 Lexer::Token_value Lexer::get_token() {
+
+  using namespace Lexer;
  
   char ch;
   Driver::ss.get(ch);
@@ -167,15 +189,12 @@ void Parser::expr(bool get) {
   }
 }
 
-/*
-int main(int argc, char *argv[]) {
-
-  std::string S1 = "CB (ii, jj) += A(i,k) * C(k, j)";
+std::vector<Parser::Array> Parser::parse(const std::string &string_to_be_parsed) {
 
   using namespace Driver;
-  ss << S1;
+  ss << string_to_be_parsed;
 
-  while(ss) {    
+  while(ss) {
     try {
       Lexer::get_token();
       if (Lexer::curr_tok == Lexer::Token_value::END) break;
@@ -183,11 +202,25 @@ int main(int argc, char *argv[]) {
     }
     catch (Error::Syntax_error e) {
       std::cout << "syntax error: " << e.p_ << std::endl;
-      return -1;
+      arrays.erase(arrays.begin(), arrays.end());
+      return arrays;
     }
   }
+  return arrays;
+}
 
-  std::cout << Parser::arrays << "\n";
-  return 0;
-} 
-*/
+
+std::ostream &operator<<(std::ostream &os, const std::vector<Parser::Array> &a) {
+
+  std::cout << "{ \n";
+  for (size_t i = 0; i < a.size(); i++) {
+    std::cout << a[i].name_ << " ";
+    auto set = a[i].induction_vars_;
+    for(auto it = set.begin(); it != set.end(); it++) {
+      std::cout << *it << " ";
+    }
+    std::cout << "\n";
+  }
+  std::cout << "} \n";
+  return os;
+}
