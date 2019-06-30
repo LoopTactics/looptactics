@@ -110,6 +110,7 @@ DEF_TYPE_MATCHER(set, ScheduleNodeType::Set)
       matcher.current_ = type;                                                 \
       matcher.children_.emplace_back(child);                                   \
       matcher.capture_ = capture;                                              \
+      matcher.nodeCallback_ = callback;                                        \
       return matcher;                                                          \
   }   
       

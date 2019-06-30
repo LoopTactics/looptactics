@@ -10,7 +10,7 @@ namespace Lexer {
 namespace Parser {
   
   using namespace std;
-  vector<Array> arrays;
+  vector<AccessDescriptor> descriptors;
 } // end namespace Parser
 
 namespace Driver {
@@ -62,7 +62,7 @@ Lexer::Token_value Lexer::get_token() {
         Driver::ss.putback(ch);
         return curr_tok = Token_value::NAME;
       }
-      throw Error::Syntax_error("bad token", ch);
+      throw Error::Error("bad token");
     }
 }
 
@@ -122,8 +122,8 @@ void Parser::get_inductions(bool get, std::set<std::string> &c) {
   if (curr_tok == Token_value::NAME) {
     while ((curr_tok = get_token()) == Token_value::SPACE) {};
     if ((curr_tok != Token_value::COMMA) && (curr_tok != Token_value::RP)) {  
-      throw Error::Syntax_error(
-        "bad syntax: induction must be followed by ',' or ')'", __LINE__);
+      throw Error::Error(
+        "bad syntax: induction must be followed by ',' or ')'");
     }
     else {
       c.insert(string_value);
@@ -155,10 +155,10 @@ void Parser::get_inductions(bool get, std::set<std::string> &c) {
     return get_inductions(true, c);
 }
 
-/// Build an array.
-Parser::Array Parser::get_array() {
+/// Get an access descriptor.
+Parser::AccessDescriptor Parser::get_access_descriptor() {
 
-  Array res {};
+  AccessDescriptor res {};
   res.name_ = std::move(string_value);
   get_inductions(false, res.induction_vars_);  
   return res;
@@ -176,9 +176,9 @@ void Parser::expr(bool get) {
     case Lexer::Token_value::NAME: {
       while ((curr_tok = get_token()) == Token_value::SPACE) {};
       if (curr_tok == Token_value::LP) 
-        arrays.push_back(get_array());
-      else throw Error::Syntax_error(
-        "bad syntax: array name must be followed by '('", __LINE__);
+        descriptors.push_back(get_access_descriptor());
+      else throw Error::Error(
+        "bad syntax: array name must be followed by '('");
       return;
     }
     case Lexer::Token_value::SPACE: {
@@ -189,7 +189,7 @@ void Parser::expr(bool get) {
   }
 }
 
-std::vector<Parser::Array> Parser::parse(const std::string &string_to_be_parsed) {
+std::vector<Parser::AccessDescriptor> Parser::parse(const std::string &string_to_be_parsed) {
 
   using namespace Driver;
   ss << string_to_be_parsed;
@@ -200,17 +200,17 @@ std::vector<Parser::Array> Parser::parse(const std::string &string_to_be_parsed)
       if (Lexer::curr_tok == Lexer::Token_value::END) break;
       Parser::expr(false);   
     }
-    catch (Error::Syntax_error e) {
-      std::cout << "syntax error: " << e.p_ << std::endl;
-      arrays.erase(arrays.begin(), arrays.end());
-      return arrays;
+    catch (Error::Error e) {
+      std::cout << "syntax error: " << e.message_ << std::endl;
+      descriptors.erase(descriptors.begin(), descriptors.end());
+      return descriptors;
     }
   }
-  return arrays;
+  return descriptors;
 }
 
 
-std::ostream &operator<<(std::ostream &os, const std::vector<Parser::Array> &a) {
+std::ostream &operator<<(std::ostream &os, const std::vector<Parser::AccessDescriptor> &a) {
 
   std::cout << "{ \n";
   for (size_t i = 0; i < a.size(); i++) {
