@@ -6,6 +6,11 @@ set(CMAKE_CXX_FLAGS_DEBUG "-Wall -pedantic -O0 -g")
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+option(VERBOSE "debug" OFF)
+if (VERBOSE)
+  add_definitions("-DDEBUG")
+endif (VERBOSE)
+
 ExternalProject_Add(isl
      PREFIX external/isl
      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/isl
@@ -59,7 +64,9 @@ add_library(islutils
             islutils/pet_wrapper.cc
             islutils/util.cc
             islutils/access_patterns.cc
-            islutils/parser.cc)
+            islutils/program.cc
+            islutils/parser.cc
+            islutils/tactics.cc)
 target_include_directories(islutils PUBLIC ${CMAKE_SOURCE_DIR})
 target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})
 target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})
