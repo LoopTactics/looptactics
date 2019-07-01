@@ -17,6 +17,7 @@ namespace Lexer {
     PLUS, MINUS, MUL, DIV,
     ASSIGN, LP, RP, COMMA,
     SPACE, EXCLAMATION_POINT,
+    ASSIGNMENT_BY_ADDITION,
   };
 
   Token_value get_token();
@@ -29,8 +30,10 @@ namespace Parser {
   using namespace Lexer;
   using namespace Error;
 
+  enum class Type { READ, WRITE, READ_AND_WRITE };
   class AccessDescriptor {
     public:
+      Type type_ = Type::READ;
       std::string name_;
       std::set<std::string> induction_vars_;
   };

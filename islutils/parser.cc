@@ -41,8 +41,16 @@ Lexer::Token_value Lexer::get_token() {
       return curr_tok = Token_value::MUL;
     case '/':
       return curr_tok = Token_value::DIV;
-    case '+':
+    case '+': {
+      string_value = ch;
+      Driver::ss.get(ch); 
+      string_value += ch;
+      if (string_value.compare("+=") == 0)
+        return curr_tok = Token_value::ASSIGNMENT_BY_ADDITION;
+      else
+        Driver::ss.putback(ch);  
       return curr_tok = Token_value::PLUS;
+    }
     case '-':
       return curr_tok = Token_value::MINUS;
     case '(':
@@ -176,6 +184,21 @@ void Parser::expr(bool get) {
         "bad syntax: array name must be followed by '('");
       return;
     }
+    case Lexer::Token_value::ASSIGN: {
+      if (descriptors.size() != 1)
+        throw Error::Error(
+          "bad syntax: no array name (or multiple of them) before =");
+      descriptors[0].type_ = Type::WRITE;
+      return;
+    }
+    case Lexer::Token_value::ASSIGNMENT_BY_ADDITION: {
+      if (descriptors.size() != 1)
+        throw Error::Error(
+          "bad syntax: no array name (or multiple of them) before +=");
+      else 
+        descriptors[0].type_ = Type::READ_AND_WRITE;
+      return;
+    } 
     case Lexer::Token_value::SPACE: {
       return expr(true);
     } 
