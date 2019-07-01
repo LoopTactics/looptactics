@@ -7,7 +7,7 @@ int main() {
   using namespace Error;
   try {
     std::string tactics_id = "tactics_gemm_no_init";
-    std::string pattern = "C(i,j) += A(i,k)*B(k,j)";
+    std::string pattern = "C(i, j)+= A(i, k)*B(k,j)";
     std::string path_to_file = "./test/inputs/gemm.c";
 
     Tactics t = Tactics(tactics_id, pattern, path_to_file);
