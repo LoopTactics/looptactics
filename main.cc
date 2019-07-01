@@ -13,8 +13,9 @@ int main() {
     Tactics t = Tactics(tactics_id, pattern, path_to_file);
     t.match();
     t.tile("i", {32});
-    t.tile("j", {32});
     t.tile("k", {32});
+    t.tile("j", {32});
+    //t.show();
     t.interchange("i_p", "j_p");
     t.show();
 
