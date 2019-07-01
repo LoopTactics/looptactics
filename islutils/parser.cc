@@ -53,6 +53,8 @@ Lexer::Token_value Lexer::get_token() {
       return curr_tok = Token_value::ASSIGN;
     case ',':
       return curr_tok = Token_value::COMMA;
+    case '!':
+      return curr_tok = Token_value::EXCLAMATION_POINT;
     default:
       if (isalpha(ch)) {
         string_value = ch;
@@ -102,8 +104,12 @@ void Lexer::print_token() {
     case Token_value::SPACE:
       std::cout << "space\n";
       break;
+    case Token_value::EXCLAMATION_POINT:
+      std::cout << "exclamation point\n";
+      break; 
     default:
-      std::cout << "boh\n";
+      std::cout << "??\n";
+      assert(0);
   }
 }
 
@@ -129,25 +135,14 @@ void Parser::get_inductions(bool get, std::set<std::string> &c) {
       c.insert(string_value);
     }
   }
-/*
-  // FIXME: you want to do these tests but do not mess-up
-  // the driver position in the stream!
+
   if ((curr_tok != Token_value::NAME) &&
       (curr_tok != Token_value::LP) &&
       (curr_tok != Token_value::SPACE) &&
       (curr_tok != Token_value::RP) &&
       (curr_tok != Token_value::COMMA))
-    throw Error::Syntax_error(  
-      "bad syntax: token not allowed in between '(' and ')'", __LINE__);
-
-  if (curr_tok == Token_value::COMMA) {
-    while ((curr_tok = get_token()) == Token_value::SPACE) {};
-    if (curr_tok != Token_value::NAME) {
-      throw Error::Syntax_error(
-        "bad syntax: ',' must be followed by an array name", __LINE__);
-    }
-  }
-*/
+    throw Error::Error(  
+      "bad syntax: token not allowed in between '(' and ')'");
 
   if (curr_tok == Token_value::RP)
     return;

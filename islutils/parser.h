@@ -16,7 +16,7 @@ namespace Lexer {
     NAME, END,
     PLUS, MINUS, MUL, DIV,
     ASSIGN, LP, RP, COMMA,
-    SPACE,
+    SPACE, EXCLAMATION_POINT,
   };
 
   Token_value get_token();
