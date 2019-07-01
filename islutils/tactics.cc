@@ -45,20 +45,14 @@ static std::set<std::string> extract_array_names(std::vector<Parser::AccessDescr
   return result;
 }
 
-/// Are the reads and writes a possible match for the accesses
-/// obtained from the parser?
+/// Do the accesses satisfy the pattern obtained from the parser?
 ///
 /// @param ctx: Context
 /// @param descr_accesses: Accesses obtained from parser.
 /// @reads: Reads accesses.
 /// @Writes: Write accesses.
-static bool check_accesses(isl::ctx ctx, 
-std::vector<Parser::AccessDescriptor> descr_accesses, isl::union_map reads, 
-isl::union_map writes) {
-
-  assert(descr_accesses.size() != 0 && "empty user provided accesses!");
-  assert(reads.n_map() != 0 && "empty reads");
-  assert(writes.n_map() != 0 && "empty writes");
+static bool check_access_pattern(isl::ctx ctx,
+std::vector<Parser::AccessDescriptor> descr_accesses, isl::union_map accesses) {
 
   using namespace matchers;
   using Placeholder = Placeholder<SingleInputDim,UnfixedOutDimPattern<SimpleAff>>;
@@ -149,9 +143,78 @@ isl::union_map writes) {
 
   } 
 
-  auto ps_read = allOf(accesses_list);
-  auto read_matches = match(reads, ps_read);
-  return (read_matches.size() == 1) ? true : false;
+  auto ps = allOf(accesses_list);
+  auto matches = match(accesses, ps);
+  return (matches.size() == 1) ? true : false;
+}
+
+/// Are the writes a possible match for the accesses
+/// obtained from the parser?
+///
+/// @param ctx: Context
+/// @param descr_accesses: Accesses obtained from parser.
+/// @reads: Reads accesses.
+/// @Writes: Write accesses.
+static bool check_accesses_write(isl::ctx ctx,
+std::vector<Parser::AccessDescriptor> write_descr_accesses, isl::union_map writes) {
+
+  bool res = check_access_pattern(ctx, write_descr_accesses, writes);
+  #ifdef DEBUG
+    std::cout << __func__ << ": " << res << "\n";
+  #endif
+  return res;
+}
+
+/// Are the reads a possible match for the accesses
+/// obtained from the parser?
+///
+/// @param ctx: Context
+/// @param descr_accesses: Accesses obtained from parser.
+/// @reads: Reads accesses.
+/// @Writes: Write accesses.
+static bool check_accesses_read(isl::ctx ctx,
+std::vector<Parser::AccessDescriptor> read_descr_accesses, isl::union_map reads) {
+  
+  bool res = check_access_pattern(ctx, read_descr_accesses, reads);
+  #ifdef DEBUG
+    std::cout << __func__ << ": " << res << "\n";
+  #endif
+  return res;
+} 
+
+/// Are the reads and writes a possible match for the accesses
+/// obtained from the parser?
+///
+/// @param ctx: Context
+/// @param descr_accesses: Accesses obtained from parser.
+/// @reads: Reads accesses.
+/// @Writes: Write accesses.
+static bool check_accesses(isl::ctx ctx, 
+std::vector<Parser::AccessDescriptor> descr_accesses, isl::union_map reads, 
+isl::union_map writes) {
+
+  assert(descr_accesses.size() != 0 && "empty user provided accesses!");
+  assert(reads.n_map() != 0 && "empty reads");
+  assert(writes.n_map() != 0 && "empty writes");
+
+  std::vector<Parser::AccessDescriptor> read_descr_accesses;
+  std::vector<Parser::AccessDescriptor> write_descr_accesses;
+
+  for (size_t i = 0; i < descr_accesses.size(); i++) {
+    if (descr_accesses[i].type_ == Parser::Type::READ ||
+        descr_accesses[i].type_ == Parser::Type::READ_AND_WRITE)
+      read_descr_accesses.push_back(descr_accesses[i]);
+    if (descr_accesses[i].type_ == Parser::Type::WRITE ||
+        descr_accesses[i].type_ == Parser::Type::READ_AND_WRITE)
+      write_descr_accesses.push_back(descr_accesses[i]);
+  }
+  
+  auto res = check_accesses_read(ctx, read_descr_accesses, reads) 
+         && check_accesses_write(ctx, write_descr_accesses, writes);
+  #ifdef DEBUG
+    std::cout << __func__ << ": " << res << "\n";
+  #endif
+  return res;
 }
 
 /// utility function.
@@ -482,6 +545,12 @@ void Tactics::match() {
     auto schedule = node.child(0).get_prefix_schedule_union_map();
     auto filtered_reads = reads.apply_domain(schedule);
     auto filtered_writes = writes.apply_domain(schedule);
+    #ifdef DEBUG  
+      std::cout << "has_pattern callback " << "\n";
+      std::cout << "reads: " << filtered_reads.to_str() << "\n";
+      std::cout << "writes: " << filtered_writes.to_str() << "\n";
+      std::cout << "node : " << node.to_str() << "\n";
+    #endif 
     if (!check_accesses(ctx, accesses_descr,
                         filtered_reads,
                         filtered_writes)) {
