@@ -639,7 +639,7 @@ static isl::schedule_node sink_point_tile(isl::schedule_node node, std::string n
 /// Matcher and builder for tiling.
 /// "loop_id" is the mark for the loop that we need to tile.
 /// "sizes" is the tile factor.
-void Tactics::tile(std::string loop_id, std::vector<int> sizes) {
+void Tactics::tile(std::string loop_id, int tile_size) {
 
   isl::schedule_node root = current_schedule_.get_root();
 
@@ -672,14 +672,14 @@ void Tactics::tile(std::string loop_id, std::vector<int> sizes) {
     };
     auto scheduler_tile = [&]() {
       auto descr = BandDescriptor(band_node);
-      auto new_schedule = tile_node(band_node, 32);
+      auto new_schedule = tile_node(band_node, tile_size);
       descr.partialSchedule = new_schedule.first;
       return descr;
     };
 
     auto scheduler_point = [&]() {
       auto descr = BandDescriptor(band_node);
-      auto new_schedule = tile_node(band_node, 32);
+      auto new_schedule = tile_node(band_node, tile_size);
       descr.partialSchedule = new_schedule.second;
       return descr;
     };

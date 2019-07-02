@@ -37,7 +37,7 @@ namespace LoopTactics {
               std::string pattern, std::string path_to_file);
       void show();
       void match();
-      void tile(std::string loop_id, std::vector<int> sizes);
+      void tile(std::string loop_id, int tile_size);
       void interchange(std::string loop_source, std::string loop_destination);
   };
 
