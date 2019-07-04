@@ -2,6 +2,21 @@
 
 using namespace LoopTactics;
 
+/// Return all the arrays detected in the Scop.
+std::vector<PetArray> Program::arrays() {
+
+  std::vector<PetArray> res;
+  auto scop = scop_.getScop();
+  for (int i = 0; i < scop.n_array; i++) {
+    auto a = scop.arrays[i];
+    TypeElement t = 
+      (a.element_type.compare("float") == 0) ? TypeElement::FLOAT : TypeElement::DOUBLE;
+    PetArray pa{a.context, a.extent,t};
+    res.push_back(pa);
+  } 
+  return res;
+}
+
 /// Return scop schedule.
 isl::schedule Program::schedule() {
   
