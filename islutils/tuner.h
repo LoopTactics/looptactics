@@ -34,14 +34,18 @@ namespace TunerLoopTactics {
   class Tuner {
     private:
       static bool check_configurations(const TileConfigurations);
-      static bool check_arrays(const std::vector<LoopTactics::PetArray> pa);
+      static bool check_arrays(const std::vector<pet::PetArray> pa);
 
     TileConfigurations cs_;
-    std::vector<LoopTactics::PetArray> arrays_;
+    std::vector<pet::PetArray> arrays_;
     LoopTactics::LoopOptimizer opt_;
+    isl::schedule current_schedule_;
     public:
       Tuner() = delete;
-      Tuner(TileConfigurations, std::vector<LoopTactics::PetArray>, std::string path_to_file);
+      Tuner(TileConfigurations, 
+            std::vector<pet::PetArray>, 
+            std::string path_to_file,
+            isl::schedule schedule);
       TileConfiguration tune();
   };
 

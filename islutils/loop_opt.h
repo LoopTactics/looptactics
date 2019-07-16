@@ -14,8 +14,9 @@ namespace LoopTactics {
   class LoopOptimizer {
 
     public:
-      isl::schedule tile(const std::string loop_id, const int tile_size, isl::schedule schedule);
-      std::string code_gen(isl::schedule_node);
+      isl::schedule tile(const std::string loop_id, 
+                        const int tile_size, isl::schedule schedule);
+      std::string code_gen(isl::schedule schedule);
       LoopOptimizer() = delete;
       LoopOptimizer(const std::string path_to_file);
 

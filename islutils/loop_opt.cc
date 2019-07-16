@@ -223,6 +223,12 @@ const int tile_size, isl::schedule schedule) {
   return root.root().get_schedule();
 }
 
+std::string LoopOptimizer::code_gen(isl::schedule schedule) {
+  
+  scop_.schedule() = schedule;
+  return scop_.codegen();
+}
+
 bool LoopOptimizer::check_file_path(const std::string path_to_file) {
   
   std::ifstream f(path_to_file.c_str());

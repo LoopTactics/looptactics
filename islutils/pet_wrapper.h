@@ -3,9 +3,8 @@
 
 #include <islutils/scop.h>
 #include <islutils/type_traits.h>
-#include <functional>
-#include <string>
-#include <vector>
+#include <string>         // std::string
+#include <vector>         // std::vector
 
 class pet_scop;
 class pet_stmt;
@@ -14,6 +13,27 @@ class ScopContainer;
 namespace pet {
 
 isl::ctx allocCtx();
+
+enum TypeElement {FLOAT, DOUBLE};
+class PetArray {
+  public:
+    PetArray() = delete;
+    PetArray(isl::set e, TypeElement et, std::string name, std::string id, int l)
+      : extent_(e), type_(et), array_name_(name), array_id_(id), loc_(l) {};
+    int dimensionality() const;
+    TypeElement type() const;
+    std::string name() const;
+    std::string dim(int i) const;
+    void dump() const;
+
+    isl::set extent_;
+    TypeElement type_;
+    std::string array_name_;
+    std::string array_id_;
+
+    int loc_ = 0;
+};
+
 
 template <typename T>
 /// A wrapper class around an isl C object, convertible (with copy) to the
@@ -87,6 +107,18 @@ public:
   IslCopyRefWrapper<isl::schedule> schedule();
   /// Return a copy of the Scop's schedule.
   isl::schedule schedule() const;
+  /// Return a copy of the Scop's context.
+  isl::set context() const;
+  /// Return pet scop location (start)
+  unsigned startPetLocation() const;
+  /// Return pet scop location (end)
+  unsigned endPetLocation() const;
+  /// Return scop reads.
+  isl::union_map reads() const;
+  /// Return scop writes.
+  isl::union_map writes() const;
+  /// Return array in scop.
+  std::vector<PetArray> arrays() const;
 
 private:
   pet_scop *scop_;

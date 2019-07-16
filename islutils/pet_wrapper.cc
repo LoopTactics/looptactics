@@ -8,6 +8,53 @@
 
 namespace pet {
 
+void PetArray::dump() const {
+
+  std::cout << "=========\n";
+  std::cout << "extent : " << extent_.to_str() << "\n";
+  std::cout << "array name : " << array_name_ << "\n";
+  std::cout << "array id : " << array_id_ << "\n";
+  std::cout << "loc : " << loc_ << "\n";
+  if (type_ == TypeElement::FLOAT)
+    std::cout << "type : float\n";
+  else 
+    std::cout << "type : double\n";
+  std::cout << "=========\n";
+}
+
+std::string PetArray::dim(int i) const {
+
+  size_t tmp = i;
+  assert(tmp < extent_.get_space().dim(isl::dim::out) && "should be less!");
+  isl::pw_aff pwaff = extent_.dim_max(i);
+  assert(pwaff.n_piece() == 1 && "expect single piece");
+  isl::val val;
+  pwaff.foreach_piece([&](isl::set s, isl::aff a) -> isl_stat {
+    val = a.get_constant_val();
+    return isl_stat_ok;
+  });
+
+  // FIXME: add 1 to extent.
+  return val.to_str();
+}
+
+
+TypeElement PetArray::type() const {
+
+  return type_;
+}
+
+int PetArray::dimensionality() const {
+
+  auto space = extent_.get_space();
+  return space.dim(isl::dim::out);
+}
+
+std::string PetArray::name() const {
+
+  return array_name_;
+}
+
 isl::ctx allocCtx() { return isl::ctx(isl_ctx_alloc_with_pet_options()); }
 
 Scop::~Scop() { pet_scop_free(scop_); }
@@ -59,7 +106,7 @@ isl::ctx Scop::getCtx() const {
     a.exposed = scop_->arrays[i]->exposed;
     a.outer = scop_->arrays[i]->outer;
     S.arrays.push_back(a);
-  } 
+  }
   return S;
 }
 
@@ -228,7 +275,7 @@ std::string Scop::codegen(
     std::function<std::string(isl::ast_build, isl::ast_node, pet_stmt *)>
         custom) const {
   auto ctx = getCtx();
-  auto build = isl::ast_build::from_context(getScop().context);
+  auto build = isl::ast_build::from_context(context());
 
   // Construct the list of statement descriptors with partial schedules while
   // building the AST.
@@ -294,7 +341,7 @@ std::string Scop::codegenPayload(
     std::function<std::string(isl::ast_build, isl::ast_node, pet_stmt *, void *user)>
         custom, void *user) const {
   auto ctx = getCtx();
-  auto build = isl::ast_build::from_context(getScop().context);
+  auto build = isl::ast_build::from_context(context());
 
   // Construct the list of statement descriptors with partial schedules while
   // building the AST.
@@ -342,5 +389,102 @@ IslCopyRefWrapper<isl::schedule> Scop::schedule() {
 isl::schedule Scop::schedule() const {
   return isl::manage_copy(scop_->schedule);
 }
+
+unsigned Scop::startPetLocation() const {
+  return pet_loc_get_start(scop_->loc);
+}
+
+unsigned Scop::endPetLocation() const {
+  return pet_loc_get_end(scop_->loc);
+}
+/*
+// partially taken from:
+// https://github.com/spcl/haystack/blob/0753e076f0ea28da68533577edb60fbc5092ccbe/src/isl-helpers.cpp#L53
+static std::string print_isl_expression(isl::aff aff) {
+
+  std::string result{};
+
+  for (int i = 0; i < aff.dim(isl::dim::in); i++) {
+    isl::val coefficient = aff.get_coefficient_val(isl::dim::in, i);
+    if (!coefficient.is_zero()) {
+      result += aff.get_dim_name(isl::dim::in, i);
+    }
+  }
+  return result;     
+}
+*/
+
+isl::union_map Scop::reads() const {
+
+  return isl::manage(pet_scop_get_tagged_may_reads(scop_)).curry();
+}
+
+isl::union_map Scop::writes() const {
+
+  return isl::manage(pet_scop_get_tagged_may_writes(scop_)).curry();
+}
+
+isl::set Scop::context() const {
+
+  return isl::manage(pet_scop_get_context(scop_));
+}
+
+std::vector<PetArray> Scop::arrays() const {
+
+  std::vector<PetArray> res;
+
+  struct Payload {
+    std::string array_name;
+    std::string array_id; 
+    int line = 0;
+  };
+  std::vector<Payload> payloads;
+
+  for (int idx = 0; idx < scop_->n_stmt; idx++) {
+    pet_expr *expression = pet_tree_expr_get_expr(scop_->stmts[idx]->body);
+    isl::space space = isl::manage(pet_stmt_get_space(scop_->stmts[idx]));
+    std::string statement = space.get_tuple_name(isl::dim::set);
+
+    auto get_array_info = [](__isl_keep pet_expr *expr, void *user) {
+  
+      auto ups = (std::vector<Payload> *)user;
+      if (pet_expr_access_is_read(expr) || pet_expr_access_is_write(expr)) {
+        std::string id = isl::manage(pet_expr_access_get_ref_id(expr)).to_str();
+        std::string name = isl::manage(pet_expr_access_get_id(expr)).to_str();   
+        ups->push_back({name, id});
+      }
+
+      return 0;
+    };
+    pet_expr_foreach_access_expr(expression, get_array_info, &payloads);
+    pet_expr_free(expression);
+    int line = pet_loc_get_line(pet_tree_get_loc(scop_->stmts[idx]->body));
+    for (auto &p : payloads) {
+      p.line = line;
+    }
+  }
+
+  for (int idx = 0; idx < scop_->n_array; idx++) {
+    isl::set ext = isl::manage_copy(scop_->arrays[idx]->extent);
+    std::string name = ext.get_tuple_name();
+    TypeElement t = 
+      (std::string(scop_->arrays[idx]->element_type).compare("float") == 0) ?
+        TypeElement::FLOAT : TypeElement::DOUBLE;
+    for (const auto &p : payloads) {
+      if (name.compare(p.array_name) == 0) {
+        res.push_back({ext, t, p.array_name, p.array_id, p.line});
+        break;
+      }
+    }
+  }
+
+  #ifdef DEBUG
+  std::cout << "# arrays : " << res.size();
+  for (const auto &a : res)
+    a.dump();
+  #endif
+
+  return res;
+}  
 
 } // namespace pet

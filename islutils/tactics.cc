@@ -477,7 +477,27 @@ void Tactics::match() {
 /// Show the generated code for the current schedule.
 void Tactics::show() {
 
-  program_.scop_.schedule() = current_schedule_;
+  //std::cout << program_.scop_.n_stmt << "\n";
+  //auto scop = program_.scop_.getScop();
+  //std::cout << scop.n_stmt << "\n";
+  //assert(0);
+
+  program_.scop_.schedule() = current_schedule_; 
+/* 
+  std::map<int, std::string> result;
+  std::ifstream source_file;
+  source_file.open(path_to_file_);
+  std::string line;
+  int line_number = 0;  
+  while (std::getline(source_file, line)) {
+    line_number++;
+    if (source_file.tellg() > program_.scop_.startPetLocation()) 
+      break;
+  }
+  source_file.close();
+
+  std::cout << line_number << "\n";
+*/
   std::cout << program_.scop_.codegen() << std::endl;
 }
 

@@ -3,39 +3,27 @@
 using namespace LoopTactics;
 
 /// Return all the arrays detected in the Scop.
-std::vector<PetArray> Program::arrays() {
-
-  std::vector<PetArray> res;
-  auto scop = scop_.getScop();
-  for (int i = 0; i < scop.n_array; i++) {
-    auto a = scop.arrays[i];
-    TypeElement t = 
-      (a.element_type.compare("float") == 0) ? TypeElement::FLOAT : TypeElement::DOUBLE;
-    PetArray pa{a.context, a.extent,t};
-    res.push_back(pa);
-  } 
-  return res;
+std::vector<pet::PetArray> Program::arrays() const {
+  
+  return scop_.arrays();
 }
 
 /// Return scop schedule.
-isl::schedule Program::schedule() {
+isl::schedule Program::schedule() const {
   
-  auto scop = scop_.getScop();
-  return scop.schedule;
+  return scop_.schedule();
 }
 
 /// Return scop reads.
-isl::union_map Program::reads() {
+isl::union_map Program::reads() const {
 
-  auto scop = scop_.getScop();
-  return scop.reads.curry();
+  return scop_.reads();
 }
 
 /// Return scop writes.
-isl::union_map Program::writes() {
+isl::union_map Program::writes() const{
 
-  auto scop = scop_.getScop();
-  return scop.mustWrites.curry();
+  return scop_.writes();
 }
 
 /// Is the file path valid?

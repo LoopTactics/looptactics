@@ -63,7 +63,7 @@ void Tactics::tile(T arg, Args... args) {
   
   TileConfiguration best_configuration; 
   try { 
-    Tuner t{tcs,program_.arrays(), path_to_file_};
+    Tuner t{tcs,program_.arrays(), path_to_file_, current_schedule_};
     best_configuration = t.tune();
   } 
   catch (Error::Error e) {
