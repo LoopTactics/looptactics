@@ -1,6 +1,6 @@
-#include <type_traits>
-
 #include <cassert>
+#include <thread>
+#include <type_traits>
 
 namespace matchers {
 
@@ -46,6 +46,67 @@ isl_schedule_node_type toIslType(ScheduleNodeType type) {
   }
 }
 
+ScheduleNodeType fromIslType(isl_schedule_node_type type) {
+  switch (type) {
+  case isl_schedule_node_band:
+    return ScheduleNodeType::Band;
+  case isl_schedule_node_context:
+    return ScheduleNodeType::Context;
+  case isl_schedule_node_domain:
+    return ScheduleNodeType::Domain;
+  case isl_schedule_node_extension:
+    return ScheduleNodeType::Extension;
+  case isl_schedule_node_filter:
+    return ScheduleNodeType::Filter;
+  case isl_schedule_node_guard:
+    return ScheduleNodeType::Guard;
+  case isl_schedule_node_mark:
+    return ScheduleNodeType::Mark;
+  case isl_schedule_node_leaf:
+    return ScheduleNodeType::Leaf;
+  case isl_schedule_node_sequence:
+    return ScheduleNodeType::Sequence;
+  case isl_schedule_node_set:
+    return ScheduleNodeType::Set;
+  default:
+    assert(false && "cannot convert the given node type");
+    return ScheduleNodeType::Leaf;
+  }
+}
+
+std::string fromTypeToString(ScheduleNodeType type) {
+  switch (type) {
+  case ScheduleNodeType::Band:
+    return "MATCHER_BAND";
+  case ScheduleNodeType::Context:
+    return "MATCHER_CONTEXT";
+  case ScheduleNodeType::Domain:
+    return "MATCHER_DOMAIN";
+  case ScheduleNodeType::Extension:
+    return "MATCHER_EXTENSION";
+  case ScheduleNodeType::Filter:
+    return "MATCHER_FILTER";
+  case ScheduleNodeType::Guard:
+    return "MATCHER_GUARD";
+  case ScheduleNodeType::Mark:
+    return "MATCHER_MARK";
+  case ScheduleNodeType::Leaf:
+    return "MATCHER_LEAF";
+  case ScheduleNodeType::Sequence:
+    return "MATCHER_SEQUENCE";
+  case ScheduleNodeType::Set:
+    return "MATCHER_SET";
+  case ScheduleNodeType::AnyTree:
+    return "MATCHER_ANYTREE";
+  case ScheduleNodeType::AnyForest:
+    return "MATCHER_ANYFOREST";
+  case ScheduleNodeType::FilterForest:
+    return "MACTHER_FILTERFOREST";
+  default:
+    return "NOT IMPLEMENTED";
+  }
+}
+
 /* Definitions for schedule tree matcher factory functions ********************/
 #define DEF_TYPE_MATCHER(name, type)                                           \
   template <typename Arg, typename... Args, typename>                          \
@@ -53,6 +114,17 @@ isl_schedule_node_type toIslType(ScheduleNodeType type) {
                                   Args... args) {                              \
     ScheduleNodeMatcher matcher(capture);                                      \
     matcher.current_ = type;                                                   \
+    matcher.needToCapture_ = true;                                             \
+    matcher.children_ = varargToVector<ScheduleNodeMatcher>(arg, args...);     \
+    return matcher;                                                            \
+  }                                                                            \
+                                                                               \
+  template <typename Arg, typename... Args, typename>                          \
+  inline ScheduleNodeMatcher name(bool x, isl::schedule_node &capture,         \
+                                  Arg arg, Args... args) {                     \
+    ScheduleNodeMatcher matcher(capture);                                      \
+    matcher.current_ = type;                                                   \
+    matcher.needToCapture_ = x;                                                \
     matcher.children_ = varargToVector<ScheduleNodeMatcher>(arg, args...);     \
     return matcher;                                                            \
   }                                                                            \
@@ -60,7 +132,7 @@ isl_schedule_node_type toIslType(ScheduleNodeType type) {
   template <typename Arg, typename... Args, typename>                          \
   inline ScheduleNodeMatcher name(Arg arg, Args... args) {                     \
     static isl::schedule_node dummyCapture;                                    \
-    return name(dummyCapture, std::forward<Arg>(arg),                          \
+    return name(false, dummyCapture, std::forward<Arg>(arg),                   \
                 std::forward<Args>(args)...);                                  \
   }                                                                            \
                                                                                \
@@ -84,6 +156,17 @@ DEF_TYPE_MATCHER(set, ScheduleNodeType::Set)
                                   ScheduleNodeMatcher &&child) {               \
     ScheduleNodeMatcher matcher(capture);                                      \
     matcher.current_ = type;                                                   \
+    matcher.needToCapture_ = true;                                             \
+    matcher.children_.emplace_back(child);                                     \
+    matcher.capture_ = capture;                                                \
+    return matcher;                                                            \
+  }                                                                            \
+                                                                               \
+  inline ScheduleNodeMatcher name(bool x, isl::schedule_node &capture,         \
+                                  ScheduleNodeMatcher &&child) {               \
+    ScheduleNodeMatcher matcher(capture);                                      \
+    matcher.current_ = type;                                                   \
+    matcher.needToCapture_ = x;                                                \
     matcher.children_.emplace_back(child);                                     \
     matcher.capture_ = capture;                                                \
     return matcher;                                                            \
@@ -91,7 +174,7 @@ DEF_TYPE_MATCHER(set, ScheduleNodeType::Set)
                                                                                \
   inline ScheduleNodeMatcher name(ScheduleNodeMatcher &&child) {               \
     static isl::schedule_node dummyCapture;                                    \
-    return name(dummyCapture, std::move(child));                               \
+    return name(false, dummyCapture, std::move(child));                        \
   }                                                                            \
                                                                                \
   inline ScheduleNodeMatcher name(                                             \
@@ -103,17 +186,16 @@ DEF_TYPE_MATCHER(set, ScheduleNodeType::Set)
   }                                                                            \
                                                                                \
   inline ScheduleNodeMatcher name(                                             \
-    std::function<bool(isl::schedule_node)> callback,                          \
-    isl::schedule_node &capture,                                               \
-    ScheduleNodeMatcher &&child) {                                             \
-      ScheduleNodeMatcher matcher(capture);                                    \
-      matcher.current_ = type;                                                 \
-      matcher.children_.emplace_back(child);                                   \
-      matcher.capture_ = capture;                                              \
-      matcher.nodeCallback_ = callback;                                        \
-      return matcher;                                                          \
-  }   
-      
+      std::function<bool(isl::schedule_node)> callback,                        \
+      isl::schedule_node &capture, ScheduleNodeMatcher &&child) {              \
+    ScheduleNodeMatcher matcher(capture);                                      \
+    matcher.current_ = type;                                                   \
+    matcher.needToCapture_ = true;                                             \
+    matcher.children_.emplace_back(child);                                     \
+    matcher.capture_ = capture;                                                \
+    matcher.nodeCallback_ = callback;                                          \
+    return matcher;                                                            \
+  }
 
 DEF_TYPE_MATCHER(band, ScheduleNodeType::Band)
 DEF_TYPE_MATCHER(context, ScheduleNodeType::Context)
@@ -125,7 +207,7 @@ DEF_TYPE_MATCHER(mark, ScheduleNodeType::Mark)
 DEF_TYPE_MATCHER(expansion, ScheduleNodeType::Expansion)
 
 #undef DEF_TYPE_MATCHER
-  
+
 inline ScheduleNodeMatcher leaf() {
   static isl::schedule_node dummyCapture;
   ScheduleNodeMatcher matcher(dummyCapture);
@@ -135,6 +217,7 @@ inline ScheduleNodeMatcher leaf() {
 
 inline ScheduleNodeMatcher leaf(isl::schedule_node &capture) {
   ScheduleNodeMatcher matcher(capture);
+  matcher.needToCapture_ = true;
   matcher.current_ = ScheduleNodeType::Leaf;
   return matcher;
 }
@@ -142,13 +225,24 @@ inline ScheduleNodeMatcher leaf(isl::schedule_node &capture) {
 inline ScheduleNodeMatcher anyTree(isl::schedule_node &capture) {
   ScheduleNodeMatcher matcher(capture);
   matcher.current_ = ScheduleNodeType::AnyTree;
+  matcher.needToCapture_ = true;
   return matcher;
 }
 
 inline ScheduleNodeMatcher anyTree() {
   static isl::schedule_node dummyCapture;
-  return anyTree(dummyCapture);
+  ScheduleNodeMatcher matcher(dummyCapture);
+  matcher.current_ = ScheduleNodeType::AnyTree;
+  return matcher;
 }
+
+// inline ScheduleNodeMatcher
+// anyTree(std::function<bool(isl::schedule_node)> callback,
+//        isl::schedule_node &capture) {
+//  ScheduleNodeMatcher matcher = anyTree(capture);
+//  matcher.nodeCallback_ = callback;
+//  return matcher;
+//}
 
 inline ScheduleNodeMatcher anyForest() {
   static isl::schedule_node dummyCapture;
@@ -162,6 +256,16 @@ anyForest(std::vector<isl::schedule_node> &multiCapture) {
   static isl::schedule_node dummyCapture;
   ScheduleNodeMatcher matcher(dummyCapture, multiCapture);
   matcher.current_ = ScheduleNodeType::AnyForest;
+  matcher.needToCapture_ = true;
+  return matcher;
+}
+
+inline ScheduleNodeMatcher
+filterForest(std::vector<isl::schedule_node> &multiCapture) {
+  static isl::schedule_node dummyCapture;
+  ScheduleNodeMatcher matcher(dummyCapture, multiCapture);
+  matcher.current_ = ScheduleNodeType::FilterForest;
+  matcher.needToCapture_ = true;
   return matcher;
 }
 
