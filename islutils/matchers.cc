@@ -70,7 +70,13 @@ bool ScheduleNodeMatcher::isMatching(const ScheduleNodeMatcher &matcher,
       return true;
     }
   }
-  matcher.capture_ = node;
+
+  // avoid to capture the node, id the matcher
+  // is not supposed to capture any node.
+  if (matcher.needToCapture_) {
+    matcher.capture_ = node;
+  }
+
   return true;
 }
 

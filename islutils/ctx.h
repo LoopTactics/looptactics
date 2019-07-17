@@ -2,6 +2,7 @@
 #define ISLUTILS_CTX_H
 
 #include <isl/cpp.h>
+#include <pet.h>
 
 namespace util {
 
@@ -14,7 +15,7 @@ namespace util {
 /// transfer.
 class ScopedCtx {
 public:
-  ScopedCtx() : ctx(isl_ctx_alloc()) {}
+  ScopedCtx() : ctx(isl_ctx_alloc_with_pet_options()) {}
   explicit ScopedCtx(isl::ctx &&ctx) : ctx(ctx) {}
   ScopedCtx(const ScopedCtx &) = delete;
   ScopedCtx(ScopedCtx &&) = default;

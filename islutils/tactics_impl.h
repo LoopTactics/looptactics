@@ -61,15 +61,7 @@ void Tactics::tile(T arg, Args... args) {
     DUMP_CONFIGS(tcs)
   #endif
   
-  TileConfiguration best_configuration; 
-  try { 
-    Tuner t{tcs,program_.arrays(), path_to_file_, current_schedule_};
-    best_configuration = t.tune();
-  } 
-  catch (Error::Error e) {
-    std::cout << "cannot build tuner: " << e.message_ << "\n";
-    return;
-  }
+  auto best_configuration = tuner_.tune(std::move(tcs), current_schedule_);
 
   #ifdef DEBUG
     DUMP_CONFIG(best_configuration);

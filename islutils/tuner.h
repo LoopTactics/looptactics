@@ -33,20 +33,13 @@ namespace TunerLoopTactics {
   
   class Tuner {
     private:
-      static bool check_configurations(const TileConfigurations);
-      static bool check_arrays(const std::vector<pet::PetArray> pa);
-
-    TileConfigurations cs_;
-    std::vector<pet::PetArray> arrays_;
-    LoopTactics::LoopOptimizer opt_;
-    isl::schedule current_schedule_;
+      LoopTactics::LoopOptimizer opt_;
+      pet::Scop scop_;
+      std::vector<pet::PetArray> arrays_;
     public:
       Tuner() = delete;
-      Tuner(TileConfigurations, 
-            std::vector<pet::PetArray>, 
-            std::string path_to_file,
-            isl::schedule schedule);
-      TileConfiguration tune();
+      Tuner(isl::ctx ctx, const std::string path_file_name);
+      TileConfiguration tune(TileConfigurations cs, isl::schedule schedule);
   };
 
   #define DUMP_CONFIG(configuration)                        \
@@ -57,7 +50,7 @@ namespace TunerLoopTactics {
       std::cout << configuration[i].name_ << ", ";          \
       std::cout << configuration[i].value_ << " ]";         \
     }                                                       \
-    std::cout << " }";                                      \
+    std::cout << " }\n";                                    \
   } while(0);                                               
 
   #define DUMP_CONFIGS(configurations)                      \

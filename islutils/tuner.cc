@@ -16,23 +16,11 @@ const std::string kMessageFailure = "\x1b[31m[   FAILED ]\x1b[0m";
 const std::string kMessageResult  = "\x1b[32m[ RESULT   ]\x1b[0m";
 const std::string kMessageBest    = "\x1b[35m[     BEST ]\x1b[0m";
 
-bool Tuner::check_configurations(const TileConfigurations cs) {
-  bool res = (cs.size() == 0) ? false : true;
-  return res;
-}
+Tuner::Tuner(isl::ctx ctx, const std::string path_to_file) :
+  opt_(LoopOptimizer()),
+  scop_(pet_scop_extract_from_C_source(ctx.get(), path_to_file.c_str(), nullptr)),
+  arrays_(scop_.arrays()){}
 
-bool Tuner::check_arrays(const std::vector<PetArray> pa) {
-  bool res = (pa.size() == 0) ? false : true;
-  return res;
-}
-
-Tuner::Tuner(const TileConfigurations cs, 
-  const std::vector<PetArray> pa,
-  const std::string path_to_file, isl::schedule current_schedule) :
-  cs_(check_configurations(cs) ? cs : throw Error::Error("invalid configurations")),
-  arrays_(check_arrays(pa) ? pa : throw Error::Error("invalid arrays")),
-  opt_(path_to_file),
-  current_schedule_(current_schedule) {}
 
 inline std::string insertTab(int tab) {
   std::string result;
@@ -97,7 +85,16 @@ static std::string dumpTimingUtilities() {
 
 
 static std::string insertConstantDecl(const PetArray &array) {
-  assert(0 && "not implemented!");
+
+  std::string code;
+
+  std::string type = "unknown";
+  if (array.type() == TypeElement::FLOAT)
+    type = "float";
+  else 
+    type = "double";
+
+  code += type + array.name() + "\n";  
   return "";
 }
 
@@ -185,14 +182,16 @@ static std::string dumpArrayDecl(const std::vector<PetArray> &arrays) {
 
 static std::string insertConstantInit(const PetArray &array) {
 
-  assert(0 && "not implemented!");
-  return "nullptr";
+  std::string code{};
+
+  code = array.name() + " = 1.5;\n";
+  return code;
 }
 
 static std::string insert1DInit(const PetArray &array) {
 
   assert(0 && "not implemented!");
-  return "nullptr";
+  return "nullptr"; 
 }
 
 static std::string insert2DInit(const PetArray &array) {
@@ -291,15 +290,14 @@ template <typename Iterator>
 TileConfiguration run_jobs(
 Iterator begin, Iterator end, const TileConfigurations cs, 
 isl::schedule schedule, LoopTactics::LoopOptimizer &opt,
-const std::vector<PetArray> &arrays) {
+pet::Scop &scop, const std::vector<PetArray> &arrays) {
 
   for (auto it = begin; it != end; it++) {
     TileConfiguration c = *it;
     for (auto &s : c) {
       schedule = opt.tile(s.name_, s.value_, schedule); 
     }
-    std::string code = generate_code(opt.code_gen(schedule), arrays);
-    std::cout << code << std::endl;
+    std::cout << schedule.get_root().to_str() << "\n";    
     assert(0); 
   }
 
@@ -307,10 +305,12 @@ const std::vector<PetArray> &arrays) {
 }
 
 
-TileConfiguration Tuner::tune() {
+TileConfiguration Tuner::tune(TileConfigurations cs, isl::schedule schedule) {
 
-  auto result = run_jobs(cs_.begin(), cs_.end(), 
-                         cs_, current_schedule_, opt_,
+  auto result = run_jobs(cs.begin(), cs.end(), 
+                         cs, schedule, opt_, scop_,
                          arrays_);
+
   return result;
 }
+

@@ -126,9 +126,4 @@ private:
 
 } // namespace pet
 
-class ScopContainer {
-  public:
-    std::vector<struct pet_scop*> c;
-};
-
 #endif // ISLUTILS_PET_WRAPPER_H
