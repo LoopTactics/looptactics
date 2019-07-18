@@ -48,3 +48,10 @@ Copyright (C) 2017 Free Software Foundation, Inc.
 This is free software; see the source for copying conditions.  There is NO
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 ```
+
+```
+TODO:
+1. Tuner
+2. Array packing and dlt.
+3. Compute the flops using pet
+```
