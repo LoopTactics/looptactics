@@ -24,7 +24,7 @@ template <typename T>
 void do_for(T f) {}
 
 template<typename T, typename... Args>
-void Tactics::tile(T arg, Args... args) {
+void Tactics::tile(const T arg, const Args... args) {
   
   static_assert(are_same<TileParam, Args...>{}, "must be of type TileParam");
 
