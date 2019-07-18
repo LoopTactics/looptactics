@@ -11,10 +11,12 @@ namespace LoopTactics {
   class LoopOptimizer {
 
     public:
-      isl::schedule tile(const std::string loop_id, 
-                        const int tile_size, isl::schedule schedule);
-      isl::schedule swap_loop(isl::schedule schedule, const std::string loop_source,
-                              const std::string loop_dest);
+      isl::schedule tile(isl::schedule schedule, 
+                         const std::string loop_id, const int tile_size);
+      isl::schedule swap_loop(isl::schedule schedule, 
+                              const std::string loop_source, const std::string loop_dest);
+      isl::schedule unroll_loop(isl::schedule schedule, 
+                                const std::string loop_id, const int unroll_factor);
   };
 
 

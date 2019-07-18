@@ -1,4 +1,5 @@
 #include <islutils/loop_opt.h>
+#include <iostream>
 
 using namespace LoopTactics;
 
@@ -164,8 +165,8 @@ tile_node(isl::schedule_node node, int tileSize) {
 }
 
 /// Tiling.
-isl::schedule LoopOptimizer::tile(const std::string loop_id,
-const int tile_size, isl::schedule schedule) {
+isl::schedule LoopOptimizer::tile(isl::schedule schedule, 
+const std::string loop_id, const int tile_size) {
 
   isl::schedule_node root = schedule.get_root();
 
@@ -248,7 +249,7 @@ std::function<isl::schedule_node(isl::schedule_node)> builder_callback) {
 }
 
 /// Simple stack-based walker -> forward.
-static isl::schedule_node builder_callback_walker_forward(
+static isl::schedule_node walker_forward(
 isl::schedule_node node, const std::string mark_id) {
 
   std::stack<isl::schedule_node> node_stack;
@@ -274,7 +275,7 @@ isl::schedule_node node, const std::string mark_id) {
 }
 
 /// Simple stack-based walker -> backward.
-static isl::schedule_node builder_callback_walker_backward(
+static isl::schedule_node walker_backward(
 isl::schedule_node node, const std::string mark_id) {
 
   std::stack<isl::schedule_node> node_stack;
@@ -294,10 +295,31 @@ isl::schedule_node node, const std::string mark_id) {
 
   assert(0 && "node is expected");
   return nullptr;
-}  
+}
 
-isl::schedule LoopOptimizer::swap_loop(
-isl::schedule schedule, std::string loop_source, std::string loop_destination) {
+isl::schedule_node helper_builder_callback(
+  isl::schedule_node node, isl::schedule_node band_node, isl::schedule_node sub_tree) {
+
+  //std::cout << band.to_str() << "\n";
+  //std::cout << subtree.to_str() << "\n"; 
+
+  auto builder = builders::ScheduleNodeBuilder();
+  {
+    using namespace builders;
+    auto scheduler = [&]() {
+      auto descr = BandDescriptor(band_node.band_get_partial_schedule());
+      return descr;
+    };
+    auto st = [&]() { return subtreeBuilder(sub_tree); };
+    builder = band(scheduler, subtree(st));
+  }
+
+  node = rebuild(node, builder);
+  return node;
+}
+
+isl::schedule LoopOptimizer::swap_loop(isl::schedule schedule, 
+const std::string loop_source, const std::string loop_destination) {
 
   isl::schedule_node node = schedule.get_root().child(0);
 
@@ -332,53 +354,27 @@ isl::schedule schedule, std::string loop_source, std::string loop_destination) {
     // delete current mark node and insert the newer one.
     node = isl::manage(isl_schedule_node_delete(node.release()));
     node = node.insert_mark(mark_node_lower.mark_get_id());
-    // use builder to re-build the band node
-    auto builder_upper = builders::ScheduleNodeBuilder();
-    {
-      using namespace builders;
-      auto scheduler = [&]() {
-        auto descr = BandDescriptor(band_node_upper);
-        descr.partialSchedule = band_node_lower.band_get_partial_schedule();
-        return descr;
-      };
-      auto st = [&]() { return subtreeBuilder(sub_tree_upper); };
-      builder_upper =
-        band(scheduler,
-          subtree(st));
-    }
-    node = node.child(0);
-    node = node.cut();
-    node = builder_upper.insertAt(node);
-    // keep walking the subtree 
-    node = builder_callback_walker_forward(node, mark_node_lower.mark_get_id().to_str());
+    node = helper_builder_callback(node.child(0), band_node_lower, sub_tree_upper);
+    node = walker_forward(node, mark_node_lower.mark_get_id().to_str());
     node = isl::manage(isl_schedule_node_delete(node.release()));
     node = node.insert_mark(mark_node_upper.mark_get_id());
-    // use builer to update the band node
-    auto builder_lower = builders::ScheduleNodeBuilder();
-    {
-      using namespace builders;
-      auto scheduler = [&]() {
-        auto descr = BandDescriptor(band_node_lower);
-        descr.partialSchedule = band_node_upper.band_get_partial_schedule();
-        return descr;
-      };
-      auto st = [&]() { return subtreeBuilder(sub_tree_lower); };
-      auto builder_lower =
-        band(scheduler,
-          subtree(st));
-    }
-    node = node.child(0);
-    node = node.cut();
-    node = builder_lower.insertAt(node);
-    // walk back to the entry point to
-    // avoid breaking recursion.
-    node = builder_callback_walker_backward(node, mark_node_lower.mark_get_id().to_str());
+    node = helper_builder_callback(node.child(0), band_node_upper, sub_tree_lower);
+    node = walker_backward(node, mark_node_upper.mark_get_id().to_str());
     return node;
   };
 
   node = swapper(node, matcher, builder_callback);
   return node.root().get_schedule();
 }
+
+isl::schedule LoopOptimizer::unroll_loop(isl::schedule schedule, 
+  const std::string loop_id, const int unroll_factor) {
+
+  isl::schedule_node node = schedule.get_root();
+  //node = walker_forward(node, loop_id);
+  std::cout << node.to_str() << "\n";
+  return schedule;
+} 
 
 
 
