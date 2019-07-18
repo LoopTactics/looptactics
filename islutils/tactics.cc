@@ -489,14 +489,23 @@ void Tactics::show() {
 /// Performs tiling using matchers and builders.
 /// "loop_id" is the mark for the loop that we need to tile.
 /// "sizes" is the tile factor.
-void Tactics::tile(std::string loop_id, int tile_size) {
+void Tactics::tile(const std::string loop_id, const int tile_size) {
 
-  current_schedule_ = opt_.tile(loop_id, tile_size, current_schedule_);
+  current_schedule_ = opt_.tile(current_schedule_, loop_id, tile_size);
 }
 
 /// Interchange "loop_source" with "loop_destination"
-void Tactics::interchange(std::string loop_source, std::string loop_destination) {
+void Tactics::interchange(const std::string loop_source, const std::string loop_destination) {
 
   current_schedule_ = opt_.swap_loop(current_schedule_, loop_source, loop_destination);
+}
+
+/// Perform unrolling of "loop_id" with an unroll factor "unroll_factor"
+void Tactics::unroll(const std::string loop_id, const int unroll_factor) {
+
+  if (unroll_factor < 1)
+    throw Error::Error("Unroll factor must be positive!");
+  
+  current_schedule_ = opt_.unroll_loop(current_schedule_, loop_id, unroll_factor);
 }
 

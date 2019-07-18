@@ -42,10 +42,11 @@ namespace LoopTactics {
       void show();
       void match();
 
-      void tile(std::string loop_id, int tile_size);
+      void unroll(const std::string loop_id, const int unroll_factor);
+      void tile(const std::string loop_id, const int tile_size);
       template<typename T, typename... Args>
-      void tile(T arg, Args... args);
-      void interchange(std::string loop_source, std::string loop_destination);
+      void tile(const T arg, const Args... args);
+      void interchange(const std::string loop_source, const std::string loop_destination);
   };
 
 } // end namespace tactics

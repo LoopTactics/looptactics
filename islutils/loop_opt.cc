@@ -300,9 +300,7 @@ isl::schedule_node node, const std::string mark_id) {
 isl::schedule_node helper_builder_callback(
   isl::schedule_node node, isl::schedule_node band_node, isl::schedule_node sub_tree) {
 
-  //std::cout << band.to_str() << "\n";
-  //std::cout << subtree.to_str() << "\n"; 
-
+  // TODO: keep not properties.
   auto builder = builders::ScheduleNodeBuilder();
   {
     using namespace builders;
@@ -367,13 +365,54 @@ const std::string loop_source, const std::string loop_destination) {
   return node.root().get_schedule();
 }
 
+isl::schedule_node helper_unroll(isl::schedule_node node, const int unroll_factor) {
+
+  assert(isl_schedule_node_get_type(node.get()) == isl_schedule_node_band 
+          && "expect band node");
+
+  if (unroll_factor == 1)
+    return node;
+
+  auto partial_schedule = node.band_get_partial_schedule_union_map();
+  assert(partial_schedule.n_map() == 1 && "expect only single map");
+
+  isl::set set = isl::set(partial_schedule.range());
+  isl::pw_aff pwa = set.dim_max(0);
+  assert(pwa.n_piece() == 1 && "expect single piece for pwa");
+
+  isl::val val;
+  pwa.foreach_piece([&val](isl::set s, isl::aff aff) -> isl_stat {
+    val = aff.get_constant_val();
+    return isl_stat_ok;
+  });
+
+  int max_unroll_factor = std::stoi(val.add(isl::val::one(val.get_ctx())).to_str());
+  
+  if (unroll_factor >= max_unroll_factor)
+    return node.band_set_ast_build_options(isl::union_set(node.get_ctx(), "{unroll[x]}"));
+
+  else {
+    // stripmine and unroll.
+    auto space = isl::manage(isl_schedule_node_band_get_space(node.get()));
+    auto dims = space.dim(isl::dim::set);
+    auto sizes = isl::multi_val::zero(space);
+    for (unsigned i = 0; i < dims; i++) {
+      sizes = sizes.set_val(i, isl::val(node.get_ctx(), unroll_factor));
+    }
+    node = isl::manage(isl_schedule_node_band_tile(node.release(), sizes.release()));
+    node = node.child(0);
+    return node.band_set_ast_build_options(isl::union_set(node.get_ctx(), "{unroll[x]}"));
+  }
+}
+
 isl::schedule LoopOptimizer::unroll_loop(isl::schedule schedule, 
   const std::string loop_id, const int unroll_factor) {
 
   isl::schedule_node node = schedule.get_root();
-  //node = walker_forward(node, loop_id);
-  std::cout << node.to_str() << "\n";
-  return schedule;
+  node = walker_forward(node, loop_id);
+  node = helper_unroll(node.child(0), unroll_factor);
+  isl::union_set set = isl::manage(isl_schedule_node_band_get_ast_build_options(node.get()));
+  return node.root().get_schedule();
 } 
 
 
