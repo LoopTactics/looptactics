@@ -6,6 +6,9 @@ set(CMAKE_CXX_FLAGS_DEBUG "-Wall -pedantic -O0 -g")
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+message(STATUS "System: ${CMAKE_SYSTEM_NAME}")
+message(STATUS "Arch: ${CMAKE_SYSTEM_PROCESSOR}")
+
 option(VERBOSE "debug" OFF)
 if (VERBOSE)
   add_definitions("-DDEBUG")
@@ -66,6 +69,8 @@ add_library(islutils
             islutils/access_patterns.cc
             islutils/program.cc
             islutils/parser.cc
+            islutils/tuner.cc
+            islutils/loop_opt.cc
             islutils/tactics.cc)
 target_include_directories(islutils PUBLIC ${CMAKE_SOURCE_DIR})
 target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})
