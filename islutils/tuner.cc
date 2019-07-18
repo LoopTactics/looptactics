@@ -1,8 +1,16 @@
 #include <islutils/tuner.h>
 
+#include <sstream>  // std::ostringstream
+#include <thread>   // std::thread
+#include "pstream.h"
+#include <chrono>   // std::sleep_for
+
 using namespace TunerLoopTactics;
 using namespace LoopTactics;
 using namespace pet;
+
+#define COMPILER "clang -O3 "
+#define RUNS 5
 
 // Messages printed to stdout (in colours)
 const std::string kMessageFull    = "\x1b[32m[==========]\x1b[0m";
@@ -18,9 +26,7 @@ const std::string kMessageBest    = "\x1b[35m[     BEST ]\x1b[0m";
 
 Tuner::Tuner(isl::ctx ctx, const std::string path_to_file) :
   opt_(LoopOptimizer()),
-  scop_(pet_scop_extract_from_C_source(ctx.get(), path_to_file.c_str(), nullptr)),
-  arrays_(scop_.arrays()){}
-
+  scop_(pet_scop_extract_from_C_source(ctx.get(), path_to_file.c_str(), nullptr)){}
 
 inline std::string insertTab(int tab) {
   std::string result;
@@ -71,15 +77,6 @@ static std::string dumpTimingUtilities() {
   code += "static double inline stop_timer() {\n";
   code += insertTab(2) + "return rtclock() - start_walltime;\n";
   code += "}\n\n";
-  code += "void reset_timer() {\n";
-  code += insertTab(2) + "start_walltime = -1.0;\n";
-  code += "}\n";
-  code += "double get_walltime() {\n";
-  code += insertTab(2) + "return rtclock();\n";
-  code += "}\n\n";
-  code += "double get_start_walltime() {\n";
-  code += insertTab(2) + "return start_walltime;\n";
-  code += "}\n\n";
   return code;
 }
 
@@ -94,8 +91,8 @@ static std::string insertConstantDecl(const PetArray &array) {
   else 
     type = "double";
 
-  code += type + array.name() + "\n";  
-  return "";
+  code += type + " " + array.name() + ";" + "\n";  
+  return code;
 }
 
 static std::string insert1Decl(const PetArray &array) {
@@ -282,34 +279,86 @@ const std::vector<PetArray> &arrays) {
   code += dumpTimingStart();
   code += kernel;
   code += dumpTimingStop();
-  code += "\n retunr 0; \n} \n";
+  code += "\n return 0; \n} \n";
   return code;
 }
 
+double execute_job(const std::string thread_id) {
+
+  std::vector<double> results;
+  for (size_t i = 0; i < RUNS; i++) {
+    
+    redi::ipstream exec("./" + thread_id);
+    std::string execution_time{};   
+    exec >> execution_time; 
+    if (execution_time.empty()) {
+      std::cout << kMessageFailure << "\n";
+      continue;
+    }
+    else {
+      std::cout << kMessageOK  << "\n";
+      std::cout << kMessageVerbose << "[ " << execution_time << " ]" << "\n";
+      results.push_back(std::stod(execution_time));  
+    }
+  }
+
+  auto pos = std::min_element(results.begin(), results.end());  
+  return results[std::distance(results.begin(), pos)];
+}
 template <typename Iterator>
 TileConfiguration run_jobs(
 Iterator begin, Iterator end, const TileConfigurations cs, 
 isl::schedule schedule, LoopTactics::LoopOptimizer &opt,
-pet::Scop &scop, const std::vector<PetArray> &arrays) {
+pet::Scop &scop) {
+
+  auto arrays = scop.arrays();
+  std::pair<TileConfiguration, double> best_configuration;
+  best_configuration.second = std::numeric_limits<double>::max();
 
   for (auto it = begin; it != end; it++) {
     TileConfiguration c = *it;
     for (auto &s : c) {
-      schedule = opt.tile(s.name_, s.value_, schedule); 
+      schedule = opt.tile(schedule, s.name_, s.value_); 
     }
-    std::cout << schedule.get_root().to_str() << "\n";    
-    assert(0); 
-  }
+    scop.schedule() = schedule;
+    std::string code = generate_code(scop.codegen(), arrays);
+    
+    // get thread id
+    std::ostringstream ss;
+    ss << std::this_thread::get_id();
+    std::string thread_id = ss.str();
+    std::string thread_file_id = thread_id + ".c";
+  
+    // write to file
+    std::ofstream file;
+    file.open(thread_file_id);
+    file << code;
+    file.close();
 
-  return cs[0];
+    // compile (TODO: maybe jit compilation??)
+    redi::ipstream in(COMPILER
+    + thread_file_id + " -o " + thread_id);
+    // need to sleep to give time to clang to compile. 
+    using namespace std::chrono_literals;
+    std::this_thread::sleep_for(2s); 
+    
+    // execute
+    double best_time = execute_job(thread_id);
+    if (best_time < best_configuration.second) {
+      best_configuration.second = best_time;
+      best_configuration.first = c;
+    }
+
+    redi::ipstream clean("rm " + thread_id);
+  }
+  return best_configuration.first;
 }
 
 
 TileConfiguration Tuner::tune(TileConfigurations cs, isl::schedule schedule) {
 
   auto result = run_jobs(cs.begin(), cs.end(), 
-                         cs, schedule, opt_, scop_,
-                         arrays_);
+                         cs, schedule, opt_, scop_);
 
   return result;
 }

@@ -35,7 +35,6 @@ namespace TunerLoopTactics {
     private:
       LoopTactics::LoopOptimizer opt_;
       pet::Scop scop_;
-      std::vector<pet::PetArray> arrays_;
     public:
       Tuner() = delete;
       Tuner(isl::ctx ctx, const std::string path_file_name);
