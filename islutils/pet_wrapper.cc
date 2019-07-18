@@ -34,7 +34,7 @@ std::string PetArray::dim(int i) const {
     return isl_stat_ok;
   });
 
-  // FIXME: add 1 to extent.
+  val = val.add(isl::val::one(val.get_ctx()));
   return val.to_str();
 }
 
@@ -441,7 +441,10 @@ std::vector<PetArray> Scop::arrays() const {
     };
     pet_expr_foreach_access_expr(expression, get_array_info, &payloads);
     pet_expr_free(expression);
-    int line = pet_loc_get_line(pet_tree_get_loc(scop_->stmts[idx]->body));
+
+    pet_loc *loc = pet_tree_get_loc(scop_->stmts[idx]->body);
+    int line = pet_loc_get_line(loc);
+    pet_loc_free(loc);
     for (auto &p : payloads) {
       p.line = line;
     }
