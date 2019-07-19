@@ -4,6 +4,10 @@
 #include <thread>   // std::thread
 #include "pstream.h"
 #include <chrono>   // std::sleep_for
+#include <isl/cpp.h>
+#include <pet.h>
+#include <cassert>
+#include <fstream>
 
 using namespace TunerLoopTactics;
 using namespace LoopTactics;

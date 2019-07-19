@@ -1,5 +1,12 @@
 #include "islutils/tactics.h"
 
+#include <islutils/pet_wrapper.h>
+#include <islutils/ctx.h>
+#include <islutils/access_patterns.h>
+#include <islutils/access.h>
+#include <islutils/matchers.h>
+#include <islutils/builders.h>
+
 using namespace LoopTactics;
 
 isl::schedule_node

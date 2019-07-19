@@ -3,9 +3,9 @@
 
 #include <string>         // std::string
 #include <vector>         // std::vector
-#include <islutils/program.h>
 #include <islutils/error.h>
 #include <islutils/loop_opt.h>
+#include <islutils/pet_wrapper.h>
 
 namespace TunerLoopTactics {
 

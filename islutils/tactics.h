@@ -11,10 +11,6 @@
 #include <cassert>
 #include <islutils/error.h>
 #include <islutils/parser.h>
-#include <islutils/pet_wrapper.h>
-#include <islutils/ctx.h>
-#include <islutils/access_patterns.h>
-#include <islutils/access.h>
 #include <islutils/tuner.h>
 #include <islutils/loop_opt.h>
 
