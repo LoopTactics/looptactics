@@ -79,8 +79,6 @@ public:
   Scop(Scop &&) = default;
   static Scop parseFile(isl::ctx ctx, std::string filename);
 
-  static ScopContainer parseMultipleScop(isl::ctx, std::string filename);
-
   ~Scop();
 
   // pet_scop does not feature a copy function
