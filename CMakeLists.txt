@@ -14,6 +14,17 @@ if (VERBOSE)
   add_definitions("-DDEBUG")
 endif (VERBOSE)
 
+# Qt libraries
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+set(CMAKE_AUTOMOC ON)
+
+find_package(Qt5 COMPONENTS Widgets REQUIRED)
+#find_package(Qt5 COMPONENTS Core REQUIRED)
+include_directories(${Qt5Core_INCLUDE_DIRS})
+
+ADD_DEFINITIONS(-DQT_NO_KEYWORDS)
+
+
 ExternalProject_Add(isl
      PREFIX external/isl
      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/isl
@@ -77,8 +88,16 @@ target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})
 target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})
 target_link_libraries(islutils ${isl_LIB} ${pet_LIB})
 
-add_executable(main main.cc)
+add_executable(main 
+  main.cc
+  islutils/highlighter.cc
+  islutils/mainwindow.cc
+  )
+
 target_link_libraries(main islutils)
+target_link_libraries(main Qt5::Widgets)
+#target_link_libraries(main Qt5::Core)
+#target_link_libraries(main Qt5::Gui)
 
 add_subdirectory(test)
 add_subdirectory(docs)
