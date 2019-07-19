@@ -3,8 +3,7 @@
 
 #include <string>       // std::string
 #include <stack>        // std::stack
-#include <islutils/matchers.h>
-#include <islutils/builders.h>
+#include <isl/cpp.h>
 
 namespace LoopTactics {
 

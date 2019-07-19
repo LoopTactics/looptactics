@@ -1,5 +1,7 @@
 #include <islutils/loop_opt.h>
-#include <iostream>
+
+#include <islutils/matchers.h>
+#include <islutils/builders.h>
 
 using namespace LoopTactics;
 
