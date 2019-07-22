@@ -12,15 +12,20 @@
 #include <algorithm>    // std::remove_if
 #include <fstream>      // std::fstream
 
+using namespace timeInfo;
+
 isl::schedule_node
 replace_DFSPreorder_repeatedly(isl::schedule_node node,
                              const matchers::ScheduleNodeMatcher &pattern,
                              const builders::ScheduleNodeBuilder &replacement);
 
-
 Highlighter::Highlighter(isl::ctx context, 
   QTextDocument *parent) : context_(context), QSyntaxHighlighter(parent),
-  opt_(LoopOptimizer()) {
+  opt_(LoopOptimizer()), tuner_(TunerThread(nullptr, context)) {
+
+  qRegisterMetaType<timeInfo::TimingInfo>("TimingInfo");
+  QObject::connect(&tuner_, &TunerThread::compareSchedules,
+                   this, &Highlighter::updateTime);
 
   HighlightingRule rule;
   patternFormat_.setForeground(Qt::blue);
@@ -42,6 +47,16 @@ Highlighter::Highlighter(isl::ctx context,
   unrollFormat_.setForeground(Qt::blue);
   rule.pattern = QRegularExpression(QStringLiteral("unroll"));
   rule.format = unrollFormat_;
+  highlightingRules.append(rule);
+
+  timeFormat_.setForeground(Qt::blue);
+  rule.pattern = QRegularExpression(QStringLiteral("compareWithBaseline"));
+  rule.format = timeFormat_;
+  highlightingRules.append(rule);
+
+  loopReversalFormat_.setForeground(Qt::blue);
+  rule.pattern = QRegularExpression(QStringLiteral("loopReverse")); 
+  rule.format = timeFormat_;
   highlightingRules.append(rule);
 }
 
@@ -448,7 +463,7 @@ isl::union_map writes) {
   return res;
 }
 
-void Highlighter::updateSchedule(isl::schedule new_schedule) {
+void Highlighter::update_schedule(isl::schedule new_schedule) {
 
   if (!current_schedule_.plain_is_equal(new_schedule)) {
     current_schedule_ = new_schedule;
@@ -467,7 +482,8 @@ void Highlighter::updateSchedule(isl::schedule new_schedule) {
   }
 }
 
-void Highlighter::matchPatternHelper(
+// FIXME: Here we need to check if the write array is the same as the read one.
+void Highlighter::match_pattern_helper(
 const std::vector<Parser::AccessDescriptor> accesses_descriptors, const pet::Scop &scop) {
 
   isl::schedule schedule = scop.schedule();   
@@ -523,15 +539,16 @@ const std::vector<Parser::AccessDescriptor> accesses_descriptors, const pet::Sco
         anyTree(subTree));
   }();
 
-  root = wrap_DFSPreorder(root, loop_matcher, "tactic");
+  // FIXME: why we wrap two times?
+  root = wrap_DFSPreorder(root, loop_matcher, "_tactic_");
   root = unsqueeze_tree(root.child(0));
-  root = mark_loop(root, "tactic");
+  root = mark_loop(root, "_tactic_");
   
   isl::schedule new_schedule = root.get_schedule();
-  updateSchedule(new_schedule);
+  update_schedule(new_schedule);
 }
 
-void Highlighter::takeSnapshot() {
+void Highlighter::take_snapshot() {
 
   assert(current_schedule_ 
     && "cannot take a snapshot of an empty schedule!");
@@ -541,7 +558,7 @@ void Highlighter::takeSnapshot() {
   return;
 }
 
-void Highlighter::matchPattern(const std::string &pattern) {
+void Highlighter::match_pattern(const std::string &pattern) {
   
   //FIXME: what if we open another file or this function
   // get called again?
@@ -576,7 +593,7 @@ void Highlighter::matchPattern(const std::string &pattern) {
       return;
     }
     std::cout << "Success in parsing: " << pattern << "\n";
-    matchPatternHelper(accesses_descriptor, scop);
+    match_pattern_helper(accesses_descriptor, scop);
   } catch (Error::Error e) {
     std::cout << "Error:" << e.message_ << "\n";
     return;
@@ -585,7 +602,7 @@ void Highlighter::matchPattern(const std::string &pattern) {
     std::cout << "Error: pet cannot open the file!\n";
     return;
   }
-  takeSnapshot(); 
+  take_snapshot(); 
 }
 
 void Highlighter::tile(std::string tile_transformation) { 
@@ -606,8 +623,8 @@ void Highlighter::tile(std::string tile_transformation) {
 
   isl::schedule new_schedule = 
     opt_.tile(current_schedule_, matched_text[1].str(), std::stoi(matched_text[2].str()));
-  updateSchedule(new_schedule);
-  takeSnapshot();
+  update_schedule(new_schedule);
+  take_snapshot();
 }
 
 void Highlighter::unroll(std::string unroll_transformation) {
@@ -628,8 +645,8 @@ void Highlighter::unroll(std::string unroll_transformation) {
 
   isl::schedule new_schedule =
     opt_.unroll_loop(current_schedule_, matched_text[1].str(), std::stoi(matched_text[2].str()));
-  updateSchedule(new_schedule);
-  takeSnapshot();
+  update_schedule(new_schedule);
+  take_snapshot();
 }
 
 void Highlighter::interchange(std::string interchange_transformation) {
@@ -650,20 +667,77 @@ void Highlighter::interchange(std::string interchange_transformation) {
 
   isl::schedule new_schedule =
     opt_.swap_loop(current_schedule_, matched_text[1].str(), matched_text[2].str());
-  updateSchedule(new_schedule);
+  update_schedule(new_schedule);
 
   // take a snapshot of the current schedule.
-  takeSnapshot();
+  take_snapshot();
 }
+
+void Highlighter::loop_reverse(std::string loop_reverse_transformation) {
+
+  if (loop_reverse_transformation.empty())
+    return;
+
+  loop_reverse_transformation.erase(
+    std::remove_if(
+      loop_reverse_transformation.begin(),
+      loop_reverse_transformation.end(),
+      [](unsigned char x) { return std::isspace(x); }), loop_reverse_transformation.end());
+
+  // FIXME: all this regex are nightmare for maintainability.
+  std::regex pattern_regex(R"(([a-z_]+))");
+  std::smatch matched_text;
+  if (!std::regex_match(loop_reverse_transformation, matched_text, pattern_regex))
+    return;
+
+  isl::schedule new_schedule =
+    opt_.loop_reverse(current_schedule_, matched_text[1].str());
+  update_schedule(new_schedule);
+  take_snapshot();
+}
+
+// The boolean means the following:
+// 1 -> compare with the baseline
+// 0 -> compare with the previous schedule
+void Highlighter::compare(bool with_baseline) {
+
+  assert(with_baseline
+    && "not implemented for non baseline");
+
+  std::string file_path_as_std_string =
+    file_path_.toStdString();
   
-void Highlighter::highlightBlock(const QString &text)
-{
+  if (file_path_as_std_string.empty()) {
+    #ifdef DEBUG
+      std::cout << __func__ << " : " 
+        << "file path is empty " << "\n";
+    #endif
+    return;
+  }
+
+  pet::Scop scop =
+      pet::Scop(pet::Scop::parseFile(context_,
+        file_path_as_std_string));
+
+  isl::schedule baseline_schedule =
+    scop.schedule();
+    
+  // compare current schedule with
+  // original one.
+  tuner_.compare(baseline_schedule,
+    current_schedule_, file_path_);
+
+}  
+  
+void Highlighter::highlightBlock(const QString &text) {
  
   // FIXME: maybe just reuse the QRegex? 
   std::regex pattern_regex(R"(pattern\[(.*)\])");
   std::regex tile_regex(R"(tile\[(.*)\])");
   std::regex interchange_regex(R"(interchange\[(.*)\])");
   std::regex unroll_regex(R"(unroll\[(.*)\])");
+  std::regex loop_reverse_regex(R"(loopReverse\[(.*)])");
+  std::regex time_regex(R"(compareWithBaseline)");
   std::smatch matched_text;
 
   auto *current_block_data = currentBlockUserData();
@@ -675,7 +749,7 @@ void Highlighter::highlightBlock(const QString &text)
         << "Current block schedule -> " 
         << payload->schedule_block_.to_str() << "\n";
       #endif 
-      updateSchedule(payload->schedule_block_);
+      update_schedule(payload->schedule_block_);
     }
   }
     
@@ -687,7 +761,7 @@ void Highlighter::highlightBlock(const QString &text)
         std::string tmp = text.toStdString();    
         if (std::regex_match(tmp, matched_text, pattern_regex)) {
           std::cout << "matched pattern!\n";
-          matchPattern(matched_text[1].str());
+          match_pattern(matched_text[1].str());
         }
         if (std::regex_match(tmp, matched_text, tile_regex))
           tile(matched_text[1].str());
@@ -695,6 +769,10 @@ void Highlighter::highlightBlock(const QString &text)
           unroll(matched_text[1].str());
         if (std::regex_match(tmp, matched_text, interchange_regex))
           interchange(matched_text[1].str());
+        if (std::regex_match(tmp, matched_text, loop_reverse_regex))
+          loop_reverse(matched_text[1].str());
+        if (std::regex_match(tmp, matched_text, time_regex))
+          compare(true);
       }
   }
 }
@@ -705,4 +783,10 @@ void Highlighter::updatePath(const QString &path) {
       << path.toStdString() << "\n";
   #endif
   file_path_ = path;
+}
+
+void Highlighter::updateTime(
+const TimingInfo &baseline_time, const TimingInfo &opt_time) {
+
+    Q_EMIT userFeedbackChanged(baseline_time, opt_time);
 }
