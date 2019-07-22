@@ -6,6 +6,8 @@
 
 #include "islutils/pet_wrapper.h"
 
+static constexpr int TABSTOP = 2;
+
 MainWindow::MainWindow(isl::ctx ctx, QWidget *parent) : context(ctx), QMainWindow(parent) {
 
   setupFileMenu();
@@ -14,18 +16,25 @@ MainWindow::MainWindow(isl::ctx ctx, QWidget *parent) : context(ctx), QMainWindo
 
   QSplitter *splitter = new QSplitter(Qt::Horizontal);
   splitter->addWidget(scriptEditor);
-  splitter->addWidget(editor);
+  splitter->addWidget(codeEditor);
 
   setCentralWidget(splitter);
   setWindowTitle(tr("loop tactics"));
 }
 
 void MainWindow::about() {
+
 }
 
 void MainWindow::newFile() {
 
-  editor->clear();
+  codeEditor->clear();
+}
+
+void MainWindow::updateCode(const QString &code) {
+
+  codeEditor->clear();
+  codeEditor->setPlainText(code);
 }
 
 std::string getScopAsString(
@@ -44,22 +53,23 @@ unsigned scop_start, unsigned scop_end, const std::string path_to_file) {
   return result;
 }
 
-void MainWindow::openFile(const QString &path) {
-  
-  QString fileName = path;
+void MainWindow::openFile(QString path) {
     
-  if (fileName.isNull())
-    fileName = 
+  if (path.isNull())
+    path = 
       QFileDialog::getOpenFileName(this, tr("Open File"), "", "C++ Files (*.cpp *.c *.h)");
   
-  if (!fileName.isEmpty()) {
-    const std::string path_to_file = std::string(fileName.toLatin1().data());
-    pet::Scop scop = pet::Scop(pet::Scop::parseFile(context, path_to_file));
+  if (!path.isEmpty()) {
+    const std::string path_as_std_string = path.toStdString();
+    pet::Scop scop = pet::Scop(pet::Scop::parseFile(context, path_as_std_string));
     unsigned scop_start = scop.startPetLocation();
     unsigned scop_end = scop.endPetLocation();
-    std::string scop_as_string = getScopAsString(scop_start, scop_end, path_to_file); 
-    editor->setPlainText(QString(scop_as_string.c_str()));
+    std::string scop_as_string = getScopAsString(scop_start, scop_end, path_as_std_string); 
+    codeEditor->setPlainText(QString(scop_as_string.c_str()));
   }
+
+  scriptEditor->setReadOnly(false);
+  Q_EMIT filePathChanged(path);
   
 }
 
@@ -70,23 +80,23 @@ void MainWindow::setupEditor() {
   font.setFixedPitch(true);
   font.setPointSize(12);
   
-  // TODO rename
-  editor = new QTextEdit();
-  editor->setFont(font);
-  editor->setReadOnly(true);
+  codeEditor = new QTextEdit();
+  codeEditor->setFont(font);
+  codeEditor->setReadOnly(true);
 
   scriptEditor = new QTextEdit();
   scriptEditor->setFont(font);
-  // FIXME : this should not "float" around the code.
-  const int tabStop = 2;  // 2 characters
   QFontMetrics metrics(font);
-  scriptEditor->setTabStopWidth(tabStop * metrics.width(' '));
+  scriptEditor->setTabStopWidth(TABSTOP * metrics.width(' '));
+  scriptEditor->setReadOnly(true);
 
   highlighter = new Highlighter(context, scriptEditor->document());
+  QObject::connect(highlighter, &Highlighter::codeChanged, this, &MainWindow::updateCode);
+  QObject::connect(this, &MainWindow::filePathChanged, highlighter, &Highlighter::updatePath);
 
   QFile file("gemm.c");
   if (file.open(QFile::ReadOnly | QFile::Text)) {
-    editor->setPlainText(file.readAll());
+    codeEditor->setPlainText(file.readAll());
     scriptEditor->setPlainText(file.readAll());
   }
 }
@@ -97,10 +107,7 @@ void MainWindow::setupFileMenu() {
   menuBar()->addMenu(fileMenu);
 
   fileMenu->addAction(tr("&Open"), this, [this]() { openFile(); }, QKeySequence::Open);
-  fileMenu->addAction(tr("&Eit"), qApp, [this]() { 
-    //if (t)
-    //  delete t;
-    QApplication::quit(); }, 
+  fileMenu->addAction(tr("&Eit"), qApp, [this]() { QApplication::quit(); }, 
     QKeySequence::Quit);
 }
 
@@ -111,8 +118,4 @@ void MainWindow::setupHelpMenu() {
   
   helpMenu->addAction(tr("&About"), this, &MainWindow::about);
 }
-
-
-
-
 
