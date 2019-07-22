@@ -19,7 +19,11 @@ public:
 public Q_SLOTS:
   void about();
   void newFile();
-  void openFile(const QString &path = QString());
+  void openFile(QString path = QString());
+  void updateCode(const QString &code);
+
+Q_SIGNALS:
+  void filePathChanged(const QString &path);
 
 private:
   void setupEditor();
@@ -29,7 +33,7 @@ private:
   isl::ctx context;
   
   QWidget *graphical_interface = nullptr;
-  QTextEdit *editor = nullptr;
+  QTextEdit *codeEditor = nullptr;
   QTextEdit *scriptEditor = nullptr;
   Highlighter *highlighter = nullptr;
 };
