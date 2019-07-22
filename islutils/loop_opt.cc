@@ -130,7 +130,8 @@ static isl::schedule_node sink_mark(isl::schedule_node node, isl::id mark_id) {
 /// with id "node_id". We then create a new mark node with the same
 /// id at the leaf of the current subtree rooted at "node". We remove
 /// the old mark node and we sink the band to the leaf.
-static isl::schedule_node sink_point_tile(isl::schedule_node node, std::string node_id) {
+static isl::schedule_node sink_point_tile(isl::schedule_node node, 
+  const std::string &node_id) {
 
   if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_mark)
       && (node.mark_get_id().to_str().compare(node_id) == 0)) {
@@ -149,7 +150,7 @@ static isl::schedule_node sink_point_tile(isl::schedule_node node, std::string n
 
 /// Apply the tiling transformation.
 std::pair<isl::multi_union_pw_aff, isl::multi_union_pw_aff>
-tile_node(isl::schedule_node node, int tileSize) {
+tile_node(isl::schedule_node node, const int &tileSize) {
 
   auto space = isl::manage(isl_schedule_node_band_get_space(node.get()));
   auto dims = space.dim(isl::dim::set);
@@ -168,7 +169,7 @@ tile_node(isl::schedule_node node, int tileSize) {
 
 /// Tiling.
 isl::schedule LoopOptimizer::tile(isl::schedule schedule, 
-const std::string loop_id, const int tile_size) {
+const std::string &loop_id, const int &tile_size) {
 
   isl::schedule_node root = schedule.get_root();
 
@@ -252,7 +253,7 @@ std::function<isl::schedule_node(isl::schedule_node)> builder_callback) {
 
 /// Simple stack-based walker -> forward.
 static isl::schedule_node walker_forward(
-isl::schedule_node node, const std::string mark_id) {
+isl::schedule_node node, const std::string &mark_id) {
 
   std::stack<isl::schedule_node> node_stack;
   node_stack.push(node);
@@ -278,7 +279,7 @@ isl::schedule_node node, const std::string mark_id) {
 
 /// Simple stack-based walker -> backward.
 static isl::schedule_node walker_backward(
-isl::schedule_node node, const std::string mark_id) {
+isl::schedule_node node, const std::string &mark_id) {
 
   std::stack<isl::schedule_node> node_stack;
   node_stack.push(node);
@@ -319,7 +320,7 @@ isl::schedule_node helper_builder_callback(
 }
 
 isl::schedule LoopOptimizer::swap_loop(isl::schedule schedule, 
-const std::string loop_source, const std::string loop_destination) {
+const std::string &loop_source, const std::string &loop_destination) {
 
   isl::schedule_node node = schedule.get_root().child(0);
 
@@ -367,7 +368,7 @@ const std::string loop_source, const std::string loop_destination) {
   return node.root().get_schedule();
 }
 
-isl::schedule_node helper_unroll(isl::schedule_node node, const int unroll_factor) {
+isl::schedule_node helper_unroll(isl::schedule_node node, const int &unroll_factor) {
 
   assert(isl_schedule_node_get_type(node.get()) == isl_schedule_node_band 
           && "expect band node");
@@ -408,13 +409,23 @@ isl::schedule_node helper_unroll(isl::schedule_node node, const int unroll_facto
 }
 
 isl::schedule LoopOptimizer::unroll_loop(isl::schedule schedule, 
-  const std::string loop_id, const int unroll_factor) {
+  const std::string &loop_id, const int &unroll_factor) {
 
   isl::schedule_node node = schedule.get_root();
   node = walker_forward(node, loop_id);
   node = helper_unroll(node.child(0), unroll_factor);
   isl::union_set set = isl::manage(isl_schedule_node_band_get_ast_build_options(node.get()));
   return node.root().get_schedule();
+}
+
+isl::schedule LoopOptimizer::loop_reverse(isl::schedule schedule,
+  const std::string &loop_id) {
+
+  isl::schedule_node node = schedule.get_root();
+  node = walker_forward(node, loop_id);
+  assert(0 && "not implemented yet!");
+  
+  return schedule;
 } 
 
 

@@ -11,11 +11,13 @@ namespace LoopTactics {
 
     public:
       isl::schedule tile(isl::schedule schedule, 
-                         const std::string loop_id, const int tile_size);
+                         const std::string &loop_id, const int &tile_size);
       isl::schedule swap_loop(isl::schedule schedule, 
-                              const std::string loop_source, const std::string loop_dest);
+                              const std::string &loop_source, const std::string &loop_dest);
       isl::schedule unroll_loop(isl::schedule schedule, 
-                                const std::string loop_id, const int unroll_factor);
+                                const std::string &loop_id, const int &unroll_factor);
+      isl::schedule loop_reverse(isl::schedule schedule,
+                                 const std::string &loop_id);
   };
 
 
