@@ -8,7 +8,9 @@
 #include <islutils/access.h>
 
 #include <iostream>
-#include <regex>
+#include <regex>        // std::regex
+#include <algorithm>    // std::remove_if
+#include <fstream>      // std::fstream
 
 isl::schedule_node
 replace_DFSPreorder_repeatedly(isl::schedule_node node,
@@ -17,13 +19,29 @@ replace_DFSPreorder_repeatedly(isl::schedule_node node,
 
 
 Highlighter::Highlighter(isl::ctx context, 
-  QTextDocument *parent) : context(context), QSyntaxHighlighter(parent) {
+  QTextDocument *parent) : context_(context), QSyntaxHighlighter(parent),
+  opt_(LoopOptimizer()) {
 
   HighlightingRule rule;
-  patternFormat.setFontItalic(true);
-  patternFormat.setForeground(Qt::blue);
-  rule.pattern = QRegularExpression(QStringLiteral("\\bpattern+[?=\\[]"));
-  rule.format = patternFormat;
+  patternFormat_.setForeground(Qt::blue);
+  rule.pattern = QRegularExpression(QStringLiteral("pattern"));
+  rule.format = patternFormat_;
+  highlightingRules.append(rule);
+  
+  
+  tileFormat_.setForeground(Qt::blue);
+  rule.pattern = QRegularExpression(QStringLiteral("tile"));
+  rule.format = tileFormat_;
+  highlightingRules.append(rule);
+
+  interchangeFormat_.setForeground(Qt::blue);
+  rule.pattern = QRegularExpression(QStringLiteral("interchange"));
+  rule.format = interchangeFormat_;
+  highlightingRules.append(rule);
+
+  unrollFormat_.setForeground(Qt::blue);
+  rule.pattern = QRegularExpression(QStringLiteral("unroll"));
+  rule.format = unrollFormat_;
   highlightingRules.append(rule);
 }
 
@@ -350,6 +368,9 @@ std::vector<Parser::AccessDescriptor> descr_accesses, isl::union_map accesses) {
 
   auto ps = allOf(accesses_list);
   auto matches = match(accesses, ps);
+  #ifdef DEBUG
+    std::cout << "#matches: " << matches.size() << "\n";
+  #endif
   return (matches.size() == 1) ? true : false;
 }
 
@@ -366,6 +387,9 @@ std::vector<Parser::AccessDescriptor> write_descr_accesses, isl::union_map write
   bool res = check_access_pattern(ctx, write_descr_accesses, writes);
   #ifdef DEBUG
     std::cout << __func__ << ": " << res << "\n";
+    std::cout << "writes: " << writes.to_str() << "\n";
+    // FIXME: be consistent with naming.
+    std::cout << "#write_descr_accesses: " << write_descr_accesses.size() << "\n";
   #endif
   return res;
 }
@@ -383,6 +407,8 @@ std::vector<Parser::AccessDescriptor> read_descr_accesses, isl::union_map reads)
   bool res = check_access_pattern(ctx, read_descr_accesses, reads);
   #ifdef DEBUG
     std::cout << __func__ << ": " << res << "\n";
+    std::cout << "reads: " << reads.to_str() << "\n";
+    std::cout << "#read_descr_accesses: " << read_descr_accesses.size() << "\n";
   #endif
   return res;
 } 
@@ -420,6 +446,25 @@ isl::union_map writes) {
     std::cout << __func__ << ": " << res << "\n";
   #endif
   return res;
+}
+
+void Highlighter::updateSchedule(isl::schedule new_schedule) {
+
+  if (!current_schedule_.plain_is_equal(new_schedule)) {
+    current_schedule_ = new_schedule;
+    std::string file_path_as_std_string =
+      file_path_.toStdString();
+    assert(!file_path_as_std_string.empty()
+      && "empty file path!");
+    pet::Scop scop = 
+      pet::Scop(pet::Scop::parseFile(context_,
+        file_path_as_std_string));
+    scop.schedule() = new_schedule;
+    std::cout << new_schedule.to_str() << "\n";
+    std::string code = scop.codegen();
+    QString code_as_q_string = QString(code.c_str());
+    Q_EMIT codeChanged(code_as_q_string);
+  }
 }
 
 void Highlighter::matchPatternHelper(
@@ -482,59 +527,182 @@ const std::vector<Parser::AccessDescriptor> accesses_descriptors, const pet::Sco
   root = unsqueeze_tree(root.child(0));
   root = mark_loop(root, "tactic");
   
-  std::cout << root.to_str() << "\n";
-
+  isl::schedule new_schedule = root.get_schedule();
+  updateSchedule(new_schedule);
 }
 
-void Highlighter::matchPattern(const std::string &text) {
- 
-  std::cout << text << std::endl; 
-  //FIXME: how to get the file path here?
+void Highlighter::takeSnapshot() {
+
+  assert(current_schedule_ 
+    && "cannot take a snapshot of an empty schedule!");
+  BlockSchedule *bs = new BlockSchedule();
+  bs->schedule_block_ = current_schedule_;
+  setCurrentBlockUserData(bs);
+  return;
+}
+
+void Highlighter::matchPattern(const std::string &pattern) {
+  
   //FIXME: what if we open another file or this function
   // get called again?
+
+  if (file_path_.isEmpty()) {
+    #ifdef DEBUG
+      std::cout << __func__ << ": " 
+        << "exit as file_path is empty!" << "\n";
+    #endif
+    return;
+  }
+  std::string file_path_as_std_string =
+    file_path_.toStdString();
+
+  // check if the file path is good.  
+  std::ifstream f(file_path_as_std_string);
+  if (!f.good()) {
+    #ifdef DEBUG
+      std::cout << __func__ << " : " 
+        << "exit as file_path is not valid!" << "\n";
+    #endif
+    return;
+  }
+
   try {
-   pet::Scop scop = pet::Scop(pet::Scop::parseFile(context, 
-     "/home/parallels/sourcetosource/test/inputs/gemm.c"));
-
-    std::vector<Parser::AccessDescriptor> access_descriptor{};
-    try {
-      access_descriptor = Parser::parse(text);
-    } catch (Error::Error e) {
-      std::cout << "Error: " << e.message_ << "\n";
+   pet::Scop scop = pet::Scop(pet::Scop::parseFile(context_, 
+     file_path_as_std_string));
+    current_schedule_ = scop.schedule();
+    std::vector<Parser::AccessDescriptor> 
+      accesses_descriptor = Parser::parse(pattern);
+    if (accesses_descriptor.size() == 0) {
       return;
     }
-
-    if (access_descriptor.size() == 0) {
-      std::cout << "Error: empty access descriptors!\n";
-      return;
-    }
-
-    std::cout << "Success in parsing: " << text << "\n";
-    matchPatternHelper(access_descriptor, scop);
-  } catch (...) {
+    std::cout << "Success in parsing: " << pattern << "\n";
+    matchPatternHelper(accesses_descriptor, scop);
+  } catch (Error::Error e) {
+    std::cout << "Error:" << e.message_ << "\n";
+    return;
+  }
+    catch (...) {
     std::cout << "Error: pet cannot open the file!\n";
     return;
-  } 
-} 
-  
+  }
+  takeSnapshot(); 
+}
 
+void Highlighter::tile(std::string tile_transformation) { 
+
+  if (tile_transformation.empty())
+    return;
+
+  tile_transformation.erase(
+    std::remove_if(
+      tile_transformation.begin(),
+      tile_transformation.end(),
+      [](unsigned char x) { return std::isspace(x); }), tile_transformation.end());
+
+  std::regex pattern_regex(R"(([a-z_]+),([0-9]+))");
+  std::smatch matched_text;
+  if (!std::regex_match(tile_transformation, matched_text, pattern_regex))
+    return;
+
+  isl::schedule new_schedule = 
+    opt_.tile(current_schedule_, matched_text[1].str(), std::stoi(matched_text[2].str()));
+  updateSchedule(new_schedule);
+  takeSnapshot();
+}
+
+void Highlighter::unroll(std::string unroll_transformation) {
+  
+  if (unroll_transformation.empty())
+    return;
+
+  unroll_transformation.erase(
+    std::remove_if(
+      unroll_transformation.begin(),
+      unroll_transformation.end(),
+      [](unsigned char x) { return std::isspace(x); }), unroll_transformation.end());
+
+  std::regex pattern_regex(R"(([a-z_]+),([0-9]+))");
+  std::smatch matched_text;
+  if (!std::regex_match(unroll_transformation, matched_text, pattern_regex))
+    return;
+
+  isl::schedule new_schedule =
+    opt_.unroll_loop(current_schedule_, matched_text[1].str(), std::stoi(matched_text[2].str()));
+  updateSchedule(new_schedule);
+  takeSnapshot();
+}
+
+void Highlighter::interchange(std::string interchange_transformation) {
+
+  if (interchange_transformation.empty())
+    return;
+
+  interchange_transformation.erase( 
+    std::remove_if(
+      interchange_transformation.begin(),
+      interchange_transformation.end(),
+      [](unsigned char x) { return std::isspace(x); }), interchange_transformation.end());
+
+  std::regex pattern_regex(R"(([a-z_]+),([a-z_]+))");
+  std::smatch matched_text;
+  if (!std::regex_match(interchange_transformation, matched_text, pattern_regex))
+    return;
+
+  isl::schedule new_schedule =
+    opt_.swap_loop(current_schedule_, matched_text[1].str(), matched_text[2].str());
+  updateSchedule(new_schedule);
+
+  // take a snapshot of the current schedule.
+  takeSnapshot();
+}
+  
 void Highlighter::highlightBlock(const QString &text)
 {
  
-  // FIXME   
-  std::regex p(R"(pattern\[(.*)\])");
-  std::smatch m;
+  // FIXME: maybe just reuse the QRegex? 
+  std::regex pattern_regex(R"(pattern\[(.*)\])");
+  std::regex tile_regex(R"(tile\[(.*)\])");
+  std::regex interchange_regex(R"(interchange\[(.*)\])");
+  std::regex unroll_regex(R"(unroll\[(.*)\])");
+  std::smatch matched_text;
+
+  auto *current_block_data = currentBlockUserData();
+  if (current_block_data) {
+    BlockSchedule *payload = dynamic_cast<BlockSchedule*>(current_block_data);
+    if (payload) {
+      #ifdef DEBUG
+      std::cout << __func__ << " : "
+        << "Current block schedule -> " 
+        << payload->schedule_block_.to_str() << "\n";
+      #endif 
+      updateSchedule(payload->schedule_block_);
+    }
+  }
     
   for (const HighlightingRule &rule : qAsConst(highlightingRules)) {
     QRegularExpressionMatchIterator matchIterator = rule.pattern.globalMatch(text);
       while (matchIterator.hasNext()) {
         QRegularExpressionMatch match = matchIterator.next();
         setFormat(match.capturedStart(), match.capturedLength(), rule.format);
-        std::string tmp = std::string(text.toLatin1().data());    
-        if (std::regex_match(tmp, m, p)) {
-          matchPattern(m[1].str());
+        std::string tmp = text.toStdString();    
+        if (std::regex_match(tmp, matched_text, pattern_regex)) {
+          std::cout << "matched pattern!\n";
+          matchPattern(matched_text[1].str());
         }
+        if (std::regex_match(tmp, matched_text, tile_regex))
+          tile(matched_text[1].str());
+        if (std::regex_match(tmp, matched_text, unroll_regex))
+          unroll(matched_text[1].str());
+        if (std::regex_match(tmp, matched_text, interchange_regex))
+          interchange(matched_text[1].str());
       }
   }
+}
 
+void Highlighter::updatePath(const QString &path) {
+  #ifdef DEBUG  
+    std::cout << __func__ << " : "
+      << path.toStdString() << "\n";
+  #endif
+  file_path_ = path;
 }
