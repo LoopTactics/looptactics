@@ -33,10 +33,7 @@ Lexer::Token_value Lexer::get_token() {
   switch (ch) {
     case 0:
     case '\n':
-      {
-        //std::cout << ch << ": is end string\n";
-        return Token_value::END;
-      }
+      return Token_value::END;
     case '*':
       return curr_tok = Token_value::MUL;
     case '/':
@@ -212,6 +209,11 @@ std::vector<Parser::AccessDescriptor> Parser::parse(const std::string &string_to
   using namespace Driver;
   ss << string_to_be_parsed;
 
+  // FIXME: why end up in a bad state?
+  if (ss.fail()) {
+    ss.clear(); 
+  }
+
   while(ss) {
     try {
       Lexer::get_token();
@@ -221,6 +223,7 @@ std::vector<Parser::AccessDescriptor> Parser::parse(const std::string &string_to
     catch (Error::Error e) {
       std::cout << "syntax error: " << e.message_ << std::endl;
       descriptors.erase(descriptors.begin(), descriptors.end());
+      ss.clear();
       return descriptors;
     }
   }
