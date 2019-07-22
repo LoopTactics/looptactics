@@ -3,20 +3,25 @@
 #include <QtGui>
 #include <fstream> // std::ifstream
 #include "islutils/mainwindow.h"
-
 #include "islutils/pet_wrapper.h"
+
+using namespace timeInfo;
 
 static constexpr int TABSTOP = 2;
 
-MainWindow::MainWindow(isl::ctx ctx, QWidget *parent) : context(ctx), QMainWindow(parent) {
+MainWindow::MainWindow(isl::ctx ctx, QWidget *parent) : context_(ctx), QMainWindow(parent) {
 
   setupFileMenu();
   setupHelpMenu();
   setupEditor();
 
   QSplitter *splitter = new QSplitter(Qt::Horizontal);
-  splitter->addWidget(scriptEditor);
-  splitter->addWidget(codeEditor);
+  QSplitter *nested_splitter = new QSplitter(Qt::Vertical);
+
+  nested_splitter->addWidget(script_editor_);
+  nested_splitter->addWidget(info_editor_);
+  splitter->addWidget(nested_splitter);
+  splitter->addWidget(code_editor_);
 
   setCentralWidget(splitter);
   setWindowTitle(tr("loop tactics"));
@@ -28,13 +33,13 @@ void MainWindow::about() {
 
 void MainWindow::newFile() {
 
-  codeEditor->clear();
+  code_editor_->clear();
 }
 
 void MainWindow::updateCode(const QString &code) {
 
-  codeEditor->clear();
-  codeEditor->setPlainText(code);
+  code_editor_->clear();
+  code_editor_->setPlainText(code);
 }
 
 std::string getScopAsString(
@@ -61,15 +66,44 @@ void MainWindow::openFile(QString path) {
   
   if (!path.isEmpty()) {
     const std::string path_as_std_string = path.toStdString();
-    pet::Scop scop = pet::Scop(pet::Scop::parseFile(context, path_as_std_string));
+    pet::Scop scop = pet::Scop(pet::Scop::parseFile(context_, path_as_std_string));
     unsigned scop_start = scop.startPetLocation();
     unsigned scop_end = scop.endPetLocation();
     std::string scop_as_string = getScopAsString(scop_start, scop_end, path_as_std_string); 
-    codeEditor->setPlainText(QString(scop_as_string.c_str()));
+    code_editor_->setPlainText(QString(scop_as_string.c_str()));
   }
 
-  scriptEditor->setReadOnly(false);
+  script_editor_->setReadOnly(false);
   Q_EMIT filePathChanged(path);
+  
+}
+
+void MainWindow::updateUserFeedback(const TimingInfo &baseline_time,
+  const TimingInfo &opt_time) {
+
+  info_editor_->clear();
+
+  std::string baseline = "Baseline min time: ";
+  baseline += std::to_string(baseline_time.min_time) + "\n"; 
+  baseline += "Baseline max time: ";
+  baseline += std::to_string(baseline_time.max_time) + "\n";
+  baseline += "Baseline avg time: ";
+  baseline += std::to_string(baseline_time.avg_time) + "\n";
+  baseline += "Baseline median time: ";
+  baseline += std::to_string(baseline_time.median_time) + "\n";
+
+  std::string opt = "Optimized min time: ";
+  opt += std::to_string(opt_time.min_time) + "\n"; 
+  opt += "Optimized max time: ";
+  opt += std::to_string(opt_time.max_time) + "\n";
+  opt += "Optimized avg time: ";
+  opt += std::to_string(opt_time.avg_time) + "\n";
+  opt += "Optimized median time: ";
+  opt += std::to_string(opt_time.median_time) + "\n";
+  
+  QString baseline_qString = QString(baseline.c_str());
+  QString opt_qString = QString(opt.c_str());
+  info_editor_->setPlainText(baseline_qString + opt_qString);
   
 }
 
@@ -80,24 +114,30 @@ void MainWindow::setupEditor() {
   font.setFixedPitch(true);
   font.setPointSize(12);
   
-  codeEditor = new QTextEdit();
-  codeEditor->setFont(font);
-  codeEditor->setReadOnly(true);
+  info_editor_ = new QTextEdit();
+  info_editor_->setFont(font);
+  info_editor_->setReadOnly(true);
+  
+  code_editor_ = new QTextEdit();
+  code_editor_->setFont(font);
+  code_editor_->setReadOnly(true);
 
-  scriptEditor = new QTextEdit();
-  scriptEditor->setFont(font);
+  script_editor_ = new QTextEdit();
+  script_editor_->setFont(font);
   QFontMetrics metrics(font);
-  scriptEditor->setTabStopWidth(TABSTOP * metrics.width(' '));
-  scriptEditor->setReadOnly(true);
+  script_editor_->setTabStopWidth(TABSTOP * metrics.width(' '));
+  script_editor_->setReadOnly(true);
 
-  highlighter = new Highlighter(context, scriptEditor->document());
-  QObject::connect(highlighter, &Highlighter::codeChanged, this, &MainWindow::updateCode);
-  QObject::connect(this, &MainWindow::filePathChanged, highlighter, &Highlighter::updatePath);
+  highlighter_ = new Highlighter(context_, script_editor_->document());
+  QObject::connect(highlighter_, &Highlighter::codeChanged, this, &MainWindow::updateCode);
+  QObject::connect(highlighter_, &Highlighter::userFeedbackChanged, 
+    this, &MainWindow::updateUserFeedback);
+  QObject::connect(this, &MainWindow::filePathChanged, highlighter_, &Highlighter::updatePath);
 
   QFile file("gemm.c");
   if (file.open(QFile::ReadOnly | QFile::Text)) {
-    codeEditor->setPlainText(file.readAll());
-    scriptEditor->setPlainText(file.readAll());
+    code_editor_->setPlainText(file.readAll());
+    script_editor_->setPlainText(file.readAll());
   }
 }
 
