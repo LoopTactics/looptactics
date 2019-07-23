@@ -1471,25 +1471,12 @@ TEST(Transformer, Capture) {
   node.dump();
 }
 
-struct Schedule : public ::testing::Test {
-  virtual void SetUp() override {
-    scop_ = pet::Scop::parseFile(ctx_, "inputs/nested.c").getScop();
-  }
+TEST(schedule, MergeBandsCallLambda) {
 
-  isl::schedule_node topmostBand() {
-    return scop_.schedule.get_root().child(0);
-  }
-
-  void expectSingleBand(isl::schedule_node node) {
-    using namespace matchers;
-    EXPECT_TRUE(ScheduleNodeMatcher::isMatching(band(leaf()), node));
-  }
-
-  Scop scop_;
-  ScopedCtx ctx_ = ScopedCtx(pet::allocCtx());
-};
-
-TEST_F(Schedule, MergeBandsCallLambda) {
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto scop = pet::Scop::parseFile(
+    ScopedCtx(pet::allocCtx()), "inputs/nested.c").getScop();
+/*
   isl::schedule_node parent, child, grandchild;
   auto matcher = [&]() {
     using namespace matchers;
@@ -1516,15 +1503,17 @@ TEST_F(Schedule, MergeBandsCallLambda) {
   // Keep transforming the tree while possible.
   // Call the builder lambda each time to construct a new builder based on the
   // currently matched nodes (captured by-reference above).
-  auto node = topmostBand();
+  auto node = scop.schedule.get_root().child(0);
   while (matchers::ScheduleNodeMatcher::isMatching(matcher, node)) {
     node = node.cut();
     node = merger().insertAt(node);
   }
-
-  expectSingleBand(node);
+  using namespace matchers;
+  EXPECT_TRUE(matchers::ScheduleNodeMatcher::isMatching(band(leaf()), node));
+*/  
 }
 
+/*
 TEST_F(Schedule, MergeBandsDeclarative) {
   isl::schedule_node parent, child, grandchild;
   // Note that the lambda is called immediately and is only necessary for
@@ -1560,7 +1549,7 @@ TEST_F(Schedule, MergeBandsDeclarative) {
 
   expectSingleBand(node);
 }
-
+*/
 
 static isl::union_map computeAllDependences(const Scop &scop) {
   // For the simplest possible dependence analysis, get rid of reference tags.
@@ -1709,14 +1698,14 @@ isl::schedule_node mergeIfTilable(isl::schedule_node node,
 
   return replaceDFSPreorderRepeatedly(node, matcher, declarativeMerger);
 }
-
+/*
 TEST_F(Schedule, MergeBandsIfTilable) {
   auto dependences = computeAllDependences(scop_);
   auto node = mergeIfTilable(topmostBand(), dependences);
   expectSingleBand(node);
   EXPECT_EQ(isl_schedule_node_band_get_permutable(node.get()), isl_bool_true);
 }
-
+*/
 static std::vector<bool> detectCoincidence(isl::schedule_node band,
                                            isl::union_map dependences) {
   std::vector<bool> result;
@@ -1765,12 +1754,12 @@ isl::schedule_node markCoincident(isl::schedule_node root,
 
   return replaceDFSPreorderOnce(root, matcher, builder);
 }
-
+/*
 TEST_F(Schedule, MarkCoincident) {
   auto dependences = computeAllDependences(scop_);
   markCoincident(scop_.schedule.get_root(), dependences).dump();
 }
-
+*/
 static bool canSink(isl::schedule_node band) {
   auto dim = band.band_get_partial_schedule().dim(isl::dim::set);
   if (dim < 2) {
@@ -2090,7 +2079,7 @@ TEST(Transformer, MatchMatmul) {
   // clang-format on
 
   ASSERT_TRUE(ScheduleNodeMatcher::isMatching(matcher, root.child(0)));
-
+/*
   isl::union_map reads = scop.reads.curry();
   isl::union_map writes = scop.mustWrites.curry();
 
@@ -2268,6 +2257,7 @@ TEST(Transformer, MatchMatmul) {
   petScop.schedule() = root.get_schedule();
   result = petScop.codegen();
   std::cout << result << std::endl;
+*/
 }
 
 isl::union_map addRangeId(isl::union_map umap, const std::string &tag) {
@@ -2645,6 +2635,180 @@ static isl::multi_union_pw_aff getSchedulePointTile(isl::schedule_node node,
   auto tile_schedule = getScheduleTile(node, s);
   auto sched = node.band_get_partial_schedule();
   return sched.sub(tile_schedule);
+}
+
+TEST(Transformer, splitting) {
+
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto pet_scop =
+    pet::Scop::parseFile(ctx, "inputs/splitting.c");
+
+  isl::schedule schedule = pet_scop.schedule();
+
+  isl::schedule_node root = schedule.get_root();  
+  root = root.child(0);
+  isl::space space = isl::manage(isl_schedule_node_band_get_space(root.get()));
+  auto maff = isl::multi_aff::zero(space);
+  auto muaff = root.band_get_partial_schedule();
+  
+  auto p =
+    isl::manage(isl_multi_union_pw_aff_apply_multi_aff(muaff.get(), maff.get()));
+  
+
+  //isl::val one = isl::val::one(ctx);
+  //isl::local_space lc = isl::local_space(space);
+  //isl::aff a = isl::aff(lc, one);
+  //isl::multi_aff maff = isl::multi_aff(a);
+  //isl::multi_union_pw_aff muaff =
+  //  isl::multi_union_pw_aff(maff); 
+
+  auto node =
+    isl::manage(isl_schedule_node_band_shift(root.get(), p.get()));
+  //std::cout << node.to_str() << "\n"; 
+
+  //std::cout << maff.to_str() << "\n"; 
+}
+
+static std::string codegenFusion(isl::ast_build astBuild, isl::ast_node node,
+  pet_stmt *stmt) {
+
+  if (stmt) {
+    using namespace pet;
+    auto schedule = isl::map::from_union_map(astBuild.get_schedule());
+    auto iteratorMap = isl::pw_multi_aff::from_map(schedule.reverse());
+    auto result = printPetStmt(stmt,
+                        buildRef2Expr(stmt, astBuild, transformSubscriptsDLT,
+                                      iteratorMap.get()));
+    std::cout << "res : " << result << std::endl;
+    return result;
+  }
+
+  auto schedule = astBuild.get_schedule();
+  std::cout << schedule.to_str() << "\n";
+  auto original = schedule.range_factor_range();
+  std::cout << original.to_str() << "\n";
+  
+  return "A[i] = B[i]";
+}
+
+TEST(Transformer, fusion) {
+
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto pet_scop =  
+    pet::Scop::parseFile(ctx, "inputs/fusion.c");
+  std::cout << pet_scop.codegen(codegenFusion) << "\n";
+
+  isl::schedule schedule = pet_scop.schedule();
+  isl::schedule_node root = schedule.get_root();
+
+  isl::schedule_node domain_node;
+  isl::schedule_node upper_band_node, lower_band_node;
+  isl::schedule_node upper_filter_node, lower_filter_node;
+
+  auto matcher = [&]() {
+    using namespace matchers;
+    return 
+      domain(domain_node,
+        sequence(
+          filter(upper_filter_node,
+            band(upper_band_node, leaf())),
+          filter(lower_filter_node, 
+            band(lower_band_node, leaf()))));
+  }();
+
+  ASSERT_TRUE(
+    matchers::ScheduleNodeMatcher::isMatching(matcher, root));
+
+  //auto node_ = [&]() {
+
+    //auto lower_band_schedule = lower_band_node.band_get_partial_schedule();
+    //lower_band_schedule = 
+    //  lower_band_schedule.flat_range_product(upper_band_node.band_get_partial_schedule());
+    //auto lower_filter = lower_filter_node.filter_get_filter();
+    //lower_filter = lower_filter.unite(upper_filter_node.filter_get_filter());
+  
+    //auto upper_band_schedule = upper_band_node.band_get_partial_schedule();
+    //upper_band_schedule =
+    //  upper_band_schedule.flat_range_product(lower_band_node.band_get_partial_schedule());
+
+    //using namespace builders;
+    //auto builder =
+    //  domain(domain_node.domain_get_domain(),
+    //    set(
+    //      filter(upper_filter_node.filter_get_filter(),
+    //        band(upper_band_node.band_get_partial_schedule())),
+    //      filter(lower_filter_node.filter_get_filter(),
+    //        band(lower_band_node.band_get_partial_schedule()))));
+
+    //using namespace builders;
+    //auto builder =
+    //  domain(domain_node.domain_get_domain(),
+    //    band(upper_band_schedule,
+    //      sequence(
+    //        filter(upper_filter_node.filter_get_filter()),
+    //        filter(lower_filter_node.filter_get_filter()))));
+    //return builder.build();
+  //}();
+/*
+  auto ctx_ = isl::ctx(isl_ctx_alloc());
+  auto node_ = [ctx_]() {
+    using namespace builders;
+  
+    auto iteration_domain = isl::union_set(
+      ctx_, "{S1[i]: 0 <= i < 10; S2[i]: 0 <= i < 10}");
+    auto sched =
+      isl::multi_union_pw_aff(ctx_, "[{S1[i]->[(i)]; S2[i]->[(i)]}]");
+    auto filterS1 = isl::union_set(ctx_, "{S1[i]}");
+    auto filterS2 = isl::union_set(ctx_, "{S2[i]}");
+    
+    auto builder =
+      domain(iteration_domain,
+        band(sched,
+          sequence(
+            filter(filterS1),
+            filter(filterS2))));
+    return builder.build();
+  }();
+
+  std::cout << node_.to_str() << "\n";
+  pet_scop.schedule() = node_.get_schedule();
+  std::cout << pet_scop.codegen() << "\n"; 
+*/
+
+  auto node_ = [&]() {
+    using namespace builders;
+    
+    auto schedule = upper_band_node.band_get_partial_schedule();
+    schedule = schedule.flat_range_product(lower_band_node.band_get_partial_schedule());
+  
+    auto domain_as_string = domain_node.domain_get_domain().to_str();
+    auto upper_filter_as_string = upper_filter_node.filter_get_filter().to_str();
+    auto lower_filter_as_string = lower_filter_node.filter_get_filter().to_str();
+    auto schedule_as_string = schedule.to_str();
+ 
+    auto ctx_ = isl::ctx(isl_ctx_alloc());
+    auto iteration_domain = isl::union_set(
+      ctx_, domain_as_string);
+    auto sched =
+      isl::multi_union_pw_aff(ctx_, "[{S_0[i]->[(i)]; S_1[i]->[(i)]}]");
+    //auto sched =
+    //  isl::multi_union_pw_aff(ctx_, schedule_as_string);
+    auto filterS1 = isl::union_set(ctx_, upper_filter_as_string);
+    auto filterS2 = isl::union_set(ctx_, lower_filter_as_string);
+ 
+    auto builder =
+      domain(iteration_domain,
+        band(sched,
+          sequence(
+            filter(filterS1),
+            filter(filterS2))));
+    return builder.build();
+  }();
+
+  std::cout << node_.to_str() << "\n";
+  pet_scop.schedule() = node_.get_schedule(); 
+  std::cout << pet_scop.codegen(codegenFusion) << "\n"; 
+
 }
 
 TEST(Transformer, simpleTuner) {
