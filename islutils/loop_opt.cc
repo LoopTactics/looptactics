@@ -1,7 +1,7 @@
 #include <islutils/loop_opt.h>
 
-#include <islutils/matchers.h>
 #include <islutils/builders.h>
+#include <islutils/matchers.h>
 
 using namespace LoopTactics;
 
@@ -14,14 +14,14 @@ using namespace LoopTactics;
 /// NOTE: This is not always possible. Cutting children
 /// in set or sequence is not allowed by ISL and as a consequence
 /// by Loop Tactics.
-static isl::schedule_node rebuild(isl::schedule_node node,
-                           const builders::ScheduleNodeBuilder &replacement) {
+static isl::schedule_node
+rebuild(isl::schedule_node node,
+        const builders::ScheduleNodeBuilder &replacement) {
 
   node = node.cut();
   node = replacement.insertAt(node);
   return node;
 }
-
 
 /// utility function.
 ///
@@ -31,8 +31,8 @@ static isl::schedule_node rebuild(isl::schedule_node node,
 /// of a match with @p pattern.
 static isl::schedule_node
 replace_repeatedly(isl::schedule_node node,
-                  const matchers::ScheduleNodeMatcher &pattern,
-                  const builders::ScheduleNodeBuilder &replacement) {
+                   const matchers::ScheduleNodeMatcher &pattern,
+                   const builders::ScheduleNodeBuilder &replacement) {
 
   while (matchers::ScheduleNodeMatcher::isMatching(pattern, node)) {
     node = rebuild(node, replacement);
@@ -54,10 +54,9 @@ replace_repeatedly(isl::schedule_node node,
 /// @param pattern: Pattern to look-up in the subtree.
 /// @param replacement: Replacement to be applied in case of
 /// a match with @p pattern.
-isl::schedule_node
-replace_DFSPreorder_repeatedly(isl::schedule_node node,
-                             const matchers::ScheduleNodeMatcher &pattern,
-                             const builders::ScheduleNodeBuilder &replacement) {
+isl::schedule_node replace_DFSPreorder_repeatedly(
+    isl::schedule_node node, const matchers::ScheduleNodeMatcher &pattern,
+    const builders::ScheduleNodeBuilder &replacement) {
 
   node = replace_repeatedly(node, pattern, replacement);
   for (int i = 0; i < node.n_children(); i++) {
@@ -67,7 +66,6 @@ replace_DFSPreorder_repeatedly(isl::schedule_node node,
   return node;
 }
 
-
 /// utility function.
 ///
 /// @param node: Root of the subtree to inspect.
@@ -76,14 +74,14 @@ replace_DFSPreorder_repeatedly(isl::schedule_node node,
 /// of a match with @p pattern.
 isl::schedule_node
 replace_once(isl::schedule_node node,
-            const matchers::ScheduleNodeMatcher &pattern,
-            const builders::ScheduleNodeBuilder &replacement) {
+             const matchers::ScheduleNodeMatcher &pattern,
+             const builders::ScheduleNodeBuilder &replacement) {
 
   if (matchers::ScheduleNodeMatcher::isMatching(pattern, node)) {
     node = rebuild(node, replacement);
-    //std::cout << node.to_str() << "\n";
-    //std::cout << node.child(0).child(0).to_str() << "\n";
-    //assert(0);
+    // std::cout << node.to_str() << "\n";
+    // std::cout << node.child(0).child(0).to_str() << "\n";
+    // assert(0);
   }
   return node;
 }
@@ -98,14 +96,13 @@ replace_once(isl::schedule_node node,
 /// a match with @p pattern.
 isl::schedule_node
 replace_DFSPreorder_once(isl::schedule_node node,
-                       const matchers::ScheduleNodeMatcher &pattern,
-                       const builders::ScheduleNodeBuilder &replacement) {
+                         const matchers::ScheduleNodeMatcher &pattern,
+                         const builders::ScheduleNodeBuilder &replacement) {
 
   node = replace_once(node, pattern, replacement);
   for (int i = 0; i < node.n_children(); i++) {
     node =
-        replace_DFSPreorder_once(node.child(i), pattern, replacement)
-            .parent();
+        replace_DFSPreorder_once(node.child(i), pattern, replacement).parent();
   }
   return node;
 }
@@ -130,11 +127,11 @@ static isl::schedule_node sink_mark(isl::schedule_node node, isl::id mark_id) {
 /// with id "node_id". We then create a new mark node with the same
 /// id at the leaf of the current subtree rooted at "node". We remove
 /// the old mark node and we sink the band to the leaf.
-static isl::schedule_node sink_point_tile(isl::schedule_node node, 
-  const std::string &node_id) {
+static isl::schedule_node sink_point_tile(isl::schedule_node node,
+                                          const std::string &node_id) {
 
-  if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_mark)
-      && (node.mark_get_id().to_str().compare(node_id) == 0)) {
+  if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_mark) &&
+      (node.mark_get_id().to_str().compare(node_id) == 0)) {
     node = sink_mark(node, node.mark_get_id());
     node = isl::manage(isl_schedule_node_delete(node.release()));
     node = isl::manage(isl_schedule_node_band_sink(node.release()));
@@ -145,7 +142,6 @@ static isl::schedule_node sink_point_tile(isl::schedule_node node,
     node = sink_point_tile(node.child(i), node_id).parent();
   }
   return node;
-
 }
 
 /// Apply the tiling transformation.
@@ -168,8 +164,9 @@ tile_node(isl::schedule_node node, const int &tileSize) {
 }
 
 /// Tiling.
-isl::schedule LoopOptimizer::tile(isl::schedule schedule, 
-const std::string &loop_id, const int &tile_size) {
+isl::schedule LoopOptimizer::tile(isl::schedule schedule,
+                                  const std::string &loop_id,
+                                  const int &tile_size) {
 
   isl::schedule_node root = schedule.get_root();
 
@@ -186,9 +183,7 @@ const std::string &loop_id, const int &tile_size) {
   isl::schedule_node sub_tree;
   auto matcher = [&]() {
     using namespace matchers;
-    return
-      mark(mark_node,
-        band(has_loop, band_node, anyTree(sub_tree)));
+    return mark(mark_node, band(has_loop, band_node, anyTree(sub_tree)));
   }();
 
   auto builder = builders::ScheduleNodeBuilder();
@@ -216,10 +211,9 @@ const std::string &loop_id, const int &tile_size) {
     auto st = [&]() { return subtreeBuilder(sub_tree); };
 
     builder =
-      mark(marker_tile,
-        band(scheduler_tile,
-          mark(marker_point,
-            band(scheduler_point, subtree(st)))));
+        mark(marker_tile,
+             band(scheduler_tile,
+                  mark(marker_point, band(scheduler_point, subtree(st)))));
   }
 
   root = replace_DFSPreorder_once(root, matcher, builder);
@@ -229,11 +223,11 @@ const std::string &loop_id, const int &tile_size) {
 
 /// Utility function to perform loop interchange
 static isl::schedule_node helper_swapper(
-isl::schedule_node node, const matchers::ScheduleNodeMatcher &pattern,
-std::function<isl::schedule_node(isl::schedule_node)> builder_callback) {
+    isl::schedule_node node, const matchers::ScheduleNodeMatcher &pattern,
+    std::function<isl::schedule_node(isl::schedule_node)> builder_callback) {
 
   if (matchers::ScheduleNodeMatcher::isMatching(pattern, node)) {
-    node = builder_callback(node);  
+    node = builder_callback(node);
   }
   return node;
 }
@@ -241,8 +235,8 @@ std::function<isl::schedule_node(isl::schedule_node)> builder_callback) {
 /// Utility function to perform loop interchange.
 /// The actual interchange is done via the builder_callback.
 static isl::schedule_node swapper(
-isl::schedule_node node, const matchers::ScheduleNodeMatcher &pattern,
-std::function<isl::schedule_node(isl::schedule_node)> builder_callback) {
+    isl::schedule_node node, const matchers::ScheduleNodeMatcher &pattern,
+    std::function<isl::schedule_node(isl::schedule_node)> builder_callback) {
 
   node = helper_swapper(node, pattern, builder_callback);
   for (int i = 0; i < node.n_children(); i++) {
@@ -252,8 +246,8 @@ std::function<isl::schedule_node(isl::schedule_node)> builder_callback) {
 }
 
 /// Simple stack-based walker -> forward.
-static isl::schedule_node walker_forward(
-isl::schedule_node node, const std::string &mark_id) {
+static isl::schedule_node walker_forward(isl::schedule_node node,
+                                         const std::string &mark_id) {
 
   std::stack<isl::schedule_node> node_stack;
   node_stack.push(node);
@@ -262,13 +256,13 @@ isl::schedule_node node, const std::string &mark_id) {
     node = node_stack.top();
     node_stack.pop();
 
-    if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_mark)
-        && (node.mark_get_id().to_str().compare(mark_id) == 0)) {
+    if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_mark) &&
+        (node.mark_get_id().to_str().compare(mark_id) == 0)) {
       return node;
     }
 
     size_t n_children =
-      static_cast<size_t>(isl_schedule_node_n_children(node.get()));
+        static_cast<size_t>(isl_schedule_node_n_children(node.get()));
     for (size_t i = 0; i < n_children; i++) {
       node_stack.push(node.child(i));
     }
@@ -278,18 +272,18 @@ isl::schedule_node node, const std::string &mark_id) {
 }
 
 /// Simple stack-based walker -> backward.
-static isl::schedule_node walker_backward(
-isl::schedule_node node, const std::string &mark_id) {
+static isl::schedule_node walker_backward(isl::schedule_node node,
+                                          const std::string &mark_id) {
 
   std::stack<isl::schedule_node> node_stack;
   node_stack.push(node);
-  
-  while(node_stack.empty() == false) {
+
+  while (node_stack.empty() == false) {
     node = node_stack.top();
     node_stack.pop();
-  
-    if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_mark)
-        && (node.mark_get_id().to_str().compare(mark_id) == 0)) {
+
+    if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_mark) &&
+        (node.mark_get_id().to_str().compare(mark_id) == 0)) {
       return node;
     }
 
@@ -300,8 +294,9 @@ isl::schedule_node node, const std::string &mark_id) {
   return nullptr;
 }
 
-isl::schedule_node helper_builder_callback(
-  isl::schedule_node node, isl::schedule_node band_node, isl::schedule_node sub_tree) {
+isl::schedule_node helper_builder_callback(isl::schedule_node node,
+                                           isl::schedule_node band_node,
+                                           isl::schedule_node sub_tree) {
 
   // TODO: keep not properties.
   auto builder = builders::ScheduleNodeBuilder();
@@ -319,16 +314,17 @@ isl::schedule_node helper_builder_callback(
   return node;
 }
 
-isl::schedule LoopOptimizer::swap_loop(isl::schedule schedule, 
-const std::string &loop_source, const std::string &loop_destination) {
+isl::schedule LoopOptimizer::swap_loop(isl::schedule schedule,
+                                       const std::string &loop_source,
+                                       const std::string &loop_destination) {
 
   isl::schedule_node node = schedule.get_root().child(0);
 
   auto has_loop = [&](isl::schedule_node band) {
-    auto mark = band.parent();  
-    auto mark_id = mark.mark_get_id().to_str(); 
+    auto mark = band.parent();
+    auto mark_id = mark.mark_get_id().to_str();
     if (mark_id.compare(loop_source) == 0 ||
-        mark_id.compare(loop_destination) == 0) {  
+        mark_id.compare(loop_destination) == 0) {
       return true;
     }
     return false;
@@ -339,27 +335,27 @@ const std::string &loop_source, const std::string &loop_destination) {
   isl::schedule_node sub_tree_upper, sub_tree_lower;
   auto matcher = [&]() {
     using namespace matchers;
-    return 
-      mark(mark_node_upper,
-        band(_and(has_loop, 
-                  hasDescendant(
-                    mark(mark_node_lower, 
-                      band(has_loop, band_node_lower, anyTree(sub_tree_lower))))), 
+    return mark(
+        mark_node_upper,
+        band(_and(has_loop, hasDescendant(mark(mark_node_lower,
+                                               band(has_loop, band_node_lower,
+                                                    anyTree(sub_tree_lower))))),
              band_node_upper, anyTree(sub_tree_upper)));
   }();
 
   // this function is called after the matching.
   // This function performs the swapping.
   auto builder_callback = [&](isl::schedule_node node) {
-
     // delete current mark node and insert the newer one.
     node = isl::manage(isl_schedule_node_delete(node.release()));
     node = node.insert_mark(mark_node_lower.mark_get_id());
-    node = helper_builder_callback(node.child(0), band_node_lower, sub_tree_upper);
+    node =
+        helper_builder_callback(node.child(0), band_node_lower, sub_tree_upper);
     node = walker_forward(node, mark_node_lower.mark_get_id().to_str());
     node = isl::manage(isl_schedule_node_delete(node.release()));
     node = node.insert_mark(mark_node_upper.mark_get_id());
-    node = helper_builder_callback(node.child(0), band_node_upper, sub_tree_lower);
+    node =
+        helper_builder_callback(node.child(0), band_node_upper, sub_tree_lower);
     node = walker_backward(node, mark_node_upper.mark_get_id().to_str());
     return node;
   };
@@ -368,10 +364,11 @@ const std::string &loop_source, const std::string &loop_destination) {
   return node.root().get_schedule();
 }
 
-isl::schedule_node helper_unroll(isl::schedule_node node, const int &unroll_factor) {
+isl::schedule_node helper_unroll(isl::schedule_node node,
+                                 const int &unroll_factor) {
 
-  assert(isl_schedule_node_get_type(node.get()) == isl_schedule_node_band 
-          && "expect band node");
+  assert(isl_schedule_node_get_type(node.get()) == isl_schedule_node_band &&
+         "expect band node");
 
   if (unroll_factor == 1)
     return node;
@@ -389,10 +386,12 @@ isl::schedule_node helper_unroll(isl::schedule_node node, const int &unroll_fact
     return isl_stat_ok;
   });
 
-  int max_unroll_factor = std::stoi(val.add(isl::val::one(val.get_ctx())).to_str());
-  
+  int max_unroll_factor =
+      std::stoi(val.add(isl::val::one(val.get_ctx())).to_str());
+
   if (unroll_factor >= max_unroll_factor)
-    return node.band_set_ast_build_options(isl::union_set(node.get_ctx(), "{unroll[x]}"));
+    return node.band_set_ast_build_options(
+        isl::union_set(node.get_ctx(), "{unroll[x]}"));
 
   else {
     // stripmine and unroll.
@@ -402,31 +401,32 @@ isl::schedule_node helper_unroll(isl::schedule_node node, const int &unroll_fact
     for (unsigned i = 0; i < dims; i++) {
       sizes = sizes.set_val(i, isl::val(node.get_ctx(), unroll_factor));
     }
-    node = isl::manage(isl_schedule_node_band_tile(node.release(), sizes.release()));
+    node = isl::manage(
+        isl_schedule_node_band_tile(node.release(), sizes.release()));
     node = node.child(0);
-    return node.band_set_ast_build_options(isl::union_set(node.get_ctx(), "{unroll[x]}"));
+    return node.band_set_ast_build_options(
+        isl::union_set(node.get_ctx(), "{unroll[x]}"));
   }
 }
 
-isl::schedule LoopOptimizer::unroll_loop(isl::schedule schedule, 
-  const std::string &loop_id, const int &unroll_factor) {
+isl::schedule LoopOptimizer::unroll_loop(isl::schedule schedule,
+                                         const std::string &loop_id,
+                                         const int &unroll_factor) {
 
   isl::schedule_node node = schedule.get_root();
   node = walker_forward(node, loop_id);
   node = helper_unroll(node.child(0), unroll_factor);
-  isl::union_set set = isl::manage(isl_schedule_node_band_get_ast_build_options(node.get()));
+  isl::union_set set =
+      isl::manage(isl_schedule_node_band_get_ast_build_options(node.get()));
   return node.root().get_schedule();
 }
 
 isl::schedule LoopOptimizer::loop_reverse(isl::schedule schedule,
-  const std::string &loop_id) {
+                                          const std::string &loop_id) {
 
   isl::schedule_node node = schedule.get_root();
   node = walker_forward(node, loop_id);
   assert(0 && "not implemented yet!");
-  
+
   return schedule;
-} 
-
-
-
+}
