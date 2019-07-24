@@ -3,7 +3,7 @@ include(ExternalProject)
 cmake_minimum_required(VERSION 3.2)
 set(CMAKE_CXX_FLAGS "-Wall -pedantic -O3")
 set(CMAKE_CXX_FLAGS_DEBUG "-Wall -pedantic -O0 -g")
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 message(STATUS "System: ${CMAKE_SYSTEM_NAME}")
@@ -78,11 +78,12 @@ add_library(islutils
             islutils/pet_wrapper.cc
             islutils/util.cc
             islutils/access_patterns.cc
-            islutils/program.cc
+            #islutils/program.cc
             islutils/parser.cc
-            islutils/tuner.cc
+            #islutils/tuner.cc
             islutils/loop_opt.cc
-            islutils/tactics.cc)
+            #islutils/tactics.cc
+                                )
 target_include_directories(islutils PUBLIC ${CMAKE_SOURCE_DIR})
 target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})
 target_include_directories(islutils PUBLIC ${isl_INCLUDE} ${pet_INCLUDE})
@@ -92,6 +93,7 @@ add_executable(main
   main.cc
   islutils/highlighter.cc
   islutils/mainwindow.cc
+  islutils/tuner_thread.cc
   )
 
 target_link_libraries(main islutils)
