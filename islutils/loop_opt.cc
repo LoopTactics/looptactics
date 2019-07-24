@@ -426,7 +426,33 @@ isl::schedule LoopOptimizer::loop_reverse(isl::schedule schedule,
 
   isl::schedule_node node = schedule.get_root();
   node = walker_forward(node, loop_id);
-  assert(0 && "not implemented yet!");
+  
+  node = node.child(0);
 
-  return schedule;
+  isl::schedule_node band_node, continuation;
+  auto matcher = [&]() {
+    using namespace matchers;
+    return band(band_node, anyTree(continuation));
+  }();
+  
+  if (matchers::ScheduleNodeMatcher::isMatching(matcher, node))
+    return schedule;
+
+  auto builder = builders::ScheduleNodeBuilder();
+  {
+    using namespace builders;
+    auto computed_schedule = [&]() {
+      auto p_schedule = band_node.band_get_partial_schedule();
+      auto p_schedule_neg = p_schedule.get_union_pw_aff(0).neg();
+      auto descr = BandDescriptor(band_node);
+      descr.partialSchedule = p_schedule_neg;
+      return descr;
+    };
+    auto st = [&]() { return subtreeBuilder(continuation); };
+    builder = band(computed_schedule, subtree(st));
+  }
+
+  node = node.cut();
+  node = builder.insertAt(node);
+  return node.root().get_schedule();
 }
