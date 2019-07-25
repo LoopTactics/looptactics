@@ -922,8 +922,8 @@ void Highlighter::do_transformation(const QString &text, bool recompute) {
           case 1: tile(text, recompute); break;
           case 2: unroll(text, recompute); break;
           case 3: interchange(text, recompute); break;
-          case 4: loop_reverse(text, recompute); break;
-          case 5: compare(true); break;
+          case 4: compare(true); break;
+          case 5: loop_reverse(text, recompute); break;
           default: assert(0 && "rule not implemented!");
         }
       }
