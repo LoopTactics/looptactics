@@ -438,18 +438,18 @@ isl::schedule LoopOptimizer::loop_reverse(isl::schedule schedule,
     return band(band_node, anyTree(continuation));
   }();
   
-  if (matchers::ScheduleNodeMatcher::isMatching(matcher, node))
-    return schedule;
+  if (!matchers::ScheduleNodeMatcher::isMatching(matcher, node))
+    assert(0);
 
   auto builder = builders::ScheduleNodeBuilder();
   {
     using namespace builders;
     auto computed_schedule = [&]() {
       auto p_schedule = band_node.band_get_partial_schedule();
-      auto p_schedule_neg = p_schedule.get_union_pw_aff(0).neg();
-      auto descr = BandDescriptor(band_node);
-      descr.partialSchedule = p_schedule_neg;
-      return descr;
+      auto p_schedule_neg = p_schedule.neg();
+      //auto descr = BandDescriptor(band_node);
+      //descr.partialSchedule = p_schedule_neg;
+      return p_schedule_neg;
     };
     auto st = [&]() { return subtreeBuilder(continuation); };
     builder = band(computed_schedule, subtree(st));
