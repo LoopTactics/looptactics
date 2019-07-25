@@ -27,6 +27,7 @@ class Highlighter : public QSyntaxHighlighter
 
 public:
     explicit Highlighter(isl::ctx context, QTextDocument *parent = 0);
+    static int get_next_stmt_id();
 
 public Q_SLOTS:
   void updatePath(const QString &path); 
@@ -44,6 +45,7 @@ protected:
 private:
 
   void do_transformation(const QString &text, bool recompute);
+  void fuse(const QString &text, bool recompute);
   void tile(const QString &text, bool recompute);
   void unroll(const QString &text, bool recompute);
   void interchange(const QString &text, bool recompute);
@@ -73,10 +75,16 @@ private:
   QTextCharFormat unrollFormat_;
   QTextCharFormat loopReversalFormat_;
   QTextCharFormat timeFormat_;
+  QTextCharFormat fuseFormat_;
 
   isl::schedule current_schedule_;
   isl::schedule previous_schedule_;
   QString file_path_;
+
+  // variable used to annotate the
+  // stmt with an unique id.
+public:
+  static int stmt_id_;
 };
 
 #endif // HIGHLIGHTER_H

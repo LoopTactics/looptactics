@@ -14,10 +14,9 @@
 
 using namespace timeInfo;
 
-isl::schedule_node
-replace_DFSPreorder_repeatedly(isl::schedule_node node,
-                             const matchers::ScheduleNodeMatcher &pattern,
-                             const builders::ScheduleNodeBuilder &replacement);
+int Highlighter::stmt_id_ = 0;
+
+static bool bad_workaround = true;
 
 Highlighter::Highlighter(isl::ctx context, 
   QTextDocument *parent) : context_(context), QSyntaxHighlighter(parent),
@@ -64,10 +63,77 @@ Highlighter::Highlighter(isl::ctx context,
   rule.format_ = timeFormat_;
   rule.id_rule_ = 5;
   highlightingRules.append(rule);
+
+  fuseFormat_.setForeground(Qt::blue);
+  rule.pattern_ = QRegularExpression(QStringLiteral("fuse"));
+  rule.format_ = fuseFormat_;
+  rule.id_rule_ = 6;
+  highlightingRules.append(rule);
 }
 
 /// utility function.
-isl::schedule_node
+///
+/// @param node: Current node where to start cutting.
+/// @param replacement: Subtree to be attached after @p node.
+/// @return: Root node of the rebuild subtree.
+///
+/// NOTE: This is not always possible. Cutting children
+/// in set or sequence is not allowed by ISL and as a consequence
+/// by Loop Tactics.
+static isl::schedule_node
+rebuild(isl::schedule_node node,
+        const builders::ScheduleNodeBuilder &replacement) {
+
+  node = node.cut();
+  node = replacement.insertAt(node);
+  return node;
+}
+
+/// utility function.
+///
+/// @param node: Root of the subtree to inspect.
+/// @param pattern: Pattern to look-up in the subtree.
+/// @param replacement: Replacement to be applied in case
+/// of a match with @p pattern.
+static isl::schedule_node
+replace_repeatedly(isl::schedule_node node,
+                   const matchers::ScheduleNodeMatcher &pattern,
+                   const builders::ScheduleNodeBuilder &replacement) {
+
+  while (matchers::ScheduleNodeMatcher::isMatching(pattern, node)) {
+    node = rebuild(node, replacement);
+    // XXX: if we insert a single mark node, we end up in
+    // an infinate loop, since they subtree under the mark will always
+    // match the matcher. Escape this skipping the mark node and the
+    // root node of the matcher.
+    if (isl_schedule_node_get_type(node.get()) == isl_schedule_node_mark)
+      node = node.child(0).child(0);
+  }
+  return node;
+}
+
+/// walk the schedule tree starting from "node" and in
+/// case of a match with the matcher "pattern" modify
+/// the schedule tree using the builder "replacement".
+///
+/// @param node: Root of the subtree to inspect.
+/// @param pattern: Pattern to look-up in the subtree.
+/// @param replacement: Replacement to be applied in case of
+/// a match with @p pattern.
+static isl::schedule_node replace_DFSPreorder_repeatedly(
+    isl::schedule_node node, const matchers::ScheduleNodeMatcher &pattern,
+    const builders::ScheduleNodeBuilder &replacement) {
+
+  node = replace_repeatedly(node, pattern, replacement);
+  for (int i = 0; i < node.n_children(); i++) {
+    node = replace_DFSPreorder_repeatedly(node.child(i), pattern, replacement)
+               .parent();
+  }
+  return node;
+}
+
+/// utility function.
+static isl::schedule_node
 wrap(isl::schedule_node node, 
      const matchers::ScheduleNodeMatcher &pattern,
      const std::string &tactics_id) {
@@ -86,7 +152,7 @@ wrap(isl::schedule_node node,
 /// @param node: Root of the subtree to inspect.
 /// @param pattern: Pattern to look-up in the subtree
 /// @param tactics_id: id for the mark node
-isl::schedule_node
+static isl::schedule_node
 wrap_DFSPreorder(isl::schedule_node node,
                  const matchers::ScheduleNodeMatcher &pattern,
                  const std::string &tactics_id) {
@@ -101,7 +167,7 @@ wrap_DFSPreorder(isl::schedule_node node,
 }
 
 /// utility function.
-__isl_give isl_schedule_node *
+static __isl_give isl_schedule_node *
 unsqueeze_band(__isl_take isl_schedule_node *node, void *user) {
 
   if (isl_schedule_node_get_type(node) != isl_schedule_node_band)
@@ -129,7 +195,7 @@ unsqueeze_band(__isl_take isl_schedule_node *node, void *user) {
 ///   schedule(j)
 ///
 /// @param root: Current root node for the subtree to simplify.
-isl::schedule_node unsqueeze_tree(isl::schedule_node root) {
+static isl::schedule_node unsqueeze_tree(isl::schedule_node root) {
 
   root = isl::manage(isl_schedule_node_map_descendant_bottom_up(
     root.release(), unsqueeze_band, nullptr));  
@@ -149,7 +215,7 @@ isl::schedule_node unsqueeze_tree(isl::schedule_node root) {
 ///   anyTree
 ///
 /// @param schedule_node: Current schedule node to be simplified.
-isl::schedule_node squeeze_tree(isl::schedule_node root) {
+static isl::schedule_node squeeze_tree(isl::schedule_node root) {
 
   isl::schedule_node parent, child, grandchild;
   auto matcher = [&]() {
@@ -213,7 +279,7 @@ static std::set<std::string> extract_array_names(std::vector<Parser::AccessDescr
 
 /// Given a partial schedule as **string**
 /// return the loop id.
-std::string get_loop_id(std::string partial_schedule) {
+static std::string get_loop_id(std::string partial_schedule) {
 
   auto f = [](unsigned char const c) { return std::isspace(c); };
   partial_schedule.erase(std::remove_if(
@@ -236,55 +302,84 @@ std::string get_loop_id(std::string partial_schedule) {
   return match[1].str();
 }
 
+/// Simple stack-based walker. Look for a mark node with id "mark_id"
+static isl::schedule_node walker_backward(isl::schedule_node node,
+                                          const std::string &mark_id) {
+
+  std::stack<isl::schedule_node> node_stack;
+  node_stack.push(node);
+
+  while (node_stack.empty() == false) {
+    node = node_stack.top();
+    node_stack.pop();
+
+    if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_mark) &&
+        (node.mark_get_id().to_str().compare(mark_id) == 0)) {
+      return node;
+    }
+
+    node_stack.push(node.parent());
+  }
+
+  assert(0 && "node is expected");
+  return nullptr;
+}
+
 /// Mark band node in the subtree rooted at "node".
 /// Each band node is marked with an id that is the name of
 /// the outermost dimension of the partial schedule contained in
 /// the band.
-isl::schedule_node mark_loop_subtree(isl::schedule_node node, bool insert) {
+static isl::schedule_node mark_loop_and_stmt_subtree(isl::schedule_node node) {
 
-  if (insert)
-    node = node.insert_mark(isl::id::alloc(node.get_ctx(), "start", nullptr)); 
+  std::stack<isl::schedule_node> node_stack;
+  node_stack.push(node);
 
-  if (isl_schedule_node_get_type(node.get()) == isl_schedule_node_band) {
-    if (isl_schedule_node_band_n_member(node.get()) != 1)
-      assert(0 && "expect unsqueeze tree!"); 
-    isl::union_map partial_schedule = 
-      isl::union_map::from(node.band_get_partial_schedule());
-    isl::map partial_schedule_as_map = isl::map::from_union_map(partial_schedule);
-    //XXX: we use regex to get the loop name:
-    // S_1[i, k, j] -> [i] return i
-    std::string loop_id = get_loop_id(partial_schedule_as_map.to_str());
-    node = 
-      node.insert_mark(isl::id::alloc(node.get_ctx(), loop_id, nullptr)).child(0);  
+  while (node_stack.empty() == false) {
+    
+    node = node_stack.top();
+    node_stack.pop();
+
+    if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_band)) {
+      assert(isl_schedule_node_band_n_member(node.get()) == 1);
+      isl::union_map partial_schedule =
+        isl::union_map::from(node.band_get_partial_schedule());
+      isl::map partial_schedule_as_map = isl::map::from_union_map(partial_schedule);
+      //XXX: we use regex to get the loop name:
+      // S_1[i, k, j] -> [i] return i
+      std::string loop_id = get_loop_id(partial_schedule_as_map.to_str());
+      node = 
+        node.insert_mark(isl::id::alloc(node.get_ctx(), loop_id, nullptr)).child(0);
+    }
+
+    if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_leaf)) {
+      std::string stmt_id = "stmt" + std::to_string(Highlighter::get_next_stmt_id());
+      node =
+        node.insert_mark(isl::id::alloc(node.get_ctx(), stmt_id, nullptr)).child(0);
+    }
+
+    size_t n_children =
+      static_cast<size_t>(isl_schedule_node_n_children(node.get()));
+    for (size_t i = 0; i < n_children; i++) {
+      node_stack.push(node.child(i));
+    }
   }
- 
-  for (int i = 0; i < node.n_children(); i++) {
-    node = mark_loop_subtree(node.child(i), false).parent();
-  }
-  
-  if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_mark)
-      && (node.mark_get_id().to_str().compare("start") == 0)) {
-    node = isl::manage(isl_schedule_node_delete(node.release()));
-    return node.parent();
-  }
 
-  if (isl_schedule_node_get_type(node.get()) == isl_schedule_node_band)
-    node = node.parent();
-
-  return node;
+  // walk back to the entry point.
+  return walker_backward(node, "_tactic_");
 }
 
 /// look for a subtree with a mark node as a root.
 /// the mark node should have id "mark_id"
-isl::schedule_node mark_loop(isl::schedule_node node, const std::string &mark_id) {
+static isl::schedule_node mark_loop_and_stmt(
+  isl::schedule_node node, const std::string &mark_id) {
 
   if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_mark)
       && (node.mark_get_id().to_str().compare(mark_id) == 0)) {
-    return mark_loop_subtree(node.child(0), true);
+    node = mark_loop_and_stmt_subtree(node.child(0));
   }
 
   for (int i = 0; i < node.n_children(); i++) {
-    node = mark_loop(node.child(i), mark_id).parent();
+    node = mark_loop_and_stmt(node.child(i), mark_id).parent();
   }
   return node;
 } 
@@ -654,7 +749,7 @@ const pet::Scop &scop, bool recompute) {
   root = unsqueeze_tree(root.child(0));
   // mark the loop in the detected region. The region
   // is labeled with a mark node _tactic_
-  root = mark_loop(root, "_tactic_");
+  root = mark_loop_and_stmt(root, "_tactic_");
   
   isl::schedule new_schedule = root.get_schedule();
   // avoid to update the schedule if not tactic has 
@@ -678,6 +773,14 @@ void Highlighter::take_snapshot(const QString &text) {
 
 void Highlighter::match_pattern(const QString &text, bool recompute) {
 
+  // FIXME
+  // the problem is that pressing carriege return
+  // triggers again this function as consequence
+  // the static variable for stmt annotation changes!
+  if (!bad_workaround) {
+    return; 
+  }
+
   std::string pattern = text.toStdString();
 
   std::regex pattern_regex(R"(pattern\[(.*)\])");
@@ -685,6 +788,8 @@ void Highlighter::match_pattern(const QString &text, bool recompute) {
   if (!std::regex_match(pattern, matched_text, pattern_regex))
     return;  
   pattern = matched_text[1].str();
+  // FIXME
+  bad_workaround = false;
 
   #ifdef DEBUG
     std::cout << __func__ << "\n";
@@ -842,6 +947,36 @@ void Highlighter::interchange(const QString &text, bool recompute) {
   take_snapshot(text);
 }
 
+void Highlighter::fuse(const QString &text, bool recompute) {
+
+  std::string fuse_transformation = text.toStdString();
+
+  std::regex fuse_regex(R"(fuse\[(.*)\])");
+  std::smatch matched_text;
+  if (!std::regex_match(fuse_transformation, matched_text, fuse_regex))
+    return;
+  fuse_transformation = matched_text[1].str();
+
+  if (fuse_transformation.empty())
+    return;
+
+  fuse_transformation.erase(
+    std::remove_if(
+      fuse_transformation.begin(),
+      fuse_transformation.end(),
+      [](unsigned char x) { return std::isspace(x); }), fuse_transformation.end());
+
+  std::regex pattern_regex(R"([stmt[1-9]+),(stmt[1-9]+))");
+  if (!std::regex_match(fuse_transformation, matched_text, pattern_regex))
+    return;
+
+  isl::schedule new_schedule =
+    opt_.fuse(current_schedule_, matched_text[1].str(), matched_text[2].str());
+  update_schedule(new_schedule, !recompute);
+
+  take_snapshot(text);
+}
+
 void Highlighter::loop_reverse(const QString &text, bool recompute) {
 
   std::string loop_reverse_transformation = text.toStdString();
@@ -924,6 +1059,7 @@ void Highlighter::do_transformation(const QString &text, bool recompute) {
           case 3: interchange(text, recompute); break;
           case 4: compare(true); break;
           case 5: loop_reverse(text, recompute); break;
+          case 6: fuse(text, recompute); break;
           default: assert(0 && "rule not implemented!");
         }
       }
@@ -967,4 +1103,9 @@ void Highlighter::updateTime(
 const TimingInfo &baseline_time, const TimingInfo &opt_time) {
 
     Q_EMIT userFeedbackChanged(baseline_time, opt_time);
+}
+
+int Highlighter::get_next_stmt_id() {
+  Highlighter::stmt_id_++;
+  return Highlighter::stmt_id_;
 }
