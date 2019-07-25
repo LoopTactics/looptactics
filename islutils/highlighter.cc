@@ -29,34 +29,40 @@ Highlighter::Highlighter(isl::ctx context,
 
   HighlightingRule rule;
   patternFormat_.setForeground(Qt::blue);
-  rule.pattern = QRegularExpression(QStringLiteral("pattern"));
-  rule.format = patternFormat_;
+  rule.pattern_ = QRegularExpression(QStringLiteral("pattern"));
+  rule.format_ = patternFormat_;
+  rule.id_rule_ = 0;
   highlightingRules.append(rule);
   
   
   tileFormat_.setForeground(Qt::blue);
-  rule.pattern = QRegularExpression(QStringLiteral("tile"));
-  rule.format = tileFormat_;
+  rule.pattern_ = QRegularExpression(QStringLiteral("tile"));
+  rule.format_ = tileFormat_;
+  rule.id_rule_ = 1;
   highlightingRules.append(rule);
 
   interchangeFormat_.setForeground(Qt::blue);
-  rule.pattern = QRegularExpression(QStringLiteral("interchange"));
-  rule.format = interchangeFormat_;
+  rule.pattern_ = QRegularExpression(QStringLiteral("interchange"));
+  rule.format_ = interchangeFormat_;
+  rule.id_rule_ = 2;
   highlightingRules.append(rule);
 
   unrollFormat_.setForeground(Qt::blue);
-  rule.pattern = QRegularExpression(QStringLiteral("unroll"));
-  rule.format = unrollFormat_;
+  rule.pattern_ = QRegularExpression(QStringLiteral("unroll"));
+  rule.format_ = unrollFormat_;
+  rule.id_rule_ = 3;
   highlightingRules.append(rule);
 
   timeFormat_.setForeground(Qt::blue);
-  rule.pattern = QRegularExpression(QStringLiteral("compareWithBaseline"));
-  rule.format = timeFormat_;
+  rule.pattern_ = QRegularExpression(QStringLiteral("compareWithBaseline"));
+  rule.format_ = timeFormat_;
+  rule.id_rule_ = 4;
   highlightingRules.append(rule);
 
   loopReversalFormat_.setForeground(Qt::blue);
-  rule.pattern = QRegularExpression(QStringLiteral("loopReverse")); 
-  rule.format = timeFormat_;
+  rule.pattern_ = QRegularExpression(QStringLiteral("loopReverse")); 
+  rule.format_ = timeFormat_;
+  rule.id_rule_ = 5;
   highlightingRules.append(rule);
 }
 
@@ -463,23 +469,84 @@ isl::union_map writes) {
   return res;
 }
 
-void Highlighter::update_schedule(isl::schedule new_schedule) {
+static std::vector<std::string> get_band_node_as_string(isl::schedule schedule) {
 
-  if (!current_schedule_.plain_is_equal(new_schedule)) {
-    current_schedule_ = new_schedule;
-    std::string file_path_as_std_string =
-      file_path_.toStdString();
-    assert(!file_path_as_std_string.empty()
-      && "empty file path!");
-    pet::Scop scop = 
-      pet::Scop(pet::Scop::parseFile(context_,
-        file_path_as_std_string));
-    scop.schedule() = new_schedule;
-    std::cout << new_schedule.to_str() << "\n";
-    std::string code = scop.codegen();
-    QString code_as_q_string = QString(code.c_str());
-    Q_EMIT codeChanged(code_as_q_string);
+  isl::schedule_node root = schedule.get_root();
+
+  struct payload {
+    std::vector<std::string> band_as_string;
+  } p;
+
+  isl_schedule_node_foreach_descendant_top_down(
+    root.get(),
+    [](__isl_keep isl_schedule_node *node_ptr, void *user) -> isl_bool {
+      payload *p = static_cast<payload *>(user);
+
+      isl::schedule_node node = isl::manage_copy(node_ptr);
+      if (isl_schedule_node_get_type(node.get()) == isl_schedule_node_band) {
+        p->band_as_string.push_back(node.band_get_partial_schedule().to_str()); 
+      }
+      return isl_bool_true;
+    }, &p);
+
+  return p.band_as_string;
+}
+
+static bool are_same_tree(isl::schedule current_schedule,
+  isl::schedule new_schedule) {
+
+  assert(current_schedule && "empty schedule!");
+  assert(new_schedule && "empty_schedule!");
+
+  if (!current_schedule.plain_is_equal(new_schedule))
+    return false;
+
+  auto current_s = get_band_node_as_string(current_schedule);
+  auto new_s = get_band_node_as_string(new_schedule);
+
+  if (current_s.size() != new_s.size())
+    return false;
+
+  for (size_t i = 0; i < current_s.size(); i++) {
+    if (current_s[i] != new_s[i])
+      return false;
   }
+  return true;
+}
+
+void Highlighter::update_schedule(isl::schedule new_schedule, bool update_prev) {
+
+  #ifdef DEBUG
+    std::cout << __func__ << "\n";
+    std::cout << "Input : " << "\n";
+    std::cout << "New schedule : " << new_schedule.to_str() << "\n";
+  #endif
+
+  // plain is equal just check that the trees are
+  // obviously the same. But it does not capture
+  // if the bands have been tiled with different tile sizes.
+  if (are_same_tree(current_schedule_, new_schedule))
+    return;
+
+  #ifdef DEBUG
+    std::cout << "update the schedule..\n";
+  #endif
+
+  if (update_prev)
+    previous_schedule_ = current_schedule_;
+  current_schedule_ = new_schedule;
+  std::string file_path_as_std_string =
+    file_path_.toStdString();
+  assert(!file_path_as_std_string.empty()
+    && "empty file path!");
+  pet::Scop scop = 
+    pet::Scop(pet::Scop::parseFile(context_,
+      file_path_as_std_string));
+  scop.schedule() = new_schedule;
+  std::cout << new_schedule.to_str() << "\n";
+  std::string code = scop.codegen();
+  QString code_as_q_string = QString(code.c_str());
+  Q_EMIT codeChanged(code_as_q_string);
 }
 
 static bool look_up_schedule_tree(const isl::schedule schedule, const std::string &mark_id) {
@@ -516,7 +583,8 @@ static bool look_up_schedule_tree(const isl::schedule schedule, const std::strin
 
 // FIXME: Here we need to check if the write array is the same as the read one.
 bool Highlighter::match_pattern_helper(
-const std::vector<Parser::AccessDescriptor> accesses_descriptors, const pet::Scop &scop) {
+const std::vector<Parser::AccessDescriptor> accesses_descriptors, 
+const pet::Scop &scop, bool recompute) {
 
   #ifdef DEBUG
     std::cout << __func__ << "\n";
@@ -593,22 +661,31 @@ const std::vector<Parser::AccessDescriptor> accesses_descriptors, const pet::Sco
   // been detected!.
   if (!look_up_schedule_tree(new_schedule, "_tactic_"))
     return false;
-  update_schedule(new_schedule);  
+  update_schedule(new_schedule, !recompute);  
   return true;
 }
 
-void Highlighter::take_snapshot() {
+void Highlighter::take_snapshot(const QString &text) {
 
   assert(current_schedule_ 
     && "cannot take a snapshot of an empty schedule!");
   BlockSchedule *bs = new BlockSchedule();
   bs->schedule_block_ = current_schedule_;
+  bs->transformation_string_ = text;
   setCurrentBlockUserData(bs);
   return;
 }
 
-void Highlighter::match_pattern(const std::string &pattern) {
- 
+void Highlighter::match_pattern(const QString &text, bool recompute) {
+
+  std::string pattern = text.toStdString();
+
+  std::regex pattern_regex(R"(pattern\[(.*)\])");
+  std::smatch matched_text;
+  if (!std::regex_match(pattern, matched_text, pattern_regex))
+    return;  
+  pattern = matched_text[1].str();
+
   #ifdef DEBUG
     std::cout << __func__ << "\n";
     std::cout << "Input: " << pattern << "\n";
@@ -645,7 +722,7 @@ void Highlighter::match_pattern(const std::string &pattern) {
       return;
     }
     std::cout << "Success in parsing: " << pattern << "\n";
-    has_matched = match_pattern_helper(accesses_descriptors, scop);
+    has_matched = match_pattern_helper(accesses_descriptors, scop, recompute);
   } catch (Error::Error e) {
     std::cout << "Error:" << e.message_ << "\n";
     return;
@@ -655,13 +732,25 @@ void Highlighter::match_pattern(const std::string &pattern) {
     return;
   }
   if (has_matched)
-    take_snapshot(); 
+    take_snapshot(text); 
 }
 
-void Highlighter::tile(std::string tile_transformation) { 
+void Highlighter::tile(const QString &text, bool recompute) {
 
-  if (tile_transformation.empty())
+  #ifdef DEBUG
+    std::cout << __func__ << "\n";
+  #endif 
+
+  std::string tile_transformation = text.toStdString();
+  
+  std::regex tile_regex(R"(tile\[(.*)\])");
+  std::smatch matched_text;
+  if (!std::regex_match(tile_transformation, matched_text, tile_regex))
     return;
+  tile_transformation = matched_text[1].str();
+
+  //if (tile_transformation.empty())
+  //  return;
 
   tile_transformation.erase(
     std::remove_if(
@@ -670,17 +759,37 @@ void Highlighter::tile(std::string tile_transformation) {
       [](unsigned char x) { return std::isspace(x); }), tile_transformation.end());
 
   std::regex pattern_regex(R"(([a-z_]+),([0-9]+))");
-  std::smatch matched_text;
   if (!std::regex_match(tile_transformation, matched_text, pattern_regex))
     return;
 
-  isl::schedule new_schedule = 
-    opt_.tile(current_schedule_, matched_text[1].str(), std::stoi(matched_text[2].str()));
-  update_schedule(new_schedule);
-  take_snapshot();
+  #ifdef DEBUG
+    std::cout << "================\n";
+    std::cout << "Current schedule: " << "\n";
+    std::cout << current_schedule_.to_str() << "\n";
+    std::cout << "Prev schedule: " << "\n";
+    std::cout << previous_schedule_.to_str() << "\n";
+    std::cout << "================\n";
+  #endif
+  isl::schedule new_schedule = (!recompute) ?
+    opt_.tile(current_schedule_, matched_text[1].str(), std::stoi(matched_text[2].str())):
+    opt_.tile(previous_schedule_, matched_text[1].str(), std::stoi(matched_text[2].str()));
+
+  
+  // update to new schedule. If we are *not*
+  // recomputing we set also the previous schedule.
+  update_schedule(new_schedule, !recompute);
+  take_snapshot(text);
 }
 
-void Highlighter::unroll(std::string unroll_transformation) {
+void Highlighter::unroll(const QString &text, bool recompute) {
+
+  std::string unroll_transformation = text.toStdString();
+
+  std::regex unroll_regex(R"(unroll\[(.*)\])");
+  std::smatch matched_text;
+  if (!std::regex_match(unroll_transformation, matched_text, unroll_regex))
+    return;
+  unroll_transformation = matched_text[1].str();
   
   if (unroll_transformation.empty())
     return;
@@ -692,17 +801,25 @@ void Highlighter::unroll(std::string unroll_transformation) {
       [](unsigned char x) { return std::isspace(x); }), unroll_transformation.end());
 
   std::regex pattern_regex(R"(([a-z_]+),([0-9]+))");
-  std::smatch matched_text;
   if (!std::regex_match(unroll_transformation, matched_text, pattern_regex))
     return;
 
   isl::schedule new_schedule =
     opt_.unroll_loop(current_schedule_, matched_text[1].str(), std::stoi(matched_text[2].str()));
-  update_schedule(new_schedule);
-  take_snapshot();
+
+  update_schedule(new_schedule, !recompute);
+  take_snapshot(text);
 }
 
-void Highlighter::interchange(std::string interchange_transformation) {
+void Highlighter::interchange(const QString &text, bool recompute) {
+
+  std::string interchange_transformation = text.toStdString();
+  
+  std::regex interchange_regex(R"(interchange\[(.*)\])");
+  std::smatch matched_text;
+  if (!std::regex_match(interchange_transformation, matched_text, interchange_regex))
+    return;
+  interchange_transformation = matched_text[1].str();
 
   if (interchange_transformation.empty())
     return;
@@ -714,19 +831,27 @@ void Highlighter::interchange(std::string interchange_transformation) {
       [](unsigned char x) { return std::isspace(x); }), interchange_transformation.end());
 
   std::regex pattern_regex(R"(([a-z_]+),([a-z_]+))");
-  std::smatch matched_text;
   if (!std::regex_match(interchange_transformation, matched_text, pattern_regex))
     return;
 
   isl::schedule new_schedule =
     opt_.swap_loop(current_schedule_, matched_text[1].str(), matched_text[2].str());
-  update_schedule(new_schedule);
+  update_schedule(new_schedule, !recompute);
 
   // take a snapshot of the current schedule.
-  take_snapshot();
+  take_snapshot(text);
 }
 
-void Highlighter::loop_reverse(std::string loop_reverse_transformation) {
+void Highlighter::loop_reverse(const QString &text, bool recompute) {
+
+  std::string loop_reverse_transformation = text.toStdString();
+
+  std::regex loop_reverse_regex(R"(loopReverse\[(.*)])");
+  std::smatch matched_text;
+  if (!std::regex_match(
+    loop_reverse_transformation, matched_text, loop_reverse_regex))
+    return;
+  loop_reverse_transformation = matched_text[1].str();
 
   if (loop_reverse_transformation.empty())
     return;
@@ -739,14 +864,16 @@ void Highlighter::loop_reverse(std::string loop_reverse_transformation) {
 
   // FIXME: all this regex are nightmare for maintainability.
   std::regex pattern_regex(R"(([a-z_]+))");
-  std::smatch matched_text;
   if (!std::regex_match(loop_reverse_transformation, matched_text, pattern_regex))
     return;
 
   isl::schedule new_schedule =
     opt_.loop_reverse(current_schedule_, matched_text[1].str());
-  update_schedule(new_schedule);
-  take_snapshot();
+
+  // do not update prev schedule if 
+  // we are recomputing.
+  update_schedule(new_schedule, !recompute);
+  take_snapshot(text);
 }
 
 // The boolean means the following:
@@ -780,54 +907,52 @@ void Highlighter::compare(bool with_baseline) {
   tuner_.compare(baseline_schedule,
     current_schedule_, file_path_);
 
-}  
+}
+
+void Highlighter::do_transformation(const QString &text, bool recompute) {
   
+  for (const HighlightingRule &rule : qAsConst(highlightingRules)) {
+    QRegularExpressionMatchIterator matchIterator = rule.pattern_.globalMatch(text);
+      while (matchIterator.hasNext()) {
+        QRegularExpressionMatch match = matchIterator.next();
+        setFormat(match.capturedStart(), match.capturedLength(), rule.format_);
+
+        switch(rule.id_rule_) {
+          case 0: match_pattern(text, recompute); break;
+          case 1: tile(text, recompute); break;
+          case 2: unroll(text, recompute); break;
+          case 3: interchange(text, recompute); break;
+          case 4: loop_reverse(text, recompute); break;
+          case 5: compare(true); break;
+          default: assert(0 && "rule not implemented!");
+        }
+      }
+  }
+}
+
 void Highlighter::highlightBlock(const QString &text) {
  
-  // FIXME: maybe just reuse the QRegex? 
-  std::regex pattern_regex(R"(pattern\[(.*)\])");
-  std::regex tile_regex(R"(tile\[(.*)\])");
-  std::regex interchange_regex(R"(interchange\[(.*)\])");
-  std::regex unroll_regex(R"(unroll\[(.*)\])");
-  std::regex loop_reverse_regex(R"(loopReverse\[(.*)])");
-  std::regex time_regex(R"(compareWithBaseline)");
-  std::smatch matched_text;
-
   auto *current_block_data = currentBlockUserData();
   if (current_block_data) {
     BlockSchedule *payload = dynamic_cast<BlockSchedule*>(current_block_data);
-    if (payload) {
+    if (payload && (text == payload->transformation_string_)) {
       #ifdef DEBUG
       std::cout << __func__ << " : "
         << "Current block schedule -> " 
         << payload->schedule_block_.to_str() << "\n";
-      std::cout << "Current text: " << text.toStdString() << "\n";
       #endif 
-      update_schedule(payload->schedule_block_);
+      update_schedule(payload->schedule_block_, false);
+    }
+    else {
+      #ifdef DEBUG
+        std::cout << "re-compute transformation with text: " 
+          << text.toStdString() << "\n";
+      #endif
+      do_transformation(text, true);
     }
   }
     
-  for (const HighlightingRule &rule : qAsConst(highlightingRules)) {
-    QRegularExpressionMatchIterator matchIterator = rule.pattern.globalMatch(text);
-      while (matchIterator.hasNext()) {
-        QRegularExpressionMatch match = matchIterator.next();
-        setFormat(match.capturedStart(), match.capturedLength(), rule.format);
-        std::string tmp = text.toStdString();    
-        if (std::regex_match(tmp, matched_text, pattern_regex)) {
-          match_pattern(matched_text[1].str());
-        }
-        if (std::regex_match(tmp, matched_text, tile_regex))
-          tile(matched_text[1].str());
-        if (std::regex_match(tmp, matched_text, unroll_regex))
-          unroll(matched_text[1].str());
-        if (std::regex_match(tmp, matched_text, interchange_regex))
-          interchange(matched_text[1].str());
-        if (std::regex_match(tmp, matched_text, loop_reverse_regex))
-          loop_reverse(matched_text[1].str());
-        if (std::regex_match(tmp, matched_text, time_regex))
-          compare(true);
-      }
-  }
+  do_transformation(text, false);  
 }
 
 void Highlighter::updatePath(const QString &path) {

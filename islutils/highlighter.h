@@ -17,6 +17,7 @@ using namespace LoopTactics;
 
 struct BlockSchedule : public QTextBlockUserData {
   isl::schedule schedule_block_;
+  QString transformation_string_;
 };
 
 // FIXME: rename the class 
@@ -42,20 +43,23 @@ protected:
 
 private:
 
-  void tile(std::string tile_transformation);
-  void unroll(std::string unroll_transformation);
-  void interchange(std::string interchange_transformation);
-  void loop_reverse(std::string loop_reverse_transformation);
-  void match_pattern(const std::string &text);
+  void do_transformation(const QString &text, bool recompute);
+  void tile(const QString &text, bool recompute);
+  void unroll(const QString &text, bool recompute);
+  void interchange(const QString &text, bool recompute);
+  void loop_reverse(const QString &text, bool recompute);
+  void match_pattern(const QString &text, bool recompute);
   bool match_pattern_helper(
-    std::vector<Parser::AccessDescriptor> accesses_descriptors, const pet::Scop &scop);
-  void update_schedule(isl::schedule new_schedule);
-  void take_snapshot();
+    std::vector<Parser::AccessDescriptor> accesses_descriptors, 
+    const pet::Scop &scop, bool recompute);
+  void update_schedule(isl::schedule new_schedule, bool update_prev);
+  void take_snapshot(const QString &text);
   void compare(bool with_baseline);
 
   struct HighlightingRule {
-    QRegularExpression pattern;
-    QTextCharFormat format;
+    QRegularExpression pattern_;
+    QTextCharFormat format_;
+    int id_rule_;
   };
   QVector<HighlightingRule> highlightingRules;
 
@@ -71,6 +75,7 @@ private:
   QTextCharFormat timeFormat_;
 
   isl::schedule current_schedule_;
+  isl::schedule previous_schedule_;
   QString file_path_;
 };
 
