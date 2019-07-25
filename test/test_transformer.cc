@@ -966,7 +966,7 @@ TEST(Transformers, codeGenPayload) {
     petScop.getScop();
   isl::schedule_node root = scop.schedule.get_root();
   petScop.schedule() = root.get_schedule();
-  std::cout << petScop.codegenPayload() << std::endl;
+  //std::cout << petScop.codegenPayload() << std::endl;
 }
 
 std::vector<isl::schedule_node>
@@ -1186,9 +1186,9 @@ TEST(Transformers, codeGenerationGPUs_flow_doubleGEMM) {
 
   payloadCodegen p = {arrayInfo, MMIBatched};
 
-  std::string codeGen = petScop.codegenPayload(codeGenGPU, &p);
-  codeGen = insertCallToCUBALS(codeGen, &p);
-  std::cout << codeGen << std::endl;
+  //std::string codeGen = petScop.codegenPayload(codeGenGPU, &p);
+  //codeGen = insertCallToCUBALS(codeGen, &p);
+  //std::cout << codeGen << std::endl;
 
 }
 
@@ -1288,9 +1288,9 @@ TEST(Transformers, codeGenerationGPUs_flow_singleGEMM) {
   MMIBatched.push_back(MMI);
   payloadCodegen p = {arrayInfo, MMIBatched};
 
-  std::string codeGen = petScop.codegenPayload(codeGenGPU, &p);
-  codeGen = insertCallToCUBALS(codeGen, &p);
-  std::cout << codeGen << std::endl;
+  //std::string codeGen = petScop.codegenPayload(codeGenGPU, &p);
+  //codeGen = insertCallToCUBALS(codeGen, &p);
+  //std::cout << codeGen << std::endl;
 }
 
 TEST(Transformers, checkPetArrayExtraction) {
@@ -2696,7 +2696,6 @@ TEST(Transformer, fusion) {
   auto ctx = ScopedCtx(pet::allocCtx());
   auto pet_scop =  
     pet::Scop::parseFile(ctx, "inputs/fusion.c");
-  std::cout << pet_scop.codegen(codegenFusion) << "\n";
 
   isl::schedule schedule = pet_scop.schedule();
   isl::schedule_node root = schedule.get_root();
@@ -2719,95 +2718,25 @@ TEST(Transformer, fusion) {
   ASSERT_TRUE(
     matchers::ScheduleNodeMatcher::isMatching(matcher, root));
 
-  //auto node_ = [&]() {
+  auto m1 = upper_band_node.child(0).get_prefix_schedule_union_map();
+  auto m2 = lower_band_node.child(0).get_prefix_schedule_union_map();
+  auto mupa1 = isl::multi_union_pw_aff::from_union_map(m1);
+  auto mupa2 = isl::multi_union_pw_aff::from_union_map(m2);
+  auto fused_schedule = mupa1.union_add(mupa2);
 
-    //auto lower_band_schedule = lower_band_node.band_get_partial_schedule();
-    //lower_band_schedule = 
-    //  lower_band_schedule.flat_range_product(upper_band_node.band_get_partial_schedule());
-    //auto lower_filter = lower_filter_node.filter_get_filter();
-    //lower_filter = lower_filter.unite(upper_filter_node.filter_get_filter());
-  
-    //auto upper_band_schedule = upper_band_node.band_get_partial_schedule();
-    //upper_band_schedule =
-    //  upper_band_schedule.flat_range_product(lower_band_node.band_get_partial_schedule());
-
-    //using namespace builders;
-    //auto builder =
-    //  domain(domain_node.domain_get_domain(),
-    //    set(
-    //      filter(upper_filter_node.filter_get_filter(),
-    //        band(upper_band_node.band_get_partial_schedule())),
-    //      filter(lower_filter_node.filter_get_filter(),
-    //        band(lower_band_node.band_get_partial_schedule()))));
-
-    //using namespace builders;
-    //auto builder =
-    //  domain(domain_node.domain_get_domain(),
-    //    band(upper_band_schedule,
-    //      sequence(
-    //        filter(upper_filter_node.filter_get_filter()),
-    //        filter(lower_filter_node.filter_get_filter()))));
-    //return builder.build();
-  //}();
-/*
-  auto ctx_ = isl::ctx(isl_ctx_alloc());
-  auto node_ = [ctx_]() {
+  auto new_root = [&]() {
     using namespace builders;
   
-    auto iteration_domain = isl::union_set(
-      ctx_, "{S1[i]: 0 <= i < 10; S2[i]: 0 <= i < 10}");
-    auto sched =
-      isl::multi_union_pw_aff(ctx_, "[{S1[i]->[(i)]; S2[i]->[(i)]}]");
-    auto filterS1 = isl::union_set(ctx_, "{S1[i]}");
-    auto filterS2 = isl::union_set(ctx_, "{S2[i]}");
-    
     auto builder =
-      domain(iteration_domain,
-        band(sched,
-          sequence(
-            filter(filterS1),
-            filter(filterS2))));
+      domain(domain_node.domain_get_domain(),
+        band(fused_schedule,
+          sequence(filter(upper_filter_node.filter_get_filter()),
+                   filter(lower_filter_node.filter_get_filter()))));
     return builder.build();
   }();
 
-  std::cout << node_.to_str() << "\n";
-  pet_scop.schedule() = node_.get_schedule();
-  std::cout << pet_scop.codegen() << "\n"; 
-*/
-
-  auto node_ = [&]() {
-    using namespace builders;
-    
-    auto schedule = upper_band_node.band_get_partial_schedule();
-    schedule = schedule.flat_range_product(lower_band_node.band_get_partial_schedule());
-  
-    auto domain_as_string = domain_node.domain_get_domain().to_str();
-    auto upper_filter_as_string = upper_filter_node.filter_get_filter().to_str();
-    auto lower_filter_as_string = lower_filter_node.filter_get_filter().to_str();
-    auto schedule_as_string = schedule.to_str();
- 
-    auto ctx_ = isl::ctx(isl_ctx_alloc());
-    auto iteration_domain = isl::union_set(
-      ctx_, domain_as_string);
-    auto sched =
-      isl::multi_union_pw_aff(ctx_, "[{S_0[i]->[(i)]; S_1[i]->[(i)]}]");
-    //auto sched =
-    //  isl::multi_union_pw_aff(ctx_, schedule_as_string);
-    auto filterS1 = isl::union_set(ctx_, upper_filter_as_string);
-    auto filterS2 = isl::union_set(ctx_, lower_filter_as_string);
- 
-    auto builder =
-      domain(iteration_domain,
-        band(sched,
-          sequence(
-            filter(filterS1),
-            filter(filterS2))));
-    return builder.build();
-  }();
-
-  std::cout << node_.to_str() << "\n";
-  pet_scop.schedule() = node_.get_schedule(); 
-  std::cout << pet_scop.codegen(codegenFusion) << "\n"; 
+  pet_scop.schedule() = new_root.get_schedule();
+  std::cout << pet_scop.codegen() << "\n";
 
 }
 
