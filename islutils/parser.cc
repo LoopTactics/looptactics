@@ -212,6 +212,8 @@ std::vector<Parser::AccessDescriptor> Parser::parse(const std::string &string_to
   // FIXME: why end up in a bad state?
   if (ss.fail()) {
     ss.clear(); 
+    descriptors.clear();
+    ss << string_to_be_parsed;
   }
 
   while(ss) {
@@ -227,6 +229,10 @@ std::vector<Parser::AccessDescriptor> Parser::parse(const std::string &string_to
       return descriptors;
     }
   }
+  #ifdef DEBUG
+    std::cout << __func__ << "\n";
+    std::cout << "# returned descr from parser: " << descriptors.size() << "\n";
+  #endif
   return descriptors;
 }
 
