@@ -47,7 +47,7 @@ private:
   void interchange(std::string interchange_transformation);
   void loop_reverse(std::string loop_reverse_transformation);
   void match_pattern(const std::string &text);
-  void match_pattern_helper(
+  bool match_pattern_helper(
     std::vector<Parser::AccessDescriptor> accesses_descriptors, const pet::Scop &scop);
   void update_schedule(isl::schedule new_schedule);
   void take_snapshot();

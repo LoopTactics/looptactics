@@ -482,9 +482,47 @@ void Highlighter::update_schedule(isl::schedule new_schedule) {
   }
 }
 
+static bool look_up_schedule_tree(const isl::schedule schedule, const std::string &mark_id) {
+
+  assert(schedule && "empty schedule");
+  isl::schedule_node root = schedule.get_root();
+
+  struct payload {
+    bool is_marked = false;
+    std::string name = "empty";
+  } p;
+  
+  p.name = mark_id;
+
+    isl_schedule_node_foreach_descendant_top_down(
+      root.get(),
+      [](__isl_keep isl_schedule_node *node_ptr, void *user) -> isl_bool {
+        payload *p = static_cast<payload *>(user);
+
+        isl::schedule_node node = isl::manage_copy(node_ptr);
+        if (isl_schedule_node_get_type(node.get()) == isl_schedule_node_mark) {
+          isl::id id = node.mark_get_id();
+          std::string id_as_string = id.to_str();
+          if ((id_as_string.compare(p->name) == 0)) {
+            p->is_marked = true;
+          }
+        }
+        return isl_bool_true;
+      },
+      &p);
+
+  return p.is_marked;
+}
+
 // FIXME: Here we need to check if the write array is the same as the read one.
-void Highlighter::match_pattern_helper(
+bool Highlighter::match_pattern_helper(
 const std::vector<Parser::AccessDescriptor> accesses_descriptors, const pet::Scop &scop) {
+
+  #ifdef DEBUG
+    std::cout << __func__ << "\n";
+    std::cout << "Input : " << "\n";
+    std::cout << "  #access_descriptors: " << accesses_descriptors.size() << "\n";
+  #endif
 
   isl::schedule schedule = scop.schedule();   
   isl::schedule_node root = schedule.get_root();
@@ -539,13 +577,24 @@ const std::vector<Parser::AccessDescriptor> accesses_descriptors, const pet::Sco
         anyTree(subTree));
   }();
 
-  // FIXME: why we wrap two times?
-  root = wrap_DFSPreorder(root, loop_matcher, "_tactic_");
+  #ifdef DEBUG
+    std::cout << "Schedule after pattern matching: " << "\n";
+    std::cout << root.root().to_str() << "\n";
+  #endif
+  // mark the detected pattern.
+  root = wrap_DFSPreorder(root, loop_matcher, "_tactic_"); 
   root = unsqueeze_tree(root.child(0));
+  // mark the loop in the detected region. The region
+  // is labeled with a mark node _tactic_
   root = mark_loop(root, "_tactic_");
   
   isl::schedule new_schedule = root.get_schedule();
-  update_schedule(new_schedule);
+  // avoid to update the schedule if not tactic has 
+  // been detected!.
+  if (!look_up_schedule_tree(new_schedule, "_tactic_"))
+    return false;
+  update_schedule(new_schedule);  
+  return true;
 }
 
 void Highlighter::take_snapshot() {
@@ -559,10 +608,12 @@ void Highlighter::take_snapshot() {
 }
 
 void Highlighter::match_pattern(const std::string &pattern) {
-  
-  //FIXME: what if we open another file or this function
-  // get called again?
-
+ 
+  #ifdef DEBUG
+    std::cout << __func__ << "\n";
+    std::cout << "Input: " << pattern << "\n";
+  #endif 
+ 
   if (file_path_.isEmpty()) {
     #ifdef DEBUG
       std::cout << __func__ << ": " 
@@ -583,17 +634,18 @@ void Highlighter::match_pattern(const std::string &pattern) {
     return;
   }
 
+  bool has_matched = false;
   try {
    pet::Scop scop = pet::Scop(pet::Scop::parseFile(context_, 
      file_path_as_std_string));
     current_schedule_ = scop.schedule();
     std::vector<Parser::AccessDescriptor> 
-      accesses_descriptor = Parser::parse(pattern);
-    if (accesses_descriptor.size() == 0) {
+      accesses_descriptors = Parser::parse(pattern);
+    if (accesses_descriptors.size() == 0) {
       return;
     }
     std::cout << "Success in parsing: " << pattern << "\n";
-    match_pattern_helper(accesses_descriptor, scop);
+    has_matched = match_pattern_helper(accesses_descriptors, scop);
   } catch (Error::Error e) {
     std::cout << "Error:" << e.message_ << "\n";
     return;
@@ -602,7 +654,8 @@ void Highlighter::match_pattern(const std::string &pattern) {
     std::cout << "Error: pet cannot open the file!\n";
     return;
   }
-  take_snapshot(); 
+  if (has_matched)
+    take_snapshot(); 
 }
 
 void Highlighter::tile(std::string tile_transformation) { 
@@ -748,6 +801,7 @@ void Highlighter::highlightBlock(const QString &text) {
       std::cout << __func__ << " : "
         << "Current block schedule -> " 
         << payload->schedule_block_.to_str() << "\n";
+      std::cout << "Current text: " << text.toStdString() << "\n";
       #endif 
       update_schedule(payload->schedule_block_);
     }
@@ -760,7 +814,6 @@ void Highlighter::highlightBlock(const QString &text) {
         setFormat(match.capturedStart(), match.capturedLength(), rule.format);
         std::string tmp = text.toStdString();    
         if (std::regex_match(tmp, matched_text, pattern_regex)) {
-          std::cout << "matched pattern!\n";
           match_pattern(matched_text[1].str());
         }
         if (std::regex_match(tmp, matched_text, tile_regex))
