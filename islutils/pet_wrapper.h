@@ -115,6 +115,15 @@ public:
   isl::union_map reads() const;
   /// Return scop writes.
   isl::union_map writes() const;
+  /// Return reads no tag  
+  isl::union_map reads_no_tag() const;
+  /// Return writes not tag (must)
+  isl::union_map must_writes_no_tag() const;
+  /// Return writes not tag (may)
+  isl::union_map may_writes_no_tag() const;
+  /// Return deps
+  isl::union_map compute_all_deps();
+  
   /// Return array in scop.
   std::vector<PetArray> arrays() const;
 

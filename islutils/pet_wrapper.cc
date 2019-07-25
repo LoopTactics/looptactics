@@ -117,14 +117,6 @@ struct ScopAndStmtsWrapper {
       stmtCodegen;
 };
 
-struct ScopAndStmtsWrapperWithPayload {
-  const Scop &scop;
-  std::vector<StmtDescr> &stmts;
-  std::function<std::string(isl::ast_build, isl::ast_node, pet_stmt *, void *user)>
-      stmtCodegen;
-  void *user;
-};
-
 } // namespace
 
 // Transform an array subscript of a reference from Domain[...] -> Access[...]
@@ -284,73 +276,6 @@ std::string Scop::codegen(
   return result;
 }
 
-// Find a statement descriptor by its occurrence identifier.
-// The descriptor is expected to exist.
-static const StmtDescr &findStmtDescriptorPayload(const ScopAndStmtsWrapperWithPayload &wrapper,
-                                           isl::id id) {
-  for (const auto &descr : wrapper.stmts) {
-    if (descr.occurrenceId == id) {
-      return descr;
-    }
-  }
-  ISLUTILS_DIE("could not find statement");
-  static StmtDescr dummy;
-  return dummy;
-}
-
-static __isl_give isl_printer *
-printStatementPayload(__isl_take isl_printer *p,
-               __isl_take isl_ast_print_options *options,
-               __isl_keep isl_ast_node *node, void *user) {
-  auto wrapper = static_cast<ScopAndStmtsWrapperWithPayload *>(user);
-
-  isl_ast_print_options_free(options);
-  isl::id occurrenceId = isl::manage_copy(node).get_annotation();
-  const StmtDescr &descr = findStmtDescriptorPayload(*wrapper, occurrenceId);
-
-  if (!wrapper->stmtCodegen) {
-    ISLUTILS_DIE("no statement codegen function provided");
-  }
-
-  std::string str =
-      wrapper->stmtCodegen(descr.astBuild, isl::manage_copy(node), descr.stmt, wrapper->user);
-  p = isl_printer_start_line(p);
-  p = isl_printer_print_str(p, str.c_str());
-  return isl_printer_end_line(p);
-}
-
-// Generate code for the scop given its current schedule and a given payload.
-std::string Scop::codegenPayload(
-    std::function<std::string(isl::ast_build, isl::ast_node, pet_stmt *, void *user)>
-        custom, void *user) const {
-  auto ctx = getCtx();
-  auto build = isl::ast_build::from_context(context());
-
-  // Construct the list of statement descriptors with partial schedules while
-  // building the AST.
-  std::vector<StmtDescr> statements;
-  ScopAndStmtsWrapperWithPayload wrapper{*this, statements, custom, user};
-  build = isl::manage(
-      isl_ast_build_set_at_each_domain(build.release(), at_domain, &wrapper));
-  auto astNode = build.node_from_schedule(isl::manage_copy(scop_->schedule));
-
-  // Print the AST as C code using statement descriptors to emit access
-  // expressions.
-  isl_printer *prn = isl_printer_to_str(ctx.get());
-  prn = isl_printer_set_output_format(prn, ISL_FORMAT_C);
-  // options are consumed by ast_node_print
-  isl_ast_print_options *options = isl_ast_print_options_alloc(ctx.get());
-  options =
-      isl_ast_print_options_set_print_user(options, printStatementPayload, &wrapper);
-  prn = isl_ast_node_print(astNode.get(), prn, options);
-  char *resultStr = isl_printer_get_str(prn);
-  auto result = std::string(resultStr);
-  free(resultStr);
-  isl_printer_free(prn);
-  return result;
-}
-
-
 static isl::id getStmtId(const pet_stmt *stmt) {
   isl::set domain = isl::manage_copy(stmt->domain);
   return domain.get_tuple_id();
@@ -397,6 +322,30 @@ static std::string print_isl_expression(isl::aff aff) {
 }
 */
 
+isl::union_map Scop::compute_all_deps() {
+  
+  auto reads = reads_no_tag();
+  auto may_writes = may_writes_no_tag();
+  auto must_writes = must_writes_no_tag();
+
+  auto false_deps_flow = isl::union_access_info(may_writes.unite(must_writes))
+                            .set_may_source(may_writes)
+                            .set_must_source(must_writes)
+                            .set_schedule(schedule())
+                            .compute_flow();
+
+  isl::union_map false_deps = false_deps_flow.get_may_dependence();
+  
+  auto flow_deps_flow = isl::union_access_info(reads)
+                            .set_may_source(may_writes) 
+                            .set_must_source(must_writes)
+                            .set_schedule(schedule())
+                            .compute_flow();
+
+  isl::union_map flow_deps = flow_deps_flow.get_may_dependence();
+  return flow_deps.unite(false_deps);
+}
+
 isl::union_map Scop::reads() const {
 
   return isl::manage(pet_scop_get_tagged_may_reads(scop_)).curry();
@@ -405,6 +354,21 @@ isl::union_map Scop::reads() const {
 isl::union_map Scop::writes() const {
 
   return isl::manage(pet_scop_get_tagged_may_writes(scop_)).curry();
+}
+
+isl::union_map Scop::reads_no_tag() const {
+
+  return isl::manage(pet_scop_get_may_reads(scop_));
+}
+
+isl::union_map Scop::must_writes_no_tag() const {
+  
+  return isl::manage(pet_scop_get_must_writes(scop_));
+}
+
+isl::union_map Scop::may_writes_no_tag() const {
+  
+  return isl::manage(pet_scop_get_may_writes(scop_));
 }
 
 isl::set Scop::context() const {
