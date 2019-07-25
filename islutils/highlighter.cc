@@ -702,7 +702,7 @@ const pet::Scop &scop, bool recompute) {
       return false;
     isl::map schedule_as_map = 
       isl::map::from_union_map(schedule);
-    if (schedule_as_map.dim(isl::dim::in) != dims)
+    if (schedule_as_map.dim(isl::dim::out) != dims)
       return false;
     return true;
   };
