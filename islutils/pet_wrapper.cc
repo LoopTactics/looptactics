@@ -376,6 +376,12 @@ isl::set Scop::context() const {
   return isl::manage(pet_scop_get_context(scop_));
 }
 
+bool Scop::is_valid_schedule(isl::schedule schedule) const {
+
+  assert(0 && "not impl");
+  return true;
+}
+
 std::vector<PetArray> Scop::arrays() const {
 
   std::vector<PetArray> res;

@@ -123,6 +123,8 @@ public:
   isl::union_map may_writes_no_tag() const;
   /// Return deps
   isl::union_map compute_all_deps();
+  /// Return true if the current schedule is valid.
+  bool is_valid_schedule(isl::schedule schedule) const;
   
   /// Return array in scop.
   std::vector<PetArray> arrays() const;
