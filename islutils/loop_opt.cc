@@ -168,6 +168,9 @@ isl::schedule LoopOptimizer::tile(isl::schedule schedule,
                                   const std::string &loop_id,
                                   const int &tile_size) {
 
+  if (tile_size <= 1)
+    return schedule;
+
   isl::schedule_node root = schedule.get_root();
 
   auto has_loop = [&](isl::schedule_node band) {
