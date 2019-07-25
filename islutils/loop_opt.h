@@ -19,6 +19,8 @@ public:
                             const int &unroll_factor);
   isl::schedule loop_reverse(isl::schedule schedule,
                              const std::string &loop_id);
+  isl::schedule fuse(isl::schedule schedule, const std::string &stmt_one,
+                     const std::string &stmt_two);
 };
 
 } // namespace LoopTactics

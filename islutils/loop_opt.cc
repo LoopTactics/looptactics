@@ -54,7 +54,7 @@ replace_repeatedly(isl::schedule_node node,
 /// @param pattern: Pattern to look-up in the subtree.
 /// @param replacement: Replacement to be applied in case of
 /// a match with @p pattern.
-isl::schedule_node replace_DFSPreorder_repeatedly(
+static isl::schedule_node replace_DFSPreorder_repeatedly(
     isl::schedule_node node, const matchers::ScheduleNodeMatcher &pattern,
     const builders::ScheduleNodeBuilder &replacement) {
 
@@ -72,7 +72,7 @@ isl::schedule_node replace_DFSPreorder_repeatedly(
 /// @param pattern: Pattern to look-up in the subtree.
 /// @param replacement: Replacement to be applied in case
 /// of a match with @p pattern.
-isl::schedule_node
+static isl::schedule_node
 replace_once(isl::schedule_node node,
              const matchers::ScheduleNodeMatcher &pattern,
              const builders::ScheduleNodeBuilder &replacement) {
@@ -94,7 +94,7 @@ replace_once(isl::schedule_node node,
 /// @param pattern: Pattern to look-up in the subtree.
 /// @param replacement: Replacement to be applied in case of
 /// a match with @p pattern.
-isl::schedule_node
+static isl::schedule_node
 replace_DFSPreorder_once(isl::schedule_node node,
                          const matchers::ScheduleNodeMatcher &pattern,
                          const builders::ScheduleNodeBuilder &replacement) {
@@ -145,7 +145,7 @@ static isl::schedule_node sink_point_tile(isl::schedule_node node,
 }
 
 /// Apply the tiling transformation.
-std::pair<isl::multi_union_pw_aff, isl::multi_union_pw_aff>
+static std::pair<isl::multi_union_pw_aff, isl::multi_union_pw_aff>
 tile_node(isl::schedule_node node, const int &tileSize) {
 
   auto space = isl::manage(isl_schedule_node_band_get_space(node.get()));
@@ -162,6 +162,99 @@ tile_node(isl::schedule_node node, const int &tileSize) {
                             node.child(0).band_get_partial_schedule());
   return res;
 }
+
+/// utility function.
+static __isl_give isl_schedule_node *
+unsqueeze_band(__isl_take isl_schedule_node *node, void *user) {
+
+  if (isl_schedule_node_get_type(node) != isl_schedule_node_band)
+    return node;
+
+  if (isl_schedule_node_band_n_member(node) == 1)
+    return node;
+ 
+  size_t members = isl_schedule_node_band_n_member(node);
+  for (size_t i = 1; i < members; i++) {
+    node = isl_schedule_node_band_split(node, 1);
+    node = isl_schedule_node_child(node, 0);
+  }
+  return node;
+}
+
+/// Un-squeeze the schedule tree.
+/// given a schedule tree that looks like
+///
+/// schedule (i, j)
+///
+/// this function will give
+///
+/// schedule(i)
+///   schedule(j)
+///
+/// @param root: Current root node for the subtree to simplify.
+static isl::schedule_node unsqueeze_tree(isl::schedule_node root) {
+
+  root = isl::manage(isl_schedule_node_map_descendant_bottom_up(
+    root.release(), unsqueeze_band, nullptr));  
+  return root;
+}
+
+/// Squeeze the schedule tree.
+/// given a tree that looks like
+///
+/// schedule (i)
+///    schedule (j)
+///      anyTree
+///
+/// this will get simplify as
+///
+/// schedule(i,j)
+///   anyTree
+///
+/// @param schedule_node: Current schedule node to be simplified.
+static isl::schedule_node squeeze_tree(isl::schedule_node root) {
+
+  isl::schedule_node parent, child, grandchild;
+  auto matcher = [&]() {
+    using namespace matchers;
+    // clang-format off
+    return band(parent,
+      band(child,
+        anyTree(grandchild)));
+    //clang-format on
+  }();
+    
+  auto merger = builders::ScheduleNodeBuilder();
+  {
+    using namespace builders;
+    // clang-format off
+    auto computeSched = [&]() {
+      isl::multi_union_pw_aff sched =
+        parent.band_get_partial_schedule().flat_range_product(
+          child.band_get_partial_schedule());
+      return sched;
+    };
+    // clang-format on
+    auto st = [&]() { return subtreeBuilder(grandchild); };
+    merger = band(computeSched, subtree(st));
+  }
+
+  root = replace_DFSPreorder_repeatedly(root, matcher, merger);
+  return root.root();
+}
+
+/// Fuse.
+isl::schedule LoopOptimizer::fuse(isl::schedule schedule,
+                                  const std::string &stmt_one,
+                                  const std::string &stmt_two) {
+
+  if (stmt_one == stmt_two)
+    return schedule;
+
+  isl::schedule_node root = schedule.get_root();
+  return schedule;
+}
+  
 
 /// Tiling.
 isl::schedule LoopOptimizer::tile(isl::schedule schedule,
@@ -297,7 +390,7 @@ static isl::schedule_node walker_backward(isl::schedule_node node,
   return nullptr;
 }
 
-isl::schedule_node helper_builder_callback(isl::schedule_node node,
+static isl::schedule_node helper_builder_callback(isl::schedule_node node,
                                            isl::schedule_node band_node,
                                            isl::schedule_node sub_tree) {
 
@@ -367,7 +460,7 @@ isl::schedule LoopOptimizer::swap_loop(isl::schedule schedule,
   return node.root().get_schedule();
 }
 
-isl::schedule_node helper_unroll(isl::schedule_node node,
+static isl::schedule_node helper_unroll(isl::schedule_node node,
                                  const int &unroll_factor) {
 
   assert(isl_schedule_node_get_type(node.get()) == isl_schedule_node_band &&
