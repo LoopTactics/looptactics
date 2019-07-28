@@ -4,6 +4,7 @@
 #include <isl/cpp.h>
 #include <stack>  // std::stack
 #include <string> // std::string
+#include "islutils/util.h"
 
 namespace LoopTactics {
 

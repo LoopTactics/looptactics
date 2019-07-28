@@ -1,9 +1,56 @@
 #include <islutils/loop_opt.h>
-
+#include <stack>
 #include <islutils/builders.h>
 #include <islutils/matchers.h>
 
+#include <iostream>
+
 using namespace LoopTactics;
+
+static isl::schedule_node mark_only_loop_subtree(isl::schedule_node node) {
+
+  std::stack<isl::schedule_node> node_stack;
+  node_stack.push(node);
+
+  while (node_stack.empty() == false) {
+  
+    node = node_stack.top();
+    node_stack.pop();
+
+    if (isl_schedule_node_get_type(node.get()) == isl_schedule_node_band) {
+      assert(isl_schedule_node_band_n_member(node.get()) == 1);
+      isl::union_map partial_schedule =
+        isl::union_map::from(node.band_get_partial_schedule());
+      isl::map partial_schedule_as_map = 
+        isl::map::from_union_map(partial_schedule);
+      if (!partial_schedule_as_map.has_tuple_id(isl::dim::out))
+        assert(0 && "not tuple id");
+      std::cout << partial_schedule_as_map.get_tuple_id(isl::dim::out).to_str() << "\n";
+      assert(0);
+    }
+
+    size_t n_children =
+      static_cast<size_t>(isl_schedule_node_n_children(node.get()));
+    for (size_t i = 0; i < n_children; i++) {
+      node_stack.push(node.child(i));
+    }
+  }
+  return node;
+}
+  
+static isl::schedule_node mark_only_loop(isl::schedule_node node,
+  const std::string &mark_id) {
+
+  if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_mark)
+      && (node.mark_get_id().to_str().compare(mark_id) == 0)) {
+    node = mark_only_loop_subtree(node.child(0));
+  }
+
+  for (int i = 0; i < node.n_children(); i++) {
+    node = mark_only_loop(node.child(i), mark_id);
+  }
+  return node;
+}
 
 /// utility function.
 ///
@@ -243,23 +290,127 @@ static isl::schedule_node squeeze_tree(isl::schedule_node root) {
   return root.root();
 }
 
+static isl::schedule_node remove_loop_mark(isl::schedule_node node) {
+
+  isl::schedule_node band_node;
+  isl::schedule_node continuation;
+
+  auto matcher = [&]() {
+    using namespace matchers;
+    return mark(band(band_node, anyTree(continuation)));
+  }();
+  auto builder = builders::ScheduleNodeBuilder();
+  {
+    using namespace builders;
+    auto new_schedule = [&]() {
+      return band_node.band_get_partial_schedule();
+    };
+    auto st = [&]() { return subtreeBuilder(continuation); };
+    builder = band(new_schedule, subtree(st));
+  }
+  node = replace_DFSPreorder_once(node, matcher, builder);
+  return node;
+}
+
+static bool is_valid_fusion(isl::schedule_node stmt_one, isl::schedule_node stmt_two) {
+
+  auto *id_first = isl_schedule_node_mark_get_id(stmt_one.get());
+  auto *pp_first = static_cast<ReadsWrites *>(isl_id_get_user(id_first));
+  auto reads_first_stmt = pp_first->reads;
+  delete pp_first;
+  auto *id_second = isl_schedule_node_mark_get_id(stmt_two.get());
+  auto *pp_second = static_cast<ReadsWrites *>(isl_id_get_user(id_second));
+  auto reads_second_stmt = pp_second->reads;
+  delete pp_second;
+  isl_id_free(id_first);
+  isl_id_free(id_second);  
+
+  // check if the kernels are independent
+  
+  return true;
+}
+
+static isl::schedule_node fuse_helper(isl::schedule_node node) {
+
+  isl::schedule_node domain_node;
+  isl::schedule_node first_band_to_be_fused, second_band_to_be_fused;
+  isl::schedule_node first_filter_node, second_filter_node;
+  isl::schedule_node first_mark_stmt, second_mark_stmt;
+
+  auto matcher = [&]() {
+    using namespace matchers; 
+    return
+      domain(domain_node,
+        sequence(
+          filter(first_filter_node,
+            mark(band(first_band_to_be_fused, mark(first_mark_stmt, leaf())))),
+          filter(second_filter_node,
+            mark(band(second_band_to_be_fused, mark(second_mark_stmt, leaf()))))));
+  }();
+
+  if (!matchers::ScheduleNodeMatcher::isMatching(matcher, node)) {
+    return node;
+  }
+
+  if (!is_valid_fusion(first_mark_stmt, second_mark_stmt)) {
+    return node;
+  }
+
+  auto p1 = first_band_to_be_fused.child(0).get_prefix_schedule_union_map();
+  auto p2 = second_band_to_be_fused.child(0).get_prefix_schedule_union_map();
+  auto mupa1 = isl::multi_union_pw_aff::from_union_map(p1);
+  auto mupa2 = isl::multi_union_pw_aff::from_union_map(p2);
+  auto fused_schedule = mupa1.union_add(mupa2);
+
+  auto new_root = [&]() {
+    using namespace builders;
+
+    auto marker = [&]() {
+      return 
+        isl::id::alloc(first_band_to_be_fused.get_ctx(), "_tactic_", nullptr);
+    };
+
+    auto builder =
+      domain(domain_node.domain_get_domain(),
+        mark(marker,
+          band(fused_schedule,
+            sequence(filter(first_filter_node.filter_get_filter()),
+                     filter(second_filter_node.filter_get_filter())))));
+    return builder.build();
+  }();
+  
+  return new_root;
+}
+
 /// Fuse.
 isl::schedule LoopOptimizer::fuse(isl::schedule schedule,
                                   const std::string &stmt_one,
                                   const std::string &stmt_two) {
+  #ifdef DEBUG
+    std::cout << __func__ << "\n";
+  #endif
 
   if (stmt_one == stmt_two)
     return schedule;
 
   isl::schedule_node root = schedule.get_root();
-  return schedule;
+  root = remove_loop_mark(root);
+  root = squeeze_tree(root); 
+  root = fuse_helper(root);
+  root = unsqueeze_tree(root);
+  std::cout << "ROOT: " << root.to_str() << "\n";
+  root = mark_only_loop(root, "_tactic_");
+  return root.root().get_schedule();
 }
-  
 
 /// Tiling.
 isl::schedule LoopOptimizer::tile(isl::schedule schedule,
                                   const std::string &loop_id,
                                   const int &tile_size) {
+
+  #ifdef DEBUG
+    std::cout << __func__ << "\n";
+  #endif
 
   if (tile_size <= 1)
     return schedule;
@@ -317,30 +468,6 @@ isl::schedule LoopOptimizer::tile(isl::schedule schedule,
   return root.root().get_schedule();
 }
 
-/// Utility function to perform loop interchange
-static isl::schedule_node helper_swapper(
-    isl::schedule_node node, const matchers::ScheduleNodeMatcher &pattern,
-    std::function<isl::schedule_node(isl::schedule_node)> builder_callback) {
-
-  if (matchers::ScheduleNodeMatcher::isMatching(pattern, node)) {
-    node = builder_callback(node);
-  }
-  return node;
-}
-
-/// Utility function to perform loop interchange.
-/// The actual interchange is done via the builder_callback.
-static isl::schedule_node swapper(
-    isl::schedule_node node, const matchers::ScheduleNodeMatcher &pattern,
-    std::function<isl::schedule_node(isl::schedule_node)> builder_callback) {
-
-  node = helper_swapper(node, pattern, builder_callback);
-  for (int i = 0; i < node.n_children(); i++) {
-    node = swapper(node.child(i), pattern, builder_callback).parent();
-  }
-  return node;
-}
-
 /// Simple stack-based walker -> forward.
 static isl::schedule_node walker_forward(isl::schedule_node node,
                                          const std::string &mark_id) {
@@ -390,6 +517,31 @@ static isl::schedule_node walker_backward(isl::schedule_node node,
   return nullptr;
 }
 
+
+/// Utility function to perform loop interchange
+static isl::schedule_node helper_swapper(
+    isl::schedule_node node, const matchers::ScheduleNodeMatcher &pattern,
+    std::function<isl::schedule_node(isl::schedule_node)> builder_callback) {
+
+  if (matchers::ScheduleNodeMatcher::isMatching(pattern, node)) {
+    node = builder_callback(node);
+  }
+  return node;
+}
+
+/// Utility function to perform loop interchange.
+/// The actual interchange is done via the builder_callback.
+static isl::schedule_node swapper(
+    isl::schedule_node node, const matchers::ScheduleNodeMatcher &pattern,
+    std::function<isl::schedule_node(isl::schedule_node)> builder_callback) {
+
+  node = helper_swapper(node, pattern, builder_callback);
+  for (int i = 0; i < node.n_children(); i++) {
+    node = swapper(node.child(i), pattern, builder_callback).parent();
+  }
+  return node;
+}
+
 static isl::schedule_node helper_builder_callback(isl::schedule_node node,
                                            isl::schedule_node band_node,
                                            isl::schedule_node sub_tree) {
@@ -414,7 +566,11 @@ isl::schedule LoopOptimizer::swap_loop(isl::schedule schedule,
                                        const std::string &loop_source,
                                        const std::string &loop_destination) {
 
-  isl::schedule_node node = schedule.get_root().child(0);
+  #ifdef DEBUG
+    std::cout << __func__ << "\n";
+  #endif
+
+  isl::schedule_node node = schedule.get_root();
 
   auto has_loop = [&](isl::schedule_node band) {
     auto mark = band.parent();
@@ -426,6 +582,8 @@ isl::schedule LoopOptimizer::swap_loop(isl::schedule schedule,
     return false;
   };
 
+  // FIXME: We look also on descendant, but we may
+  // need to look at the parent(s).
   isl::schedule_node mark_node_upper, band_node_upper;
   isl::schedule_node mark_node_lower, band_node_lower;
   isl::schedule_node sub_tree_upper, sub_tree_lower;
@@ -443,6 +601,12 @@ isl::schedule LoopOptimizer::swap_loop(isl::schedule schedule,
   // This function performs the swapping.
   auto builder_callback = [&](isl::schedule_node node) {
     // delete current mark node and insert the newer one.
+
+    #ifdef DEBUG
+      std::cout << "entry point builder callback: \n";
+      std::cout << node.to_str() << "\n";
+    #endif
+
     node = isl::manage(isl_schedule_node_delete(node.release()));
     node = node.insert_mark(mark_node_lower.mark_get_id());
     node =
@@ -452,7 +616,15 @@ isl::schedule LoopOptimizer::swap_loop(isl::schedule schedule,
     node = node.insert_mark(mark_node_upper.mark_get_id());
     node =
         helper_builder_callback(node.child(0), band_node_upper, sub_tree_lower);
-    node = walker_backward(node, mark_node_upper.mark_get_id().to_str());
+    // we walk back to the *mark_node_lower* that is now 
+    // before *mark_node_upper*
+    node = walker_backward(node, mark_node_lower.mark_get_id().to_str());
+
+    #ifdef DEBUG
+      std::cout << "exit point builder callback: \n";
+      std::cout << node.to_str() << "\n";
+    #endif
+
     return node;
   };
 
@@ -460,8 +632,23 @@ isl::schedule LoopOptimizer::swap_loop(isl::schedule schedule,
   return node.root().get_schedule();
 }
 
-static isl::schedule_node helper_unroll(isl::schedule_node node,
-                                 const int &unroll_factor) {
+/// helper fuction for unrolling.
+/// node is the target band node to be unrolled.
+/// unroll factor is the unroll factor for the band.
+/// domain is the schedule domain.
+///
+/// if the unroll factor is > than the loop dimension
+/// we unroll the entire loop. If this is not the case
+/// we stripmine the loop and unroll the newly created loop.
+static isl::schedule_node unroller(isl::schedule_node node,
+                                 const int &unroll_factor,
+                                 const isl::union_set domain) {
+
+  #ifdef DEBUG
+    std::cout << "****" <<  __func__ << "****" << "\n";
+    std::cout << "Entry node: \n";
+    std::cout << node.to_str() << "\n";
+  #endif
 
   assert(isl_schedule_node_get_type(node.get()) == isl_schedule_node_band &&
          "expect band node");
@@ -471,6 +658,7 @@ static isl::schedule_node helper_unroll(isl::schedule_node node,
 
   auto partial_schedule = node.band_get_partial_schedule_union_map();
   assert(partial_schedule.n_map() == 1 && "expect only single map");
+  partial_schedule = partial_schedule.intersect_domain(domain);
 
   isl::set set = isl::set(partial_schedule.range());
   isl::pw_aff pwa = set.dim_max(0);
@@ -485,9 +673,16 @@ static isl::schedule_node helper_unroll(isl::schedule_node node,
   int max_unroll_factor =
       std::stoi(val.add(isl::val::one(val.get_ctx())).to_str());
 
-  if (unroll_factor >= max_unroll_factor)
-    return node.band_set_ast_build_options(
+  if (unroll_factor >= max_unroll_factor) {
+    node = node.band_set_ast_build_options(
         isl::union_set(node.get_ctx(), "{unroll[x]}"));
+    #ifdef DEBUG 
+      std::cout << "**** " << __func__ << "****\n"; 
+      std::cout << node.to_str() << "\n";
+      std::cout << "**** exit " << __func__ << "****\n";
+    #endif
+    return node;
+  }
 
   else {
     // stripmine and unroll.
@@ -500,30 +695,60 @@ static isl::schedule_node helper_unroll(isl::schedule_node node,
     node = isl::manage(
         isl_schedule_node_band_tile(node.release(), sizes.release()));
     node = node.child(0);
-    return node.band_set_ast_build_options(
+    node = node.band_set_ast_build_options(
         isl::union_set(node.get_ctx(), "{unroll[x]}"));
+    #ifdef DEBUG
+      std::cout << "****" << __func__ << "****\n";
+      std::cout << node.to_str() << "\n";
+      std::cout << "**** exit " << __func__ << "****\n";
+    #endif
+    // note here we return .parent()  
+    // as we have introduced a new loop.
+    return node.parent();
   }
 }
 
+/// helper function that helps to visit all the tree.
+/// In case we detected the target loop we unroll it
+/// using the helper fuction unroller.
+static isl::schedule_node helper_unroll(isl::schedule_node node,
+  const std::string &loop_id, const int &unroll_factor,
+  const isl::union_set domain) {
+
+  if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_mark) 
+      && node.mark_get_id().to_str().compare(loop_id) == 0) {
+    node = unroller(node.child(0), unroll_factor, domain);
+  }
+
+  for (int i = 0; i < node.n_children(); i++) {
+    node = helper_unroll(
+      node.child(i), loop_id, unroll_factor, domain).parent();
+  }
+  return node;
+}
+
+/// unroll the loop.
+/// schedule is the target schedule.
+/// loop id is the loop identifier 
+/// unroll factor is the unroll factor for the target loop.
 isl::schedule LoopOptimizer::unroll_loop(isl::schedule schedule,
                                          const std::string &loop_id,
                                          const int &unroll_factor) {
 
+  #ifdef DEBUG
+    std::cout << __func__ << "\n";
+  #endif
+
   isl::schedule_node node = schedule.get_root();
-  node = walker_forward(node, loop_id);
-  node = helper_unroll(node.child(0), unroll_factor);
-  isl::union_set set =
-      isl::manage(isl_schedule_node_band_get_ast_build_options(node.get()));
+  isl::union_set domain = node.domain_get_domain();
+  
+  node = helper_unroll(node, loop_id, unroll_factor, domain);
   return node.root().get_schedule();
 }
 
-isl::schedule LoopOptimizer::loop_reverse(isl::schedule schedule,
-                                          const std::string &loop_id) {
-
-  isl::schedule_node node = schedule.get_root();
-  node = walker_forward(node, loop_id);
-  
-  node = node.child(0);
+/// Helper function for loop reverse.
+/// It uses matchers/buidlers to perform the action.
+static isl::schedule_node reverser(isl::schedule_node node) {
 
   isl::schedule_node band_node, continuation;
   auto matcher = [&]() {
@@ -550,5 +775,35 @@ isl::schedule LoopOptimizer::loop_reverse(isl::schedule schedule,
 
   node = node.cut();
   node = builder.insertAt(node);
+  return node;
+} 
+
+/// Helper function for loop reverse. It is used to
+/// walk all the node of the schedule tree.
+static isl::schedule_node helper_reverse(isl::schedule_node node,
+  const std::string &loop_id) {
+
+  if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_mark)
+      && node.mark_get_id().to_str().compare(loop_id) == 0) {
+    node = reverser(node.child(0));
+  }
+
+  for (int i = 0; i < node.n_children(); i++) {
+    node = helper_reverse(
+      node.child(i), loop_id).parent();
+  }
+  return node;
+}    
+
+/// Loop reverse.
+isl::schedule LoopOptimizer::loop_reverse(isl::schedule schedule,
+                                          const std::string &loop_id) {
+
+  #ifdef DEBUG
+    std::cout << __func__ << "\n";
+  #endif
+
+  isl::schedule_node node = schedule.get_root();
+  node = helper_reverse(node, loop_id);
   return node.root().get_schedule();
 }
