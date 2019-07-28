@@ -1,11 +1,12 @@
-#include "highlighter.h"
-
+#include "islutils/highlighter.h"
+#include "islutils/util.h"
 #include "islutils/error.h"
 #include "islutils/matchers.h"
 #include "islutils/builders.h"
-#include <islutils/loop_opt.h>
-#include <islutils/access_patterns.h>
-#include <islutils/access.h>
+#include "islutils/loop_opt.h"
+#include "islutils/access_patterns.h"
+#include "islutils/access.h"
+#include "islutils/gsl/gsl_assert"
 
 #include <iostream>
 #include <regex>        // std::regex
@@ -13,6 +14,7 @@
 #include <fstream>      // std::fstream
 
 using namespace timeInfo;
+using namespace LoopTactics;
 
 int Highlighter::stmt_id_ = 0;
 
@@ -297,7 +299,7 @@ static std::string get_loop_id(std::string partial_schedule) {
   if (match.size() != 2) {
     std::cout << "#matches : " << match.size() << "\n";
     std::cout << "schedule : " << partial_schedule << "\n";
-    assert(0 && "expect only two matches");
+    Expects(match.size() == 2);
   }
   return match[1].str();
 }
@@ -329,7 +331,8 @@ static isl::schedule_node walker_backward(isl::schedule_node node,
 /// Each band node is marked with an id that is the name of
 /// the outermost dimension of the partial schedule contained in
 /// the band.
-static isl::schedule_node mark_loop_and_stmt_subtree(isl::schedule_node node) {
+static isl::schedule_node mark_loop_and_stmt_subtree(isl::schedule_node node,
+  const pet::Scop &scop) {
 
   std::stack<isl::schedule_node> node_stack;
   node_stack.push(node);
@@ -340,7 +343,7 @@ static isl::schedule_node mark_loop_and_stmt_subtree(isl::schedule_node node) {
     node_stack.pop();
 
     if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_band)) {
-      assert(isl_schedule_node_band_n_member(node.get()) == 1);
+      Expects(isl_schedule_node_band_n_member(node.get()) == 1);
       isl::union_map partial_schedule =
         isl::union_map::from(node.band_get_partial_schedule());
       isl::map partial_schedule_as_map = isl::map::from_union_map(partial_schedule);
@@ -351,11 +354,17 @@ static isl::schedule_node mark_loop_and_stmt_subtree(isl::schedule_node node) {
         node.insert_mark(isl::id::alloc(node.get_ctx(), loop_id, nullptr)).child(0);
     }
 
-    if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_leaf)) {
-      std::string stmt_id = "stmt" + std::to_string(Highlighter::get_next_stmt_id());
-      node =
-        node.insert_mark(isl::id::alloc(node.get_ctx(), stmt_id, nullptr)).child(0);
-    }
+    //if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_leaf)) {
+    //  auto prefix_schedule = node.get_prefix_schedule_union_map();
+    //  auto reads = scop.reads();
+    //  auto writes = scop.writes();
+    //  reads = reads.apply_domain(prefix_schedule);
+    //  writes = writes.apply_domain(prefix_schedule);
+    //  auto *p = new ReadsWrites{reads, writes};
+    //  std::string stmt_id = "stmt" + std::to_string(Highlighter::get_next_stmt_id());
+    //  node =
+    //    node.insert_mark(isl::id::alloc(node.get_ctx(), stmt_id, p)).child(0);
+    //}
 
     size_t n_children =
       static_cast<size_t>(isl_schedule_node_n_children(node.get()));
@@ -371,15 +380,16 @@ static isl::schedule_node mark_loop_and_stmt_subtree(isl::schedule_node node) {
 /// look for a subtree with a mark node as a root.
 /// the mark node should have id "mark_id"
 static isl::schedule_node mark_loop_and_stmt(
-  isl::schedule_node node, const std::string &mark_id) {
+  isl::schedule_node node, const std::string &mark_id,
+  const pet::Scop &scop) {
 
   if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_mark)
       && (node.mark_get_id().to_str().compare(mark_id) == 0)) {
-    node = mark_loop_and_stmt_subtree(node.child(0));
+    node = mark_loop_and_stmt_subtree(node.child(0), scop);
   }
 
   for (int i = 0; i < node.n_children(); i++) {
-    node = mark_loop_and_stmt(node.child(i), mark_id).parent();
+    node = mark_loop_and_stmt(node.child(i), mark_id, scop).parent();
   }
   return node;
 } 
@@ -540,9 +550,9 @@ static bool check_accesses(isl::ctx ctx,
 std::vector<Parser::AccessDescriptor> descr_accesses, isl::union_map reads, 
 isl::union_map writes) {
 
-  assert(descr_accesses.size() != 0 && "empty user provided accesses!");
-  assert(reads.n_map() != 0 && "empty reads");
-  assert(writes.n_map() != 0 && "empty writes");
+  Expects(descr_accesses.size() != 0);
+  Expects(reads.n_map() != 0);
+  Expects(writes.n_map() != 0);
 
   std::vector<Parser::AccessDescriptor> read_descr_accesses;
   std::vector<Parser::AccessDescriptor> write_descr_accesses;
@@ -590,8 +600,8 @@ static std::vector<std::string> get_band_node_as_string(isl::schedule schedule) 
 static bool are_same_tree(isl::schedule current_schedule,
   isl::schedule new_schedule) {
 
-  assert(current_schedule && "empty schedule!");
-  assert(new_schedule && "empty_schedule!");
+  Expects(current_schedule);
+  Expects(new_schedule);
 
   if (!current_schedule.plain_is_equal(new_schedule))
     return false;
@@ -632,8 +642,7 @@ void Highlighter::update_schedule(isl::schedule new_schedule, bool update_prev) 
   current_schedule_ = new_schedule;
   std::string file_path_as_std_string =
     file_path_.toStdString();
-  assert(!file_path_as_std_string.empty()
-    && "empty file path!");
+  Expects(!file_path_as_std_string.empty());
   pet::Scop scop = 
     pet::Scop(pet::Scop::parseFile(context_,
       file_path_as_std_string));
@@ -646,7 +655,7 @@ void Highlighter::update_schedule(isl::schedule new_schedule, bool update_prev) 
 
 static bool look_up_schedule_tree(const isl::schedule schedule, const std::string &mark_id) {
 
-  assert(schedule && "empty schedule");
+  Expects(schedule);
   isl::schedule_node root = schedule.get_root();
 
   struct payload {
@@ -749,7 +758,7 @@ const pet::Scop &scop, bool recompute) {
   root = unsqueeze_tree(root.child(0));
   // mark the loop in the detected region. The region
   // is labeled with a mark node _tactic_
-  root = mark_loop_and_stmt(root, "_tactic_");
+  root = mark_loop_and_stmt(root, "_tactic_", scop);
   
   isl::schedule new_schedule = root.get_schedule();
   // avoid to update the schedule if not tactic has 
@@ -762,8 +771,7 @@ const pet::Scop &scop, bool recompute) {
 
 void Highlighter::take_snapshot(const QString &text) {
 
-  assert(current_schedule_ 
-    && "cannot take a snapshot of an empty schedule!");
+  Expects(current_schedule_);
   BlockSchedule *bs = new BlockSchedule();
   bs->schedule_block_ = current_schedule_;
   bs->transformation_string_ = text;
@@ -966,7 +974,7 @@ void Highlighter::fuse(const QString &text, bool recompute) {
       fuse_transformation.end(),
       [](unsigned char x) { return std::isspace(x); }), fuse_transformation.end());
 
-  std::regex pattern_regex(R"([stmt[1-9]+),(stmt[1-9]+))");
+  std::regex pattern_regex(R"((stmt[1-9]+),(stmt[1-9]+))");
   if (!std::regex_match(fuse_transformation, matched_text, pattern_regex))
     return;
 
@@ -1016,8 +1024,7 @@ void Highlighter::loop_reverse(const QString &text, bool recompute) {
 // 0 -> compare with the previous schedule
 void Highlighter::compare(bool with_baseline) {
 
-  assert(with_baseline
-    && "not implemented for non baseline");
+  Expects(with_baseline);
 
   std::string file_path_as_std_string =
     file_path_.toStdString();
@@ -1055,8 +1062,8 @@ void Highlighter::do_transformation(const QString &text, bool recompute) {
         switch(rule.id_rule_) {
           case 0: match_pattern(text, recompute); break;
           case 1: tile(text, recompute); break;
-          case 2: unroll(text, recompute); break;
-          case 3: interchange(text, recompute); break;
+          case 2: interchange(text, recompute); break;
+          case 3: unroll(text, recompute); break;
           case 4: compare(true); break;
           case 5: loop_reverse(text, recompute); break;
           case 6: fuse(text, recompute); break;
