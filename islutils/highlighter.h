@@ -13,8 +13,6 @@
 
 class QTextDocument;
 
-using namespace LoopTactics;
-
 struct BlockSchedule : public QTextBlockUserData {
   isl::schedule schedule_block_;
   QString transformation_string_;
@@ -66,7 +64,7 @@ private:
   QVector<HighlightingRule> highlightingRules;
 
   isl::ctx context_;
-  LoopOptimizer opt_;
+  LoopTactics::LoopOptimizer opt_;
   TunerThread tuner_;
   
   QTextCharFormat patternFormat_;
