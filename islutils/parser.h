@@ -8,6 +8,7 @@
 #include <cassert>      // lovely assert
 #include <set>          // std::set
 #include <vector>       // std::vector
+#include <tuple>        // std::tuple
 #include "islutils/error.h"
 
 namespace Lexer {
@@ -18,6 +19,7 @@ namespace Lexer {
     ASSIGN, LP, RP, COMMA,
     SPACE, EXCLAMATION_POINT,
     ASSIGNMENT_BY_ADDITION,
+    NUMBER,
   };
 
   Token_value get_token();
@@ -30,16 +32,29 @@ namespace Parser {
   using namespace Lexer;
   using namespace Error;
 
+  enum class Increment_type {PLUS, MINUS};
+  class AffineAccess {
+    public:
+      std::string induction_var_name_;
+      int increment_;
+      Increment_type inc_type_ = Increment_type::PLUS;
+      AffineAccess() = delete;
+      AffineAccess(const std::string &, int, Increment_type);
+  };
+
   enum class Type { READ, WRITE, READ_AND_WRITE };
   class AccessDescriptor {
     public:
       Type type_ = Type::READ;
-      std::string name_;
-      std::set<std::string> induction_vars_;
+      std::string array_name_;
+      std::vector<AffineAccess> affine_access_;
   };
 
   void expr(bool get);
-  void get_inductions(bool get, std::set<std::string> &c); 
+  void get_inductions(bool first_call, std::vector<AffineAccess> &a);
+  std::tuple<int, Increment_type> get_coeff_after_induction();
+  std::tuple<std::string, int, Increment_type> get_coeff_before_and_after_induction();
+  void reset(); 
   AccessDescriptor get_access_descriptor();
   std::vector<AccessDescriptor> parse(const std::string &string_to_be_parsed);
 
