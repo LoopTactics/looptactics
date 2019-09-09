@@ -132,6 +132,42 @@ replace_repeatedly(isl::schedule_node node,
   return node;
 }
 
+/// utility function.
+///
+/// @param node: Root of the subtree to inspect.
+/// @param pattern: Pattern to look-up in the subtree.
+/// @param replacement: Replacement to be applied in case
+/// of a match with @p pattern
+static isl::schedule_node
+replace_once(isl::schedule_node node,
+             const matchers::ScheduleNodeMatcher &pattern,
+             const builders::ScheduleNodeBuilder &replacement) {
+
+  if (matchers::ScheduleNodeMatcher::isMatching(pattern, node)) {
+    node = rebuild(node, replacement);
+  }
+  return node;
+}
+
+/// walk the schedule tree starting from "node" and in
+/// case of a match with the matcher "pattern" modify
+/// the schedule tree using the builder "replacement".
+///
+/// @param node: Root of the subtree to inspect.
+/// @param pattern: Pattern to look-up in the subtree.
+/// @param replacement: Replacement to be applied in case of
+/// a match with @p pattern
+static isl::schedule_node replace_DFSPreorder_once(
+  isl::schedule_node node, const matchers::ScheduleNodeMatcher &pattern,
+  const builders::ScheduleNodeBuilder &replacement) {
+
+  node = replace_once(node, pattern, replacement);
+  for (int i = 0; i < node.n_children(); ++i) {
+    node = replace_DFSPreorder_once(node.child(i), pattern, replacement).parent();
+  }
+  return node;
+}
+
 /// walk the schedule tree starting from "node" and in
 /// case of a match with the matcher "pattern" modify
 /// the schedule tree using the builder "replacement".
@@ -322,7 +358,38 @@ static std::string get_loop_id(std::string partial_schedule) {
   return match[1].str();
 }
 
+/// Given a partial schedule as **string** retunr the loop id.
+/// For example, for the following partial schedule
+/// { S_0[i, j] -> [(i)]; S_1[i, j, k] -> [(i)] }
+/// the function returns "i". We also make sure that
+/// the output dimension is "i" for all the partial schedules 
+/// in the isl::union_map.
+static std::string 
+get_loop_id_from_partial_schedule(isl::union_map schedule) {
+
+  #ifdef DEBUG
+    std::cout << __func__ << "\n";
+  #endif
+
+  if (schedule.n_map() == 1) {
+    isl::map schedule_as_map = isl::map::from_union_map(schedule);
+    return get_loop_id(schedule_as_map.to_str());
+  }
+
+  std::vector<isl::map> schedule_as_map{};  
+  schedule.foreach_map([&schedule_as_map](isl::map m) { schedule_as_map.push_back(m); });
+
+  std::string loop_id = get_loop_id(schedule_as_map[0].to_str());  
+  for (const auto & s : schedule_as_map) {
+    std::string tmp = get_loop_id(s.to_str());
+    Expects(tmp == loop_id);
+    loop_id = tmp;
+  }
+  return loop_id;
+}
+
 /// Simple stack-based walker. Look for a mark node with id "mark_id"
+/*
 static isl::schedule_node walker_backward(isl::schedule_node node,
                                           const std::string &mark_id) {
 
@@ -344,71 +411,58 @@ static isl::schedule_node walker_backward(isl::schedule_node node,
   assert(0 && "node is expected");
   return nullptr;
 }
-
-/// Mark band node in the subtree rooted at "node".
-/// Each band node is marked with an id that is the name of
-/// the outermost dimension of the partial schedule contained in
-/// the band.
-static isl::schedule_node mark_loop_and_stmt_subtree(isl::schedule_node node,
-  const pet::Scop &scop) {
-
-  std::stack<isl::schedule_node> node_stack;
-  node_stack.push(node);
-
-  while (node_stack.empty() == false) {
-    
-    node = node_stack.top();
-    node_stack.pop();
-
-    if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_band)) {
-      Expects(isl_schedule_node_band_n_member(node.get()) == 1);
-      isl::union_map partial_schedule =
-        isl::union_map::from(node.band_get_partial_schedule());
-      isl::map partial_schedule_as_map = isl::map::from_union_map(partial_schedule);
-      //XXX: we use regex to get the loop name:
-      // S_1[i, k, j] -> [i] return i
-      std::string loop_id = get_loop_id(partial_schedule_as_map.to_str());
-      node = 
-        node.insert_mark(isl::id::alloc(node.get_ctx(), loop_id, nullptr)).child(0);
-    }
-
-    //if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_leaf)) {
-    //  auto prefix_schedule = node.get_prefix_schedule_union_map();
-    //  auto reads = scop.reads();
-    //  auto writes = scop.writes();
-    //  reads = reads.apply_domain(prefix_schedule);
-    //  writes = writes.apply_domain(prefix_schedule);
-    //  auto *p = new ReadsWrites{reads, writes};
-    //  std::string stmt_id = "stmt" + std::to_string(Highlighter::get_next_stmt_id());
-    //  node =
-    //    node.insert_mark(isl::id::alloc(node.get_ctx(), stmt_id, p)).child(0);
-    //}
-
-    size_t n_children =
-      static_cast<size_t>(isl_schedule_node_n_children(node.get()));
-    for (size_t i = 0; i < n_children; i++) {
-      node_stack.push(node.child(i));
-    }
-  }
-
-  // walk back to the entry point.
-  return walker_backward(node, "_tactic_");
-}
+*/
 
 /// look for a subtree with a mark node as a root.
 /// the mark node should have id "mark_id"
 static isl::schedule_node mark_loop_and_stmt(
-  isl::schedule_node node, const std::string &mark_id,
-  const pet::Scop &scop) {
+  isl::schedule_node node, const std::string &mark_id) {
 
-  if ((isl_schedule_node_get_type(node.get()) == isl_schedule_node_mark)
-      && (node.mark_get_id().to_str().compare(mark_id) == 0)) {
-    node = mark_loop_and_stmt_subtree(node.child(0), scop);
+  #ifdef DEBUG
+    std::cout << __func__ << "\n";
+  #endif
+
+  auto has_not_annotation = [&](isl::schedule_node band) {
+    if (!band.has_parent())
+      return true;
+    auto maybe_mark = band.parent();
+    if (isl_schedule_node_get_type(maybe_mark.get()) != isl_schedule_node_mark)
+      return true;
+    // add exception for the band node annotated with _tactic_
+    auto mark_id_node = maybe_mark.mark_get_id().to_str();
+    if (mark_id_node.compare(mark_id) == 0)
+      return true;
+    else return false;
+  };
+
+  isl::schedule_node band_schedule, continuation;
+  auto matcher = [&]() {
+    using namespace matchers;
+    return
+      band(has_not_annotation, band_schedule, anyTree(continuation));
+  }();
+
+  auto builder = builders::ScheduleNodeBuilder();
+  {
+    using namespace builders;
+    
+    auto marker = [&]() {
+      return isl::id::alloc(
+        node.get_ctx(), 
+        get_loop_id_from_partial_schedule(
+          isl::union_map::from(band_schedule.band_get_partial_schedule())),
+        nullptr);
+    };
+    auto original_schedule = [&]() {
+      auto descr = BandDescriptor(band_schedule);
+      return descr;
+    };
+    auto st = [&]() { return subtreeBuilder(continuation); };
+
+    builder = mark(marker, band(original_schedule, subtree(st)));
   }
 
-  for (int i = 0; i < node.n_children(); i++) {
-    node = mark_loop_and_stmt(node.child(i), mark_id, scop).parent();
-  }
+  node = replace_DFSPreorder_once(node, matcher, builder).root();
   return node;
 } 
 
@@ -712,6 +766,28 @@ static bool look_up_schedule_tree(const isl::schedule schedule, const std::strin
 }
 
 // FIXME: Here we need to check if the write array is the same as the read one.
+// The structural matchers are derived as follow:
+// 1. In case the LHS array is INIT_REDUCTION. We look for 
+// an initialization stmt, with the following structure:
+//  band(property_one
+//    sequence(
+//      filter(
+//      filter(
+//        band(property_two
+//          anyTree(
+// Property_one is derived from the LHS array only. The # of members in this band
+// should be equal to the # of induction variables used in the LHS.
+// Property_two is derived from the total number of induction variables. The # of
+// members in this band should be equal to the # of induction variables used.
+// (note that here we check the input dimension and *not* the output ones)
+//
+// 2. In case the LHS is ASSIGN or ASSIGNMENT_BY_ADDITION. We look for a trivial nested loop,
+// with the following structure:
+// band(property_one
+//  anyTree(
+// Property_one is derived from the total number of induction variables. The
+// # if members in this band should be equal to the # of induction variables used.
+// (note that here we check the output dimensions and *not* the input ones).
 bool Highlighter::match_pattern_helper(
 const std::vector<Parser::AccessDescriptor> accesses_descriptors, 
 const pet::Scop &scop, bool recompute) {
@@ -729,16 +805,43 @@ const pet::Scop &scop, bool recompute) {
   // structural properties:
   // # induction variables -> #loops
   size_t dims = extract_inductions(accesses_descriptors).size();
+  bool has_init =
+    accesses_descriptors[0].type_ == Parser::Type::INIT_REDUCTION ? 1 : 0;
   
   auto has_conditions = [&](isl::schedule_node band) {
     isl::union_map schedule =
       isl::union_map::from(band.band_get_partial_schedule());
-    if (schedule.n_map() != 1)
+    if (schedule.n_map() != 1) {
+      #ifdef DEBUG
+        std::cout << "has_coditions returns false: n_map() != 1\n";
+        std::cout << "on band node: \n";
+        std::cout << band.to_str() << "\n";
+      #endif
       return false;
+    }
     isl::map schedule_as_map = 
       isl::map::from_union_map(schedule);
-    if (schedule_as_map.dim(isl::dim::out) != dims)
+    if (schedule_as_map.dim(isl::dim::in) != dims) {
+      #ifdef DEBUG
+        std::cout << "ha_conditions returns false: isl::dim::out\n";
+        std::cout << "on band node: \n";
+        std::cout << band.to_str() << "\n";
+      #endif
       return false;
+    }
+    return true;
+  };
+
+  auto has_conditions_init = [&](isl::schedule_node band) {
+    isl::union_map schedule =
+      isl::union_map::from(band.band_get_partial_schedule());
+    if (schedule.n_map() != 2) {
+      #ifdef DEBUG
+        std::cout << "has_conditions_init returns false: n_map() != 2\n";
+        std::cout << "on band node: \n";
+        std::cout << band.to_str() << "\n";
+      #endif
+    }
     return true;
   };
 
@@ -775,16 +878,31 @@ const pet::Scop &scop, bool recompute) {
         anyTree(subTree));
   }();
 
+  auto loop_matcher_init = [&]() {
+    using namespace matchers;
+    return  
+      band(
+        sequence(
+          filter(leaf()),
+          filter(
+            band(has_pattern, anyTree(subTree)))));
+  }();
+
   #ifdef DEBUG
-    std::cout << "Schedule after pattern matching: " << "\n";
+    std::cout << "Schedule before pattern matching: " << "\n";
     std::cout << root.root().to_str() << "\n";
   #endif
   // mark the detected pattern.
-  root = wrap_DFSPreorder(root, loop_matcher, "_tactic_"); 
+  if (!has_init) {
+    root = wrap_DFSPreorder(root, loop_matcher, "_tactic_");
+  }
+  else {
+    root = wrap_DFSPreorder(root, loop_matcher_init, "_tactic_");
+  } 
   root = unsqueeze_tree(root.child(0));
   // mark the loop in the detected region. The region
   // is labeled with a mark node _tactic_
-  root = mark_loop_and_stmt(root, "_tactic_", scop);
+  root = mark_loop_and_stmt(root, "_tactic_");
   
   isl::schedule new_schedule = root.get_schedule();
   // avoid to update the schedule if not tactic has 
@@ -867,7 +985,7 @@ void Highlighter::match_pattern(const QString &text, bool recompute) {
     return;
     }
     catch (...) {
-    std::cout << "Error: pet cannot open the file!\n";
+    std::cout << "Error: pet cannot open the file or isl exception!\n";
     return;
     }
   if (has_matched)
