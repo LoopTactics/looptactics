@@ -71,8 +71,16 @@ Lexer::Token_value Lexer::get_token() {
     return curr_tok = Token_value::ASSIGN;
   case ',':
     return curr_tok = Token_value::COMMA;
-  case '!':
+  case '!': {
+    string_value = ch;
+    Driver::ss.get(ch);
+    string_value += ch;
+    if (string_value.compare("!+") == 0)
+      return curr_tok = Token_value::INIT_REDUCTION;
+    else 
+      Driver::ss.putback(ch);
     return curr_tok = Token_value::EXCLAMATION_POINT;
+  }
   default:
     if (isalpha(ch)) {
       string_value = ch;
@@ -386,6 +394,17 @@ void Parser::expr(bool get) {
           "bad syntax: no array name (or multiple of them) before +=");
     else
       descriptors[0].type_ = Type::READ_AND_WRITE;
+    return;
+  }
+  case Lexer::Token_value::INIT_REDUCTION: {
+#ifdef DEBUG
+    std::cout << "Lexer::Token_value::INIT_REDUCTION\n";
+#endif
+    if (descriptors.size() != 1)
+      throw Error::Error(
+        "bad syntax: no arry name (or multiple of them) before !+");
+    else
+      descriptors[0].type_ = Type::INIT_REDUCTION;
     return;
   }
   case Lexer::Token_value::SPACE: {

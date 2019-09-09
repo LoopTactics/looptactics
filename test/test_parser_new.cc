@@ -217,6 +217,20 @@ TEST(Parser, testTwentyTwo) {
   EXPECT_TRUE(res.size() == 0);
 }
 
+TEST(Parser, testTwentyThree) {
 
+  using namespace Parser;
+  std::string S = "CB A(i+1)";
+  auto res = parse(S);
+  std::cout << res << std::endl;
+  EXPECT_TRUE(res.size() == 0);
+}
 
+TEST(Parser, testTwentyFour) {
 
+  using namespace Parser;
+  std::string S = "CB ( A(i + 1)";  
+  auto res = parse(S);
+  std::cout << res << std::endl;
+  EXPECT_TRUE(res.size() == 0);
+}

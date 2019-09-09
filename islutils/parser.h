@@ -19,7 +19,7 @@ namespace Lexer {
     ASSIGN, LP, RP, COMMA,
     SPACE, EXCLAMATION_POINT,
     ASSIGNMENT_BY_ADDITION,
-    NUMBER,
+    NUMBER, INIT_REDUCTION,
   };
 
   Token_value get_token();
@@ -42,7 +42,7 @@ namespace Parser {
       AffineAccess(const std::string &, int, Increment_type);
   };
 
-  enum class Type { READ, WRITE, READ_AND_WRITE };
+  enum class Type { READ, WRITE, READ_AND_WRITE, INIT_REDUCTION};
   class AccessDescriptor {
     public:
       Type type_ = Type::READ;
