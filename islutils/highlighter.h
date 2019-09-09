@@ -39,6 +39,7 @@ Q_SIGNALS:
 
 protected:
   void highlightBlock(const QString &text) override;
+  bool eventFilter(QObject* obj, QEvent* event) override;
 
 private:
 
@@ -78,6 +79,7 @@ private:
   isl::schedule current_schedule_;
   isl::schedule previous_schedule_;
   QString file_path_;
+  QString prev_text_;
 
   // variable used to annotate the
   // stmt with an unique id.

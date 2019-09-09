@@ -20,6 +20,8 @@ int Highlighter::stmt_id_ = 0;
 
 static bool bad_workaround = true;
 
+static int calls_to_interchange = 0;
+
 Highlighter::Highlighter(isl::ctx context, 
   QTextDocument *parent) : context_(context), QSyntaxHighlighter(parent),
   opt_(LoopOptimizer()), tuner_(TunerThread(nullptr, context)) {
@@ -71,6 +73,22 @@ Highlighter::Highlighter(isl::ctx context,
   rule.format_ = fuseFormat_;
   rule.id_rule_ = 6;
   highlightingRules.append(rule);
+}
+
+bool Highlighter::eventFilter(QObject* obj, QEvent* event)
+{
+    if (event->type()==QEvent::KeyPress) {
+        QKeyEvent* key = static_cast<QKeyEvent*>(event);
+        if ( (key->key()==Qt::Key_Enter) || (key->key()==Qt::Key_Return) ) {
+            //Enter or return was pressed
+        } else {
+            return QObject::eventFilter(obj, event);
+        }
+        return true;
+    } else {
+        return QObject::eventFilter(obj, event);
+    }
+    return false;
 }
 
 /// utility function.
@@ -257,9 +275,9 @@ static std::set<std::string> extract_inductions(std::vector<Parser::AccessDescri
 
   std::set<std::string> result{};
   for (size_t i = 0; i < accesses.size(); i++) {
-    std::set<std::string> tmp = accesses[i].induction_vars_;
+    std::vector<Parser::AffineAccess> tmp = accesses[i].affine_access_;
     for (auto it = tmp.begin(); it != tmp.end(); it++) {
-      result.insert(*it);
+      result.insert((*it).induction_var_name_);
     }
   }
   return result;
@@ -274,7 +292,7 @@ static std::set<std::string> extract_array_names(std::vector<Parser::AccessDescr
   
   std::set<std::string> result{};  
   for (size_t i = 0; i < accesses.size(); i++) {
-    result.insert(accesses[i].name_);
+    result.insert(accesses[i].array_name_);
   }
   return result;
 }
@@ -422,6 +440,14 @@ std::vector<Parser::AccessDescriptor> descr_accesses, isl::union_map accesses) {
   std::set<std::string> inductions_set = extract_inductions(descr_accesses);
   std::set<std::string> array_names_set = extract_array_names(descr_accesses);
 
+  #ifdef DEBUG
+    std::cout << __func__ << std::endl;
+    for (auto it = inductions_set.begin(); it != inductions_set.end(); it++) 
+      std::cout << "induction : " << *it << "\n";;
+    for (auto it = array_names_set.begin(); it != array_names_set.end(); it++)
+      std::cout << "array name : " << *it << "\n";
+  #endif
+
   for (auto it = inductions_set.begin(); it != inductions_set.end(); it++) {
     Placeholder_set tmp = {placeholder(ctx), *it};
     vector_placeholder_set.push_back(tmp);
@@ -453,15 +479,15 @@ std::vector<Parser::AccessDescriptor> descr_accesses, isl::union_map accesses) {
   // build the accesses.
   for (size_t i = 0; i < descr_accesses.size(); i++) {
 
-    size_t dims = descr_accesses[i].induction_vars_.size();
+    size_t dims = descr_accesses[i].affine_access_.size();
   
     switch (dims) {
       case 1 : {
         size_t index_in_array_placeholder = 
-          find_index_in_arrays(descr_accesses[i].name_);
-        auto it = descr_accesses[i].induction_vars_.begin();
+          find_index_in_arrays(descr_accesses[i].array_name_);
+        auto it = descr_accesses[i].affine_access_.begin();
         size_t index_in_placeholder_dim_zero = 
-          find_index_in_placeholders(*it);
+          find_index_in_placeholders((*it).induction_var_name_);
 
         accesses_list.push_back(access(
           vector_array_placeholder_set[index_in_array_placeholder].p,
@@ -471,13 +497,13 @@ std::vector<Parser::AccessDescriptor> descr_accesses, isl::union_map accesses) {
       }
       case 2: {
         size_t index_in_array_placeholder = 
-          find_index_in_arrays(descr_accesses[i].name_);
-        auto it = descr_accesses[i].induction_vars_.begin();
+          find_index_in_arrays(descr_accesses[i].array_name_);
+        auto it = descr_accesses[i].affine_access_.begin();
         size_t index_in_placeholder_dim_zero =
-          find_index_in_placeholders(*it);
+          find_index_in_placeholders((*it).induction_var_name_);
         it++;
         size_t index_in_placeholder_dim_one =
-          find_index_in_placeholders(*it);
+          find_index_in_placeholders((*it).induction_var_name_);
 
         accesses_list.push_back(access(
           vector_array_placeholder_set[index_in_array_placeholder].p,
@@ -623,8 +649,9 @@ void Highlighter::update_schedule(isl::schedule new_schedule, bool update_prev) 
 
   #ifdef DEBUG
     std::cout << __func__ << "\n";
-    std::cout << "Input : " << "\n";
-    std::cout << "New schedule : " << new_schedule.to_str() << "\n";
+    std::cout << "Input: " << "\n";
+    std::cout << "New schedule : " 
+      << new_schedule.get_root().to_str() << "\n";
   #endif
 
   // plain is equal just check that the trees are
@@ -634,7 +661,7 @@ void Highlighter::update_schedule(isl::schedule new_schedule, bool update_prev) 
     return;
 
   #ifdef DEBUG
-    std::cout << "update the schedule..\n";
+    std::cout << "new_schedule != current_schedule_; updating..\n";
   #endif
 
   if (update_prev)
@@ -647,7 +674,6 @@ void Highlighter::update_schedule(isl::schedule new_schedule, bool update_prev) 
     pet::Scop(pet::Scop::parseFile(context_,
       file_path_as_std_string));
   scop.schedule() = new_schedule;
-  std::cout << new_schedule.to_str() << "\n";
   std::string code = scop.codegen();
   QString code_as_q_string = QString(code.c_str());
   Q_EMIT codeChanged(code_as_q_string);
@@ -839,11 +865,11 @@ void Highlighter::match_pattern(const QString &text, bool recompute) {
   } catch (Error::Error e) {
     std::cout << "Error:" << e.message_ << "\n";
     return;
-  }
+    }
     catch (...) {
     std::cout << "Error: pet cannot open the file!\n";
     return;
-  }
+    }
   if (has_matched)
     take_snapshot(text); 
 }
@@ -926,6 +952,13 @@ void Highlighter::unroll(const QString &text, bool recompute) {
 
 void Highlighter::interchange(const QString &text, bool recompute) {
 
+  #ifdef DEBUG
+    std::cout << __func__ << "\n";
+    std::cout << "Input: " << "\n";
+    std::cout << " remcompute: " << recompute << "\n";
+    std::cout << " text: " << text.toStdString() << "\n";
+  #endif
+
   std::string interchange_transformation = text.toStdString();
   
   std::regex interchange_regex(R"(interchange\[(.*)\])");
@@ -953,6 +986,7 @@ void Highlighter::interchange(const QString &text, bool recompute) {
 
   // take a snapshot of the current schedule.
   take_snapshot(text);
+  calls_to_interchange++;
 }
 
 void Highlighter::fuse(const QString &text, bool recompute) {
@@ -1074,6 +1108,15 @@ void Highlighter::do_transformation(const QString &text, bool recompute) {
 }
 
 void Highlighter::highlightBlock(const QString &text) {
+
+  #ifdef DEBUG
+    std::cout << "=====================================================\n";
+    std::cout << "TEXT: " << text.toStdString() << "\n";
+    std::cout << "calls_to_interchange: " << calls_to_interchange << "\n";
+  #endif
+
+  if (text.isEmpty() || prev_text_ == text)
+    return;
  
   auto *current_block_data = currentBlockUserData();
   if (current_block_data) {
@@ -1082,7 +1125,7 @@ void Highlighter::highlightBlock(const QString &text) {
       #ifdef DEBUG
       std::cout << __func__ << " : "
         << "Current block schedule -> " 
-        << payload->schedule_block_.to_str() << "\n";
+        << payload->schedule_block_.get_root().to_str() << "\n";
       #endif 
       update_schedule(payload->schedule_block_, false);
     }
@@ -1095,7 +1138,13 @@ void Highlighter::highlightBlock(const QString &text) {
     }
   }
     
-  do_transformation(text, false);  
+  do_transformation(text, false);
+  
+  prev_text_ = text;  
+
+  #ifdef DEBUG
+    std::cout << "=====================================================\n";
+  #endif
 }
 
 void Highlighter::updatePath(const QString &path) {
