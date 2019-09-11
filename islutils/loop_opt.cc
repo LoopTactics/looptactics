@@ -311,7 +311,7 @@ static isl::schedule_node remove_loop_mark(isl::schedule_node node) {
   node = replace_DFSPreorder_once(node, matcher, builder);
   return node;
 }
-
+/*
 static bool is_valid_fusion(isl::schedule_node stmt_one, isl::schedule_node stmt_two) {
 
   auto *id_first = isl_schedule_node_mark_get_id(stmt_one.get());
@@ -381,7 +381,7 @@ static isl::schedule_node fuse_helper(isl::schedule_node node) {
   
   return new_root;
 }
-
+*/
 /// Fuse.
 isl::schedule LoopOptimizer::fuse(isl::schedule schedule,
                                   const std::string &stmt_one,
@@ -389,7 +389,7 @@ isl::schedule LoopOptimizer::fuse(isl::schedule schedule,
   #ifdef DEBUG
     std::cout << __func__ << "\n";
   #endif
-
+/*
   if (stmt_one == stmt_two)
     return schedule;
 
@@ -401,6 +401,8 @@ isl::schedule LoopOptimizer::fuse(isl::schedule schedule,
   std::cout << "ROOT: " << root.to_str() << "\n";
   root = mark_only_loop(root, "_tactic_");
   return root.root().get_schedule();
+*/
+  return schedule;
 }
 
 /// Tiling.
