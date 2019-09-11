@@ -25,7 +25,11 @@ Brief explanation:
 This is the matchers/builder framework to be used as a source-to-source compiler.
 
 Issues:
+```
 Not working with Clang/LLVM 9.0
+Not working with CLang/LLVM 8.0
+The reason is that we patch a particular version of ISL that works with Clang/LLVM 6.0
+```
 
 Tested in:
 ```
