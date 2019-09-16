@@ -6,9 +6,9 @@ set(TEST_NAMES
     builders
     transformer
     access
-    parser_new  
-    synthesis
-    parser)
+    parser
+    stencils  
+    synthesis)
 
 set(TEST_INPUTS
     3mm.c
@@ -21,7 +21,7 @@ set(TEST_INPUTS
     strided_domain_with_coefficients.c
     strided_domain_multi_dimensions.c
     1mmWithoutInitStmt.c
-    stencil.c)
+    stencilMix.c)
 
 add_custom_target(check COMMAND echo "Running all")
 
