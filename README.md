@@ -65,3 +65,12 @@ TODO:
 2. Array packing and dlt.
 3. Compute the flops using pet
 ```
+
+If you use this tool please cite:
+```
+@article{zinenko2018declarative,
+  title={Declarative Transformations in the Polyhedral Model},
+  author={Zinenko, Oleksandr and Chelini, Lorenzo and Grosser, Tobias},
+  year={2018}
+}
+```
