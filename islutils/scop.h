@@ -1,9 +1,7 @@
 #ifndef SCOP_H
 #define SCOP_H
 
-#include <isl/cpp.h>
-
-#include <iostream>
+#include <isl/isl-noexceptions.h>
 #include <vector>
 
 /// context holds constraints on the parameter that ensure that

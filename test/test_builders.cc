@@ -1,6 +1,6 @@
 #include <islutils/builders.h>
 
-#include <isl/cpp.h>
+#include <isl/isl-noexceptions.h>
 
 #include <iostream>
 

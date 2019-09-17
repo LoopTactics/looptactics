@@ -5,7 +5,7 @@
 #include <QSize>
 #include <QThread>
 #include <QWaitCondition>
-#include <isl/cpp.h>
+#include <isl/isl-noexceptions.h>
 
 #include "islutils/timing_info.h"
 

@@ -4,7 +4,7 @@
 #include <QSyntaxHighlighter>
 #include <QTextCharFormat>
 #include <QRegularExpression>
-#include <isl/cpp.h>
+#include <isl/isl-noexceptions.h>
 #include "islutils/pet_wrapper.h"
 #include "islutils/parser.h"
 #include "islutils/loop_opt.h"

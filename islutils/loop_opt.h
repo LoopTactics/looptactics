@@ -1,9 +1,9 @@
 #ifndef ISLUTILS_LOOP_OPT_H
 #define ISLUTILS_LOOP_OPT_H
 
-#include <isl/cpp.h>
-#include <stack>  // std::stack
-#include <string> // std::string
+#include <isl/isl-noexceptions.h>
+#include <stack>                  // std::stack
+#include <string>                 // std::string
 #include "islutils/util.h"
 
 namespace LoopTactics {

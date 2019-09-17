@@ -23,6 +23,7 @@ SingleInputDim::candidates(isl::map singleOutDimMap, const SimpleAff &pattern) {
       ISLUTILS_DIE("unexpected second piece");
     }
     a = aff;
+    return isl_stat_ok;
   });
 
   int dim = singleOutDimMap.dim(isl::dim::in);

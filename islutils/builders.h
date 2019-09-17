@@ -1,7 +1,7 @@
 #ifndef BUILDERS_H
 #define BUILDERS_H
 
-#include <isl/cpp.h>
+#include <isl/isl-noexceptions.h>
 #include <isl/id.h>
 
 #include <vector>

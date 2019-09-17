@@ -1,7 +1,7 @@
 #ifndef ISLUTILS_AFF_OP_H
 #define ISLUTILS_AFF_OP_H
 
-#include <isl/cpp.h>
+#include <isl/isl-noexceptions.h>
 
 namespace aff_op {
 // Operations between affs.

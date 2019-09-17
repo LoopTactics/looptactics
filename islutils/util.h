@@ -1,7 +1,7 @@
 #ifndef UTIL_H
 #define UTIL_H
 
-#include <isl/cpp.h>
+#include <isl/isl-noexceptions.h>
 #include <islutils/scop.h>
 #include <islutils/pet_wrapper.h>
 

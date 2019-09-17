@@ -1,7 +1,7 @@
 #ifndef ACCESS_H
 #define ACCESS_H
 
-#include <isl/cpp.h>
+#include <isl/isl-noexceptions.h>
 
 #include <algorithm>
 #include <functional>

@@ -377,7 +377,10 @@ get_loop_id_from_partial_schedule(isl::union_map schedule) {
   }
 
   std::vector<isl::map> schedule_as_map{};  
-  schedule.foreach_map([&schedule_as_map](isl::map m) { schedule_as_map.push_back(m); });
+  schedule.foreach_map([&schedule_as_map](isl::map m) { 
+    schedule_as_map.push_back(m); 
+    return isl_stat_ok;
+  });
 
   std::string loop_id = get_loop_id(schedule_as_map[0].to_str());  
   for (const auto & s : schedule_as_map) {

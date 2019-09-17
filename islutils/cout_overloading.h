@@ -1,7 +1,7 @@
 #ifndef ISLUTILS_COUT_H
 #define ISLUTILS_COUT_H 
 
-#include <isl/cpp.h>
+#include <isl/isl-noexceptions.h>
 
 //
 // overloading << for isl::pw_multi_aff 

@@ -1,4 +1,4 @@
-#include <isl/cpp.h>
+#include <isl/isl-noexceptions.h>
 
 #include <algorithm>
 #include <functional>
@@ -249,7 +249,10 @@ Matches<typename PlaceholderCollectionTy::CandidateTy,
         typename PlaceholderCollectionTy::PatternTy>
 match(isl::union_map access, PlaceholderCollectionTy ps) {
   std::vector<isl::map> accesses;
-  access.foreach_map([&accesses](isl::map m) { accesses.push_back(m); });
+  access.foreach_map([&accesses](isl::map m) { 
+    accesses.push_back(m); 
+    return isl_stat_ok;
+  });
 
   // Stage 1: fill in the candidate lists for all placeholders.
   for (auto &ph : ps) {
@@ -328,7 +331,10 @@ isl::union_map findAndReplace(isl::union_map umap,
   // finally, copy all the remaining original maps as is into result
 
   std::vector<isl::map> originalMaps, transformedMaps;
-  umap.foreach_map([&originalMaps](isl::map m) { originalMaps.push_back(m); });
+  umap.foreach_map([&originalMaps](isl::map m) { 
+    originalMaps.push_back(m); 
+    return isl_stat_ok;
+  });
 
   auto getPattern =
       [](const Replacement<CandidatePayload, PatternPayload> &replacement) {
@@ -482,7 +488,7 @@ allOf(std::vector<PlaceholderList<CandidatePayload, PatternPayload>>
 
 /// Build an object used to match all of the access patterns provided as
 /// arguments. Individual patterns can be constructed by calling "access(...)".
-/// In this case we also take into accoun the ArrayPlaceholder.
+/// In this case we also take into account the ArrayPlaceholder.
 template <typename CandidatePayload, typename PatternPayload, typename... Args>
 PlaceholderGroupedSet<CandidatePayload, PatternPayload>
 allOf(ArrayPlaceholderList<CandidatePayload, PatternPayload> arg,
@@ -502,7 +508,7 @@ allOf(ArrayPlaceholderList<CandidatePayload, PatternPayload> arg,
 
 /// Overloading for building an object used to match all of the access patterns
 /// provided as arguments. Individual patterns can be constructed by calling
-/// "access(...)". In this case we also take into accoun the ArrayPlaceholder.
+/// "access(...)". In this case we also take into account the ArrayPlaceholder.
 template <typename CandidatePayload, typename PatternPayload, typename... Args>
 PlaceholderGroupedSet<CandidatePayload, PatternPayload>
 allOf(std::vector<ArrayPlaceholderList<CandidatePayload, PatternPayload>>

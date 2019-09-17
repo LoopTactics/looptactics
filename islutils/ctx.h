@@ -1,7 +1,7 @@
 #ifndef ISLUTILS_CTX_H
 #define ISLUTILS_CTX_H
 
-#include <isl/cpp.h>
+#include <isl/isl-noexceptions.h>
 #include <pet.h>
 
 namespace util {

@@ -4,7 +4,7 @@
 #include <thread>   // std::thread
 #include "pstream.h"
 #include <chrono>   // std::sleep_for
-#include <isl/cpp.h>
+#include <isl/isl-noexceptions.h>
 #include <pet.h>
 #include <cassert>
 #include <fstream>

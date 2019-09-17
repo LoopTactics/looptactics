@@ -1,4 +1,4 @@
-#include <isl/cpp.h>
+#include <isl/isl-noexceptions.h>
 #include <isl/schedule_node.h>
 #include <vector>
 

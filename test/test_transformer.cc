@@ -134,8 +134,14 @@ static std::vector<GpuArrayInfo> collectArrayInfo(Scop scop) {
 
   arrays = arrays.coalesce();
   accesses = accesses.coalesce();
-  arrays.foreach_set([&arraysAsSet](isl::set s) { arraysAsSet.push_back(s); });
-  accesses.foreach_map([&accessesAsMap](isl::map m) { accessesAsMap.push_back(m); });
+  arrays.foreach_set([&arraysAsSet](isl::set s) { 
+    arraysAsSet.push_back(s); 
+    return isl_stat_ok;
+  });
+  accesses.foreach_map([&accessesAsMap](isl::map m) { 
+    accessesAsMap.push_back(m); 
+    return isl_stat_ok;
+  });
    
   for(size_t i = 0; i < arraysAsSet.size(); ++i) {
     GpuArrayInfo ga;
@@ -273,11 +279,13 @@ static std::string getNumberOfElementArray(GpuArrayInfo g) {
     isl::val min_val;
     isl::val max_val;
  
-    min.foreach_piece([&](isl::set s, isl::aff aff) -> void {
-      min_val = aff.get_constant_val(); 
+    min.foreach_piece([&](isl::set s, isl::aff aff) {
+      min_val = aff.get_constant_val();
+      return isl_stat_ok; 
     });
-    max.foreach_piece([&](isl::set s, isl::aff aff) -> void {
+    max.foreach_piece([&](isl::set s, isl::aff aff) {
       max_val = aff.get_constant_val();
+      return isl_stat_ok;
     });
 
     max_val = max_val.sub(min_val);
@@ -615,13 +623,14 @@ findAccess(std::vector<GpuArrayInfo> &gv, int x, int y, isl::union_map s) {
 
     for(size_t ot = 0; ot < m.dim(isl::dim::out); ++ot) {
       isl::pw_aff pwa = multiAff.get_pw_aff(ot);
-      pwa.foreach_piece([&](isl::set s, isl::aff a) -> void {
+      pwa.foreach_piece([&](isl::set s, isl::aff a){
         for(size_t in = 0; in < m.dim(isl::dim::in); ++in) {
           isl::val v = a.get_coefficient_val(isl::dim::in, in);
           if(v.is_one()) {
             indexesDiscovered.push_back(in);
           }
         }
+        return isl_stat_ok;
       });
     }
 
@@ -674,11 +683,13 @@ getRowsNumber(std::vector<std::string> ids, std::vector<GpuArrayInfo> gp) {
         isl::val min_val;
         isl::val max_val;
 
-        min.foreach_piece([&](isl::set s, isl::aff aff) -> void {
+        min.foreach_piece([&](isl::set s, isl::aff aff) {
           min_val = aff.get_constant_val();
+          return isl_stat_ok;
         });
-        max.foreach_piece([&](isl::set s, isl::aff aff) -> void {
+        max.foreach_piece([&](isl::set s, isl::aff aff) {
           max_val = aff.get_constant_val();
+          return isl_stat_ok;
         });
 
         max_val = max_val.sub(min_val);
@@ -711,11 +722,13 @@ getColumnsNumber(std::vector<std::string> ids, std::vector<GpuArrayInfo> gp) {
         isl::val min_val;
         isl::val max_val;
 
-        min.foreach_piece([&](isl::set s, isl::aff aff) -> void {
+        min.foreach_piece([&](isl::set s, isl::aff aff) {
           min_val = aff.get_constant_val();
+          return isl_stat_ok;
         });
-        max.foreach_piece([&](isl::set s, isl::aff aff) -> void {
+        max.foreach_piece([&](isl::set s, isl::aff aff) {
           max_val = aff.get_constant_val();
+          return isl_stat_ok;
         });
 
         max_val = max_val.sub(min_val);
@@ -2267,6 +2280,7 @@ isl::union_map addRangeId(isl::union_map umap, const std::string &tag) {
   auto result = isl::union_map::empty(umap.get_space());
   umap.foreach_map([id, &result](isl::map m) {
     result = result.add_map(m.set_tuple_id(isl::dim::out, id));
+    return isl_stat_ok;
   });
   return result;
 }
@@ -2315,6 +2329,7 @@ transformSubscriptsDLT(__isl_take isl_multi_pw_aff *subscript,
       auto partial = isl::pw_aff(aff.set_constant_val(cst.mul_ui(4)))
                          .intersect_domain(domain);
       result = result.union_add(partial);
+      return isl_stat_ok;
     });
     scheduledAccess = scheduledAccess.set_pw_aff(i, result);
   }
@@ -2469,6 +2484,7 @@ TEST(Transformer, HenrettyDLTJacobi) {
       m.set_tuple_name(isl::dim::out, "TEST");
     }
     result = result.add_map(m);
+    return isl_stat_ok;
   });
   scop.reads = result;
 

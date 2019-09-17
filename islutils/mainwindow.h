@@ -1,11 +1,9 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-#include "islutils/tactics.h"
 #include "islutils/highlighter.h"
 #include <QMainWindow>
-#include "islutils/timing_info.h"
-#include <isl/cpp.h>
+#include <isl/isl-noexceptions.h>
 
 class QTextEdit;
 

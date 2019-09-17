@@ -1,6 +1,3 @@
-[submodule "external/isl"]
-	path = external/isl
-	url = http://repo.or.cz/isl.git
 [submodule "external/googletest"]
 	path = external/googletest
 	url = https://github.com/google/googletest.git
@@ -10,9 +7,9 @@
 [submodule "external/pet"]
 	path = external/pet
 	url = https://repo.or.cz/pet.git
-[submodule "external/isl_haystack"]
-	path = external/isl_haystack
-	url = https://github.com/spcl/haystack-isl.git
 [submodule "external/barvinok"]
 	path = external/barvinok
 	url = https://repo.or.cz/barvinok.git
+[submodule "external/isl-haystack"]
+	path = external/isl-haystack
+	url = git@github.com:chelini/isl-haystack.git
