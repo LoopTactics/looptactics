@@ -30,20 +30,12 @@ CPLUS_INCLUDE_PATH=/whereLLVMisInstalled/include
 Brief explanation:
 This is the matchers/builder framework to be used as a source-to-source compiler.
 
-Issues:
-```
-Not working with Clang/LLVM 9.0
-Not working with CLang/LLVM 8.0
-Not working with CLang/LLVM 7.0
-The reason is that we patch a particular version of ISL that works with Clang/LLVM 6.0
-```
 
 Tested in:
 ```
-clang version 6.0.0-1ubuntu2 (tags/RELEASE_600/final)
+clang version 9.0.0
 Target: x86_64-pc-linux-gnu
 Thread model: posix
-InstalledDir: /usr/bin
 ```
 
 ```
