@@ -8,6 +8,116 @@
 #include "isl-helpers.h"
 #include "op.h"
 
+void Program::extractScop(pet_scop *PetScop) {
+
+  if (PetScop == nullptr) {
+    printf("-> exit(-1) cannot extract scope\n");
+    exit(-1);
+  }
+
+  // get the schedule and access information
+  // (the tagged accesses allow us to distinguish multiple accesses of the same array)
+  Schedule_ = isl::manage(pet_scop_get_schedule(PetScop));
+  Reads_ = isl::manage(pet_scop_get_tagged_may_reads(PetScop));
+  Writes_ = isl::manage(pet_scop_get_tagged_may_writes(PetScop));
+
+  // check if the schedule is bounded
+  auto checkIfBounded = [](isl::set Set) {
+    if (!Set.is_bounded()) {
+      printf("-> exit(-1) schedule not bounded\n");
+      exit(-1);
+    }
+    return isl::stat::ok();
+  };
+  Schedule_.get_domain().foreach_set(checkIfBounded);
+
+  // extract the array information
+  for (int idx = 0; idx < PetScop->n_array; idx++) {
+    isl::set Extent = isl::manage_copy(PetScop->arrays[idx]->extent);
+    // ignore scalars
+    if (Extent.dim(isl::dim::set) == 0)
+      continue;
+    // store the array information
+    std::string Name = Extent.get_tuple_name();
+    ArrayExtents_[Name] = Extent;
+    ElementSizes_[Name] = PetScop->arrays[idx]->element_size;
+  }
+  // extract the reads and writes
+  extractReferences();
+
+  // compute detailed access information
+  ScopLoc_ = std::make_pair(pet_loc_get_start(PetScop->loc), pet_loc_get_end(PetScop->loc));
+  for (int idx = 0; idx < PetScop->n_stmt; idx++) {
+    // extract the statement info
+    pet_expr *Expression = pet_tree_expr_get_expr(PetScop->stmts[idx]->body);
+    isl::space Space = isl::manage(pet_stmt_get_space(PetScop->stmts[idx]));
+    std::string Statement = Space.get_tuple_name(isl::dim::set);
+    // extract the access info
+    auto printExpression = [](__isl_keep pet_expr *Expr, void *User) {
+      if (pet_expr_access_is_read(Expr) || pet_expr_access_is_write(Expr)) {
+        isl::id RefId = isl::manage(pet_expr_access_get_ref_id(Expr));
+        std::string Name = RefId.to_str();
+        isl::multi_pw_aff Index = isl::manage(pet_expr_access_get_index(Expr));
+        // filter the array accesses
+        if (Index.dim(isl::dim::out) > 0 && Index.has_tuple_id(isl::dim::out)) {
+          std::string Access = Index.get_tuple_name(isl::dim::out);
+          // process the array dimensions
+          for (int i = 0; i < Index.dim(isl::dim::out); ++i) {
+            std::vector<std::string> Expressions;
+            auto IndexExpr = Index.get_pw_aff(i);
+            auto extractExpr = [&](isl::set Set, isl::aff Aff) {
+              Access += "[" + isl::printExpression(Aff) + "]";
+              return isl::stat::ok();
+            };
+            IndexExpr.foreach_piece(extractExpr);
+          }
+          // find the access info
+          auto AccessInfos = (std::vector<access_info> *)User;
+          auto Iter = AccessInfos->begin();
+          do {
+            // find the pet references and update the access description
+            Iter = std::find_if(Iter, AccessInfos->end(), [&](access_info AccessInfo) {
+              if (AccessInfo.Access == Name)
+                return true;
+              return false;
+            });
+            if (Iter != AccessInfos->end() && Iter->Access == Name) {
+              Iter->Access = Access;
+              Iter++;
+            }
+          } while (Iter != AccessInfos->end());
+        }
+      }
+      return 0;
+    };
+    pet_expr_foreach_access_expr(Expression, printExpression, &AccessInfos_[Statement]);
+    // get the line number
+    pet_loc *Loc = pet_tree_get_loc(PetScop->stmts[idx]->body);
+    int Line = pet_loc_get_line(Loc);
+    int Start = pet_loc_get_start(Loc);
+    int Stop = pet_loc_get_end(Loc);
+    pet_loc_free(Loc);
+    // store the access information
+    for (auto &Access : AccessInfos_[Statement]) {
+      Access.Line = Line;
+      Access.Start = Start;
+      Access.Stop = Stop;
+    }
+    pet_expr_free(Expression);
+  }
+
+  // extend the schedule and the read and write maps with an access dimension
+  extendSchedule();
+  Reads_ = extendAccesses(Reads_, false);
+  Writes_ = extendAccesses(Writes_, true);
+
+  // compute the access domain
+  AccessDomain_ = Reads_.domain().unite(Writes_.domain()).coalesce();
+
+  // free the pet scop
+  //pet_scop_free(PetScop);
+}
+
 void Program::extractScop(std::string SourceFile, std::string ScopFunction) {
   const char *Function = ScopFunction.empty() ? NULL : ScopFunction.c_str();
   pet_scop *PetScop = pet_scop_extract_from_C_source(Context_.get(), SourceFile.c_str(), Function);

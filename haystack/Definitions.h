@@ -96,6 +96,6 @@ inline long compute_power(long base, int exponent) {
     exponent /= 2;
   }
   return Result;
-};
+}
 
 #endif

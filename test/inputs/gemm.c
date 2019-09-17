@@ -11,7 +11,7 @@ float beta = 1.1;
 int main(void) {
 
 
-/*
+
 #pragma scop
   for (int i = 0; i < 1024; i++)
     for (int j = 0; j < 1024; j++)
@@ -21,7 +21,6 @@ int main(void) {
           C[i][j] += alpha * A[i][k] * B[k][j];
       }
 #pragma endscop
-*/
 
 
 /*
@@ -36,7 +35,7 @@ int main(void) {
 */
 
 
-
+/*
 #pragma scop
   for (int i = 0; i < 1024; i++)
     for (int j = 0; j < 1024; j++)
@@ -57,7 +56,7 @@ int main(void) {
       for (int j = 0; j < 1024; j++)
         CC[i][j] += alpha * AA[i][k] * BB[k][j];
 #pragma endscop
-
+*/
 
 
 

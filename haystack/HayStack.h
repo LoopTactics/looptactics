@@ -29,6 +29,7 @@ public:
 
   void compileProgram(std::string SourceFile);
   void compileProgram(std::string SourceFile, std::string ScopFunction);
+  void compileProgram(pet_scop *scop);
 
   // initialize the cache model
   void initModel(std::vector<NamedLong> Parameters);

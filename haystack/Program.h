@@ -19,6 +19,7 @@ public:
   Program(isl::ctx Context, machine_model MachineModel) : Context_(Context), MachineModel_(MachineModel) {}
 
   void extractScop(std::string SourceFile, std::string ScopFunction);
+  void extractScop(pet_scop *PetScop);
 
   void computeAccessToLine(isl::set Parameters);
 

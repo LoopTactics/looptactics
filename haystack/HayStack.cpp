@@ -33,6 +33,7 @@ void HayStack::compileProgram(std::string SourceFile) { compileProgram(SourceFil
 void HayStack::compileProgram(std::string SourceFile, std::string ScopFunction) {
   Program_.extractScop(SourceFile, ScopFunction);
 }
+void HayStack::compileProgram(pet_scop *scop) { Program_.extractScop(scop); }
 
 void HayStack::initModel(std::vector<NamedLong> Parameters) {
   assert(!Program_.getSchedule().is_null());

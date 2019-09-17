@@ -382,6 +382,11 @@ bool Scop::is_valid_schedule(isl::schedule schedule) const {
   return true;
 }
 
+pet_scop *Scop::get() const {
+
+  return scop_;  
+}
+
 std::vector<PetArray> Scop::arrays() const {
 
   std::vector<PetArray> res;

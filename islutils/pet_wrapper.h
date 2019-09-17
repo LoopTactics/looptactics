@@ -125,6 +125,8 @@ public:
   isl::union_map compute_all_deps();
   /// Return true if the current schedule is valid.
   bool is_valid_schedule(isl::schedule schedule) const;
+  /// get pet_scop *
+  pet_scop *get() const;
   
   /// Return array in scop.
   std::vector<PetArray> arrays() const;
