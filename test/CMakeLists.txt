@@ -7,7 +7,8 @@ set(TEST_NAMES
     transformer
     access
     parser
-    stencils  
+    stencils 
+    haystack 
     synthesis)
 
 set(TEST_INPUTS
