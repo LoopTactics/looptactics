@@ -56,7 +56,6 @@ warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 TODO:
 1. Tuner
 2. Compute the flops using pet
-3. Integrate Haystack
 ```
 
 If you use this tool please cite:
