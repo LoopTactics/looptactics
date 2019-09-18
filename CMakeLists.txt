@@ -21,6 +21,14 @@ find_package(Qt5 COMPONENTS Widgets REQUIRED)
 include_directories(${Qt5Core_INCLUDE_DIRS})
 ADD_DEFINITIONS(-DQT_NO_KEYWORDS)
 
+# LLVM used to get cache configuration via TTI.
+find_package(LLVM REQUIRED CONFIG)
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+include_directories(${LLVM_INCLUDE_DIRS})
+add_definitions(${LLVM_DEFINITIONS})
+
+
 # Boost
 #find_package(Boost COMPONENTS program_options REQUIRED)
 #include_directories(${Boost_INCLUDE_DIRS})
@@ -95,6 +103,11 @@ add_library(islutils
             haystack/Timer.cpp
             haystack/isl-helpers.cpp
 )
+
+# Find the libraries that correspond to the LLVM components
+# that we wish to use
+llvm_map_components_to_libnames(llvm_libs core nativecodegen ExecutionEngine)
+
 target_include_directories(islutils PUBLIC ${CMAKE_SOURCE_DIR})
 target_include_directories(islutils PUBLIC ${isl-haystack_INCLUDE})
 target_include_directories(islutils PUBLIC ${pet_INCLUDE})
@@ -102,6 +115,7 @@ target_include_directories(islutils PUBLIC ${barvinok_INCLUDE})
 target_link_libraries(islutils ${isl-haystack_LIB})
 target_link_libraries(islutils ${pet_LIB})
 target_link_libraries(islutils ${barvinok_LIB})
+target_link_libraries(islutils ${llvm_libs})
 
 add_executable(main 
   main.cc

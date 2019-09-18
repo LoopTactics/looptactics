@@ -7,11 +7,55 @@
 #include <islutils/builders.h>
 
 
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
+
 using util::ScopedCtx;
 
 const int CACHE_SIZE1 = 32 * 1024;
 const int CACHE_SIZE2 = 512 * 1024;
 const int CACHE_LINE_SIZE = 64;
+
+struct CacheParameters {
+  int lineSize{64};
+  std::vector<int> cacheSizes{32 * 1024, 512 * 1024};
+};
+
+static CacheParameters getCacheParameters(const llvm::TargetTransformInfo &TTI) {
+
+  CacheParameters res{};
+  auto L1DCache = llvm::TargetTransformInfo::CacheLevel::L1D; 
+  auto L2DCache = llvm::TargetTransformInfo::CacheLevel::L2D;
+  auto cacheLine = TTI.getCacheLineSize();
+  if (cacheLine != 0) {
+    res.lineSize = cacheLine;
+  }
+  if (TTI.getCacheSize(L1DCache).hasValue()) {
+    res.cacheSizes[0] = TTI.getCacheSize(L1DCache).getValue();
+  }
+  if (TTI.getCacheSize(L2DCache).hasValue()) {
+    res.cacheSizes[1] = TTI.getCacheSize(L2DCache).getValue();
+  }
+  return res;
+}
+
+TEST(haystack, TTI) {
+
+  using namespace llvm;
+  InitializeNativeTarget();
+  LLVMContext Context;
+  std::unique_ptr<Module> Owner(new Module("dummy", Context));
+  Module *M = Owner.get();
+  M->setTargetTriple(
+    EngineBuilder().selectTarget()->getTargetTriple().getTriple());
+  auto layout = M->getDataLayout();
+  auto TTI = TargetTransformInfo(layout);
+  auto cacheParam = getCacheParameters(TTI);
+  EXPECT_TRUE(cacheParam.lineSize != 0);
+}
+
 
 TEST(haystack, runCacheModel) {
 
