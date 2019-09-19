@@ -13,7 +13,7 @@
 #include <algorithm>    // std::remove_if
 #include <fstream>      // std::fstream
 
-using namespace timeInfo;
+using namespace userFeedback;
 using namespace LoopTactics;
 
 int Highlighter::stmt_id_ = 0;
@@ -24,11 +24,16 @@ static int calls_to_interchange = 0;
 
 Highlighter::Highlighter(isl::ctx context, 
   QTextDocument *parent) : context_(context), QSyntaxHighlighter(parent),
-  opt_(LoopOptimizer()), tuner_(TunerThread(nullptr, context)) {
+  opt_(LoopOptimizer()), tuner_(TunerThread(nullptr, context)),
+  haystackRunner_(nullptr, context) {
 
-  qRegisterMetaType<timeInfo::TimingInfo>("TimingInfo");
+  qRegisterMetaType<userFeedback::TimingInfo>("TimingInfo");
+  // FIXME: rename compareSchedules
   QObject::connect(&tuner_, &TunerThread::compareSchedules,
                    this, &Highlighter::updateTime);
+  qRegisterMetaType<userFeedback::CacheStats>("CacheStats");
+  QObject::connect(&haystackRunner_, &HaystackRunner::computedStats,
+    this, &Highlighter::updateCacheStats);
 
   HighlightingRule rule;
   patternFormat_.setForeground(Qt::blue);
@@ -36,8 +41,7 @@ Highlighter::Highlighter(isl::ctx context,
   rule.format_ = patternFormat_;
   rule.id_rule_ = 0;
   highlightingRules.append(rule);
-  
-  
+   
   tileFormat_.setForeground(Qt::blue);
   rule.pattern_ = QRegularExpression(QStringLiteral("tile"));
   rule.format_ = tileFormat_;
@@ -72,6 +76,12 @@ Highlighter::Highlighter(isl::ctx context,
   rule.pattern_ = QRegularExpression(QStringLiteral("fuse"));
   rule.format_ = fuseFormat_;
   rule.id_rule_ = 6;
+  highlightingRules.append(rule);
+
+  cacheEmulatorFormat_.setForeground(Qt::blue);
+  rule.pattern_ = QRegularExpression(QStringLiteral("runCacheEmulator"));
+  rule.format_ = cacheEmulatorFormat_;
+  rule.id_rule_ = 7;
   highlightingRules.append(rule);
 }
 
@@ -810,6 +820,8 @@ const pet::Scop &scop, bool recompute) {
   size_t dims = extract_inductions(accesses_descriptors).size();
   bool has_init =
     accesses_descriptors[0].type_ == Parser::Type::INIT_REDUCTION ? 1 : 0;
+  // FIXME: remove me
+  has_init = 1;
   
   auto has_conditions = [&](isl::schedule_node band) {
     isl::union_map schedule =
@@ -897,9 +909,15 @@ const pet::Scop &scop, bool recompute) {
   #endif
   // mark the detected pattern.
   if (!has_init) {
+    #ifdef DEBUG
+      std::cout << "not init stmt..\n";
+    #endif
     root = wrap_DFSPreorder(root, loop_matcher, "_tactic_");
   }
   else {
+    #ifdef DEBUG
+      std::cout << "init stmt..\n"; 
+    #endif
     root = wrap_DFSPreorder(root, loop_matcher_init, "_tactic_");
   } 
   root = unsqueeze_tree(root.child(0));
@@ -981,7 +999,9 @@ void Highlighter::match_pattern(const QString &text, bool recompute) {
     if (accesses_descriptors.size() == 0) {
       return;
     }
-    std::cout << "Success in parsing: " << pattern << "\n";
+    #ifdef DEBUG
+      std::cout << "Success in parsing: " << pattern << "\n";
+    #endif
     has_matched = match_pattern_helper(accesses_descriptors, scop, recompute);
   } catch (Error::Error e) {
     std::cout << "Error:" << e.message_ << "\n";
@@ -1206,6 +1226,14 @@ void Highlighter::compare(bool with_baseline) {
 
 }
 
+/// run cache model (haystack)
+void Highlighter::runCacheModel() {
+
+  if (current_schedule_.is_null())
+    return;
+  haystackRunner_.runModel(current_schedule_, file_path_);
+} 
+
 void Highlighter::do_transformation(const QString &text, bool recompute) {
   
   for (const HighlightingRule &rule : qAsConst(highlightingRules)) {
@@ -1221,7 +1249,8 @@ void Highlighter::do_transformation(const QString &text, bool recompute) {
           case 3: unroll(text, recompute); break;
           case 4: compare(true); break;
           case 5: loop_reverse(text, recompute); break;
-          case 6: fuse(text, recompute); break;
+          case 6: fuse(text, recompute); break; 
+          case 7: runCacheModel(); break;
           default: assert(0 && "rule not implemented!");
         }
       }
@@ -1276,10 +1305,15 @@ void Highlighter::updatePath(const QString &path) {
   file_path_ = path;
 }
 
-void Highlighter::updateTime(
-const TimingInfo &baseline_time, const TimingInfo &opt_time) {
+void Highlighter::updateTime(const TimingInfo &baseline_time, 
+  const TimingInfo &opt_time) {
 
-    Q_EMIT userFeedbackChanged(baseline_time, opt_time);
+    Q_EMIT timeUserFeedbackChanged(baseline_time, opt_time);
+}
+
+void Highlighter::updateCacheStats(const CacheStats &stats) {
+
+  Q_EMIT cacheUserFeedbackChanged(stats);
 }
 
 int Highlighter::get_next_stmt_id() {

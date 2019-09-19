@@ -7,7 +7,7 @@
 #include <QWaitCondition>
 #include <isl/isl-noexceptions.h>
 
-#include "islutils/timing_info.h"
+#include "islutils/feedback_definition.h"
 
 class TunerThread : public QThread {
 
@@ -21,8 +21,8 @@ public:
     const isl::schedule opt_schedule, const QString &file_path);
 
 Q_SIGNALS:
-  void compareSchedules(const timeInfo::TimingInfo &time_baseline, 
-    const timeInfo::TimingInfo &time_opt);
+  void compareSchedules(const userFeedback::TimingInfo &time_baseline, 
+    const userFeedback::TimingInfo &time_opt);
 
 protected:
   void run() override;

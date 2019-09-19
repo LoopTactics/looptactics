@@ -11,7 +11,7 @@
 #define RUNS 3
 
 using namespace pet;
-using namespace timeInfo;
+using namespace userFeedback;
 
 // Messages printed to stdout (in colours)
 const std::string kMessageFull    = "\x1b[32m[==========]\x1b[0m";

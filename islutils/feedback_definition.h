@@ -17,7 +17,7 @@ struct CacheStats {
 
   long totalAccesses = 0;
   long compulsory = 0;
-  std::vector<long> capacity = {};
+  std::vector<long> capacity{};
 };
 
 } // end namespace useFeedback

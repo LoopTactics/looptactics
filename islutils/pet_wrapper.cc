@@ -305,22 +305,6 @@ unsigned Scop::startPetLocation() const {
 unsigned Scop::endPetLocation() const {
   return pet_loc_get_end(scop_->loc);
 }
-/*
-// partially taken from:
-// https://github.com/spcl/haystack/blob/0753e076f0ea28da68533577edb60fbc5092ccbe/src/isl-helpers.cpp#L53
-static std::string print_isl_expression(isl::aff aff) {
-
-  std::string result{};
-
-  for (int i = 0; i < aff.dim(isl::dim::in); i++) {
-    isl::val coefficient = aff.get_coefficient_val(isl::dim::in, i);
-    if (!coefficient.is_zero()) {
-      result += aff.get_dim_name(isl::dim::in, i);
-    }
-  }
-  return result;     
-}
-*/
 
 isl::union_map Scop::compute_all_deps() {
   

@@ -19,8 +19,9 @@ public Q_SLOTS:
   void newFile();
   void openFile(QString path = QString());
   void updateCode(const QString &code);
-  void updateUserFeedback(const timeInfo::TimingInfo &baseline_time,
-    const timeInfo::TimingInfo &opt_time); 
+  void updateTimeUserFeedback(const userFeedback::TimingInfo &baseline_time,
+    const userFeedback::TimingInfo &opt_time);
+  void updateCacheUserFeedback(const userFeedback::CacheStats &stats);
 
 Q_SIGNALS:
   void filePathChanged(const QString &path);

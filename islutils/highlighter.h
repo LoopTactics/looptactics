@@ -9,7 +9,8 @@
 #include "islutils/parser.h"
 #include "islutils/loop_opt.h"
 #include "islutils/tuner_thread.h"
-#include "islutils/timing_info.h"
+#include "islutils/haystack_runner.h"
+#include "islutils/feedback_definition.h"
 
 class QTextDocument;
 
@@ -29,13 +30,15 @@ public:
 
 public Q_SLOTS:
   void updatePath(const QString &path); 
-  void updateTime(const timeInfo::TimingInfo &baseline_time, 
-    const timeInfo::TimingInfo &opt_time);
+  void updateTime(const userFeedback::TimingInfo &baseline_time, 
+    const userFeedback::TimingInfo &opt_time);
+  void updateCacheStats(const userFeedback::CacheStats &stats);
 
 Q_SIGNALS:
   void codeChanged(const QString &code);
-  void userFeedbackChanged(const timeInfo::TimingInfo &baseline_time,
-    const timeInfo::TimingInfo &opt_time);
+  void timeUserFeedbackChanged(const userFeedback::TimingInfo &baseline_time,
+    const userFeedback::TimingInfo &opt_time);
+  void cacheUserFeedbackChanged(const userFeedback::CacheStats &stats);
 
 protected:
   void highlightBlock(const QString &text) override;
@@ -56,6 +59,7 @@ private:
   void update_schedule(isl::schedule new_schedule, bool update_prev);
   void take_snapshot(const QString &text);
   void compare(bool with_baseline);
+  void runCacheModel();
 
   struct HighlightingRule {
     QRegularExpression pattern_;
@@ -67,6 +71,7 @@ private:
   isl::ctx context_;
   LoopTactics::LoopOptimizer opt_;
   TunerThread tuner_;
+  HaystackRunner haystackRunner_;
   
   QTextCharFormat patternFormat_;
   QTextCharFormat tileFormat_;
@@ -75,6 +80,7 @@ private:
   QTextCharFormat loopReversalFormat_;
   QTextCharFormat timeFormat_;
   QTextCharFormat fuseFormat_;
+  QTextCharFormat cacheEmulatorFormat_;
 
   isl::schedule current_schedule_;
   isl::schedule previous_schedule_;

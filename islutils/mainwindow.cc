@@ -5,7 +5,7 @@
 #include "islutils/mainwindow.h"
 #include "islutils/pet_wrapper.h"
 
-using namespace timeInfo;
+using namespace userFeedback;
 
 static constexpr int TABSTOP = 2;
 
@@ -78,7 +78,19 @@ void MainWindow::openFile(QString path) {
   
 }
 
-void MainWindow::updateUserFeedback(const TimingInfo &baseline_time,
+void MainWindow::updateCacheUserFeedback(const CacheStats &stats) {
+
+  info_editor_->clear();
+  std::string statsCache = "*** stats cache ***\n";
+  statsCache += "TotalAccess: " + std::to_string(stats.totalAccesses) + "\n";
+  statsCache += "Compulsory: " + std::to_string(stats.compulsory) + "\n";
+  statsCache += "L1 capacity: " + std::to_string(stats.capacity[0]) + "\n";
+  statsCache += "L2 capacity: " + std::to_string(stats.capacity[1]) + "\n";
+  QString statsCacheQString = QString(statsCache.c_str());
+  info_editor_->setPlainText(statsCacheQString);
+}
+
+void MainWindow::updateTimeUserFeedback(const TimingInfo &baseline_time,
   const TimingInfo &opt_time) {
 
   info_editor_->clear();
@@ -130,9 +142,12 @@ void MainWindow::setupEditor() {
 
   highlighter_ = new Highlighter(context_, script_editor_->document());
   QObject::connect(highlighter_, &Highlighter::codeChanged, this, &MainWindow::updateCode);
-  QObject::connect(highlighter_, &Highlighter::userFeedbackChanged, 
-    this, &MainWindow::updateUserFeedback);
-  QObject::connect(this, &MainWindow::filePathChanged, highlighter_, &Highlighter::updatePath);
+  QObject::connect(highlighter_, &Highlighter::timeUserFeedbackChanged, 
+    this, &MainWindow::updateTimeUserFeedback);
+  QObject::connect(highlighter_, &Highlighter::cacheUserFeedbackChanged,
+    this, &MainWindow::updateCacheUserFeedback);
+  QObject::connect(this, &MainWindow::filePathChanged, highlighter_, 
+    &Highlighter::updatePath);
 
   QFile file("gemm.c");
   if (file.open(QFile::ReadOnly | QFile::Text)) {

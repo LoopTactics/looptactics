@@ -28,6 +28,13 @@ message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
+# prevent error 
+# "You must build your code with position independent code if Qt was built with..
+# https://github.com/tora-tool/tora/blob/master/CMakeLists.txt
+if (Qt5_POSITION_INDEPENDENT_CODE)
+  SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
 
 # Boost
 #find_package(Boost COMPONENTS program_options REQUIRED)
@@ -95,6 +102,7 @@ add_library(islutils
             islutils/pet_wrapper.cc
             islutils/util.cc
             islutils/access_patterns.cc
+            islutils/haystack_runner.cc
             islutils/parser.cc
             islutils/loop_opt.cc
             haystack/Access.cpp
