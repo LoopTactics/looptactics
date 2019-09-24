@@ -9,6 +9,7 @@ std::ostream &operator<<(std::ostream &os,
     for (const auto &ac : sa.affine_access_) {
       std::cout << "induction var : " << ac.induction_var_name_ << "\n";
       std::cout << "increment : " << ac.increment_ << "\n";
+      std::cout << "coefficient : " << ac.coefficient_ << "\n";
       if (ac.inc_type_ == Parser::Increment_type::PLUS) 
         std::cout << "PLUS\n";
       else std::cout << "MINUS\n";
@@ -205,7 +206,7 @@ TEST(Parser, testTwentyOne) {
   std::string S = "CB (1 + 3 + 2i )";
   auto res = parse(S);
   std::cout << res << std::endl;
-  EXPECT_TRUE(res.size() == 0);
+  EXPECT_TRUE(res.size() == 1);
 }
 
 TEST(Parser, testTwentyTwo) {
@@ -230,6 +231,105 @@ TEST(Parser, testTwentyFour) {
 
   using namespace Parser;
   std::string S = "CB ( A(i + 1)";  
+  auto res = parse(S);
+  std::cout << res << std::endl;
+  EXPECT_TRUE(res.size() == 0);
+}
+
+TEST(Parser, testTwentyFive) {
+  
+  using namespace Parser;
+  std::string S = "B(i) = A(i-1) + A(i) + A(i+1)";
+  auto res = parse(S);
+  std::cout << res << std::endl;
+  EXPECT_TRUE(res.size() == 4);
+  EXPECT_TRUE(res[0].array_name_ == "B");
+  EXPECT_TRUE(res[1].array_name_ == "A");
+  EXPECT_TRUE(res[2].array_name_ == "A");
+  EXPECT_TRUE(res[3].array_name_ == "A");
+  EXPECT_TRUE(res[1].affine_access_[0].inc_type_ == Increment_type::MINUS);
+}
+
+TEST(Parser, testTwentySix) {
+  
+  using namespace Parser;
+  std::string S = "B(i) = A(i-4) + A(i-0) + A(i+4)";
+  auto res = parse(S);
+  std::cout << res << std::endl;
+  EXPECT_TRUE(res.size() == 4);
+  EXPECT_TRUE(res[0].array_name_ == "B");
+  EXPECT_TRUE(res[1].array_name_ == "A");
+  EXPECT_TRUE(res[2].array_name_ == "A");
+  EXPECT_TRUE(res[3].array_name_ == "A");
+  EXPECT_TRUE(res[1].affine_access_[0].inc_type_ == Increment_type::MINUS);
+}
+
+TEST(Parser, testTwentySeven) {
+  
+  using namespace Parser;
+  std::string S = "B(i) = A(i-4) + A(i-(0)) + A(i+4)";
+  auto res = parse(S);
+  std::cout << res << std::endl;
+  EXPECT_TRUE(res.size() == 0);
+}
+
+TEST(Parser, testTwentyEigth) {
+
+  using namespace Parser;
+  std::string S = "B(2*i + 4)";
+  auto res = parse(S);
+  std::cout << res << std::endl;
+  EXPECT_TRUE(res.size() == 1);
+  EXPECT_TRUE(res[0].affine_access_[0].coefficient_ == 2);
+  EXPECT_TRUE(res[0].affine_access_[0].increment_ == 4);
+}
+
+TEST(Parser, testTwentyNine) {
+
+  using namespace Parser;
+  std::string S = "B(4 + 2*i)";
+  auto res = parse(S);
+  std::cout << res << std::endl;
+  EXPECT_TRUE(res.size() == 1);
+  EXPECT_TRUE(res[0].affine_access_[0].coefficient_ == 2);
+  EXPECT_TRUE(res[0].affine_access_[0].increment_ == 4);
+}
+
+TEST(Parser, testThirty) {
+
+  using namespace Parser;
+  std::string S = "V(4 + -2*i)";
+  auto res = parse(S);
+  std::cout << res << std::endl;
+  EXPECT_TRUE(res.size() == 0);
+}
+
+TEST(Parser, testThirtyOne) {
+
+  using namespace Parser;
+  std::string S = "B(4 + 8 + 2*i)";
+  auto res = parse(S);
+  std::cout << res << std::endl;
+  EXPECT_TRUE(res.size() == 1);
+  EXPECT_TRUE(res[0].affine_access_[0].coefficient_ == 2);
+  EXPECT_TRUE(res[0].affine_access_[0].increment_ == 12);
+}
+
+TEST(Parser, testThirtyTwo) {
+  
+  using namespace Parser;
+  std::string S = "B(4 -20 + 3*i)";
+  auto res = parse(S);
+  std::cout << res << std::endl;
+  EXPECT_TRUE(res.size() == 1);
+  EXPECT_TRUE(res[0].affine_access_[0].coefficient_ == 3);
+  EXPECT_TRUE(res[0].affine_access_[0].increment_ == -16);
+}
+
+TEST(Parser, testThirtyThree) {
+
+  using namespace Parser;
+  std::string S = "B(4 + 6)";
   auto res = parse(S);
   std::cout << res << std::endl;
   EXPECT_TRUE(res.size() == 0);

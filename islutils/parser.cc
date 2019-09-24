@@ -151,9 +151,9 @@ void Lexer::print_token() {
 
 namespace Parser {
 AffineAccess::AffineAccess(const std::string &induction_name, int inc,
-                           Increment_type inc_type)
+                           Increment_type inc_type, int coeff)
     : induction_var_name_(induction_name), increment_(inc),
-      inc_type_(inc_type){}
+      inc_type_(inc_type), coefficient_(coeff){}
 }
 
 
@@ -182,12 +182,18 @@ std::tuple<int, Parser::Increment_type> Parser::get_coeff_after_induction() {
       throw Error::Error(
         "bad syntax while parsing coefficients");
     if ((curr_tok == Token_value::PLUS) || (curr_tok == Token_value::MINUS)) {
+
+      bool is_plus = (curr_tok == Token_value::PLUS) ? 1 : 0;
       while ((curr_tok = get_token()) == Token_value::SPACE) {};
       if (curr_tok != Token_value::NUMBER) 
         throw Error::Error(
           "bad syntax: induction must be followed only by numbers");
-      else
-        offset += std::stoi(string_value);
+      else {
+        if (is_plus)
+          offset += std::stoi(string_value);
+        else 
+          offset -= std::stoi(string_value);
+      }
     }
     else {
       if (curr_tok != Token_value::SPACE)
@@ -203,7 +209,7 @@ std::tuple<int, Parser::Increment_type> Parser::get_coeff_after_induction() {
     return std::make_tuple(offset, Increment_type::MINUS);
 }
 
-std::tuple<std::string, int, Parser::Increment_type> 
+std::tuple<std::string, int, Parser::Increment_type, int> 
 Parser::get_coeff_before_and_after_induction() {
 
   #ifdef DEBUG
@@ -212,7 +218,9 @@ Parser::get_coeff_before_and_after_induction() {
   #endif
   
   assert(curr_tok == Token_value::NUMBER && "Expect number");
-  int val_coeff = std::stoi(string_value); 
+  int val_inc = std::stoi(string_value); 
+  int val_coeff = val_inc;
+  bool is_valid_coeff = false;
 
   std::string array_name{};
 
@@ -222,10 +230,36 @@ Parser::get_coeff_before_and_after_induction() {
     if (curr_tok == Token_value::END || curr_tok == Token_value::RP)
       throw Error::Error(
         "bad syntax while parsing coefficients");
-    if (curr_tok == Token_value::PLUS) {
+
+    if (curr_tok == Token_value::MUL) {
       while ((curr_tok = get_token()) == Token_value::SPACE) {};  
       if (curr_tok == Token_value::NAME) {
-        last_token = Token_value::PLUS;
+        array_name = string_value;
+        is_valid_coeff = true;
+        // remove added element to val_inc  
+        if (last_token == Token_value::PLUS) {
+          val_inc -= val_coeff;
+        }
+        if (last_token == Token_value::MINUS) {
+          val_inc += val_coeff;
+        }
+        if (last_token != Token_value::MINUS &&
+            last_token != Token_value::PLUS) {
+          val_inc = 0;
+        }
+        last_token = Token_value::MUL;
+        break;
+      }
+      else {
+        throw Error::Error(
+          "bad syntax: expect * to be followed by an array name");
+      }
+    }
+    if (curr_tok == Token_value::PLUS) {
+      last_token = Token_value::PLUS;
+      while ((curr_tok = get_token()) == Token_value::SPACE) {};  
+      if (curr_tok == Token_value::NAME) {
+        //last_token = Token_value::PLUS;
         array_name = string_value;
         break;
       }
@@ -234,26 +268,34 @@ Parser::get_coeff_before_and_after_induction() {
         throw Error::Error(
           "bad syntax: plus operator should be followed by a number");
       }
-      else val_coeff += std::stoi(string_value);
+      else {
+        val_inc += std::stoi(string_value);
+        val_coeff = std::stoi(string_value);
+      }
     }
     if (curr_tok == Token_value::MINUS) {
+      last_token = Token_value::MINUS;
       while ((curr_tok = get_token()) == Token_value::SPACE) {};
       if (curr_tok == Token_value::NAME) {
-        last_token = Token_value::MINUS;
+        //last_token = Token_value::MINUS;
         array_name = string_value;
         break;
       }
       if (curr_tok != Token_value::NUMBER)
         throw Error::Error(
           "bad syntax: minus operator should be followed by a number");
-      else val_coeff -= std::stoi(string_value);
+      else {
+        val_inc -= std::stoi(string_value);
+        val_coeff = std::stoi(string_value);
+      }
     }
     get_token();
   }
 
   // the induction variable should be preceded by a number.
   if ((last_token != Token_value::PLUS) && 
-      (last_token != Token_value::MINUS)) {
+      (last_token != Token_value::MINUS) &&
+      (last_token != Token_value::MUL)) {
     print_token();
     throw Error::Error(
       "bad syntax expect +/- before induction name");
@@ -263,14 +305,17 @@ Parser::get_coeff_before_and_after_induction() {
   res = get_coeff_after_induction();
   
   if (std::get<1>(res) == Parser::Increment_type::PLUS)
-    val_coeff += std::get<0>(res);
+    val_inc += std::get<0>(res);
   else 
-    val_coeff -= std::get<0>(res);
+    val_inc -= std::get<0>(res);
 
-  if (val_coeff > 0)
-    return std::make_tuple(array_name, val_coeff, Increment_type::PLUS);
+  if (!is_valid_coeff)
+    val_coeff = 1;
+
+  if (val_inc > 0)
+    return std::make_tuple(array_name, val_inc, Increment_type::PLUS, val_coeff);
   else 
-    return std::make_tuple(array_name, val_coeff, Increment_type::MINUS);
+    return std::make_tuple(array_name, val_inc, Increment_type::MINUS, val_coeff);
 }
 
 /// get inductions.
@@ -311,21 +356,22 @@ void Parser::get_inductions(bool first_call, std::vector<Parser::AffineAccess> &
     } catch (Error::Error e) { throw; }
 
     a.push_back(
-      AffineAccess{array_name, std::get<0>(res_coeff), std::get<1>(res_coeff)});
+      AffineAccess{array_name, std::get<0>(res_coeff), std::get<1>(res_coeff), 1});
   }
 
-  // handle (8 + 9 + i + 9  + 8)
+  // handle (8 + 9 + i + 9  + 8) and (8 + 9 + 2*i + 9 + 8)
   if (curr_tok == Token_value::NUMBER) {
     
-    std::tuple<std::string, int, Increment_type> 
-      res_coeff{"null", 0, Parser::Increment_type::PLUS};
+    std::tuple<std::string, int, Increment_type, int> 
+      res_coeff{"null", 0, Parser::Increment_type::PLUS, 1};
     try {
       res_coeff = get_coeff_before_and_after_induction();
     } catch (Error::Error e) { throw; }
 
     a.push_back(
       AffineAccess{std::get<0>(res_coeff), 
-                    std::get<1>(res_coeff), std::get<2>(res_coeff)});
+                   std::get<1>(res_coeff), std::get<2>(res_coeff),
+                   std::get<3>(res_coeff)});
   }
 
   if ((curr_tok != Token_value::NAME) && (curr_tok != Token_value::LP) &&

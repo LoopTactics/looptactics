@@ -38,8 +38,9 @@ namespace Parser {
       std::string induction_var_name_;
       int increment_;
       Increment_type inc_type_ = Increment_type::PLUS;
+      int coefficient_;
       AffineAccess() = delete;
-      AffineAccess(const std::string &, int, Increment_type);
+      AffineAccess(const std::string &, int, Increment_type, int);
   };
 
   enum class Type { READ, WRITE, READ_AND_WRITE, INIT_REDUCTION};
@@ -53,7 +54,8 @@ namespace Parser {
   void expr(bool get);
   void get_inductions(bool first_call, std::vector<AffineAccess> &a);
   std::tuple<int, Increment_type> get_coeff_after_induction();
-  std::tuple<std::string, int, Increment_type> get_coeff_before_and_after_induction();
+  std::tuple<std::string, int, Increment_type, int> 
+    get_coeff_before_and_after_induction();
   void reset(); 
   AccessDescriptor get_access_descriptor();
   std::vector<AccessDescriptor> parse(const std::string &string_to_be_parsed);
