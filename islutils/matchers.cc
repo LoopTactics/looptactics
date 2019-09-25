@@ -13,7 +13,8 @@ bool ScheduleNodeMatcher::isMatching(const ScheduleNodeMatcher &matcher,
   }
 
   if (matcher.current_ == ScheduleNodeType::AnyTree) {
-    matcher.capture_ = node;
+    if (matcher.needToCapture_)
+      matcher.capture_ = node;
     return true;
   }
 
