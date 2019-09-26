@@ -48,7 +48,7 @@ namespace Parser {
     public:
       Type type_ = Type::READ;
       std::string array_name_;
-      std::vector<AffineAccess> affine_access_;
+      std::vector<AffineAccess> affine_accesses_;
   };
 
   void expr(bool get);
