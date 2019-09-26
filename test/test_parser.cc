@@ -6,7 +6,7 @@ std::ostream &operator<<(std::ostream &os,
   std::cout << "{\n";
   for (const auto& sa : a) {
     std::cout << sa.array_name_ << std::endl;
-    for (const auto &ac : sa.affine_access_) {
+    for (const auto &ac : sa.affine_accesses_) {
       std::cout << "induction var : " << ac.induction_var_name_ << "\n";
       std::cout << "increment : " << ac.increment_ << "\n";
       std::cout << "coefficient : " << ac.coefficient_ << "\n";
@@ -247,7 +247,7 @@ TEST(Parser, testTwentyFive) {
   EXPECT_TRUE(res[1].array_name_ == "A");
   EXPECT_TRUE(res[2].array_name_ == "A");
   EXPECT_TRUE(res[3].array_name_ == "A");
-  EXPECT_TRUE(res[1].affine_access_[0].inc_type_ == Increment_type::MINUS);
+  EXPECT_TRUE(res[1].affine_accesses_[0].inc_type_ == Increment_type::MINUS);
 }
 
 TEST(Parser, testTwentySix) {
@@ -261,7 +261,7 @@ TEST(Parser, testTwentySix) {
   EXPECT_TRUE(res[1].array_name_ == "A");
   EXPECT_TRUE(res[2].array_name_ == "A");
   EXPECT_TRUE(res[3].array_name_ == "A");
-  EXPECT_TRUE(res[1].affine_access_[0].inc_type_ == Increment_type::MINUS);
+  EXPECT_TRUE(res[1].affine_accesses_[0].inc_type_ == Increment_type::MINUS);
 }
 
 TEST(Parser, testTwentySeven) {
@@ -280,8 +280,8 @@ TEST(Parser, testTwentyEigth) {
   auto res = parse(S);
   std::cout << res << std::endl;
   EXPECT_TRUE(res.size() == 1);
-  EXPECT_TRUE(res[0].affine_access_[0].coefficient_ == 2);
-  EXPECT_TRUE(res[0].affine_access_[0].increment_ == 4);
+  EXPECT_TRUE(res[0].affine_accesses_[0].coefficient_ == 2);
+  EXPECT_TRUE(res[0].affine_accesses_[0].increment_ == 4);
 }
 
 TEST(Parser, testTwentyNine) {
@@ -291,8 +291,8 @@ TEST(Parser, testTwentyNine) {
   auto res = parse(S);
   std::cout << res << std::endl;
   EXPECT_TRUE(res.size() == 1);
-  EXPECT_TRUE(res[0].affine_access_[0].coefficient_ == 2);
-  EXPECT_TRUE(res[0].affine_access_[0].increment_ == 4);
+  EXPECT_TRUE(res[0].affine_accesses_[0].coefficient_ == 2);
+  EXPECT_TRUE(res[0].affine_accesses_[0].increment_ == 4);
 }
 
 TEST(Parser, testThirty) {
@@ -311,8 +311,8 @@ TEST(Parser, testThirtyOne) {
   auto res = parse(S);
   std::cout << res << std::endl;
   EXPECT_TRUE(res.size() == 1);
-  EXPECT_TRUE(res[0].affine_access_[0].coefficient_ == 2);
-  EXPECT_TRUE(res[0].affine_access_[0].increment_ == 12);
+  EXPECT_TRUE(res[0].affine_accesses_[0].coefficient_ == 2);
+  EXPECT_TRUE(res[0].affine_accesses_[0].increment_ == 12);
 }
 
 TEST(Parser, testThirtyTwo) {
@@ -322,8 +322,8 @@ TEST(Parser, testThirtyTwo) {
   auto res = parse(S);
   std::cout << res << std::endl;
   EXPECT_TRUE(res.size() == 1);
-  EXPECT_TRUE(res[0].affine_access_[0].coefficient_ == 3);
-  EXPECT_TRUE(res[0].affine_access_[0].increment_ == -16);
+  EXPECT_TRUE(res[0].affine_accesses_[0].coefficient_ == 3);
+  EXPECT_TRUE(res[0].affine_accesses_[0].increment_ == -16);
 }
 
 TEST(Parser, testThirtyThree) {

@@ -26,7 +26,7 @@ Lexer::Token_value Lexer::get_token() {
   char ch;
   Driver::ss.get(ch);
 
-#ifdef DEBUG
+#if defined(DEBUG) && defined(LEVEL_THREE)
   std::cout << "get_token -> ch = " << ch << "\n";
 #endif
 
@@ -164,7 +164,7 @@ AffineAccess::AffineAccess(const std::string &induction_name, int inc,
 /// (i + j + 2) is rejected
 std::tuple<int, Parser::Increment_type> Parser::get_coeff_after_induction() {
 
-  #ifdef DEBUG
+  #if defined(DEBUG) && defined(LEVEL_THREE)
     std::cout << __func__ << std::endl;
     print_token();
   #endif
@@ -212,7 +212,7 @@ std::tuple<int, Parser::Increment_type> Parser::get_coeff_after_induction() {
 std::tuple<std::string, int, Parser::Increment_type, int> 
 Parser::get_coeff_before_and_after_induction() {
 
-  #ifdef DEBUG
+  #if defined(DEBUG) && defined(LEVEL_THREE)
     std::cout << __func__ << std::endl;
     print_token();
   #endif
@@ -327,7 +327,7 @@ void Parser::get_inductions(bool first_call, std::vector<Parser::AffineAccess> &
 
   get_token();
 
-#ifdef DEBUG
+#if defined(DEBUG) && defined(LEVEL_THREE)
   std::cout << __func__ << std::endl;
   print_token();
 #endif
@@ -391,7 +391,7 @@ Parser::AccessDescriptor Parser::get_access_descriptor() {
 
   AccessDescriptor res{};
   res.array_name_ = std::move(string_value);
-  get_inductions(true, res.affine_access_);
+  get_inductions(true, res.affine_accesses_);
   return res;
 }
 
@@ -401,7 +401,7 @@ Parser::AccessDescriptor Parser::get_access_descriptor() {
 /// Name not followed by an LP token are rejected.
 void Parser::expr(bool get) {
 
-#ifdef DEBUG
+#if defined(DEBUG) && defined(LEVEL_THREE)
   print_token();
 #endif
 
@@ -410,7 +410,7 @@ void Parser::expr(bool get) {
 
   switch (curr_tok) {
   case Lexer::Token_value::NAME: {
-#ifdef DEBUG
+#if defined(DEBUG) && defined(LEVEL_THREE)
     std::cout << "Lexer::Token_value::NAME\n";
 #endif
     while ((curr_tok = get_token()) == Token_value::SPACE) {
@@ -422,7 +422,7 @@ void Parser::expr(bool get) {
     return;
   }
   case Lexer::Token_value::ASSIGN: {
-#ifdef DEBUG
+#if defined(DEBUG) && defined(LEVEL_THREE)
     std::cout << "Lexer::Token_value::ASSIGN\n";
 #endif
     if (descriptors.size() != 1)
@@ -432,7 +432,7 @@ void Parser::expr(bool get) {
     return;
   }
   case Lexer::Token_value::ASSIGNMENT_BY_ADDITION: {
-#ifdef DEBUG
+#if defined(DEBUG) && defined(LEVEL_THREE)
     std::cout << "Lexer::Token_value::ASSIGNMENT_BY_ADDITION\n";
 #endif
     if (descriptors.size() != 1)
@@ -443,7 +443,7 @@ void Parser::expr(bool get) {
     return;
   }
   case Lexer::Token_value::INIT_REDUCTION: {
-#ifdef DEBUG
+#if defined(DEBUG) && defined(LEVEL_THREE)
     std::cout << "Lexer::Token_value::INIT_REDUCTION\n";
 #endif
     if (descriptors.size() != 1)
@@ -454,7 +454,7 @@ void Parser::expr(bool get) {
     return;
   }
   case Lexer::Token_value::SPACE: {
-#ifdef DEBUG
+#if defined(DEBUG) && defined(LEVEL_THREE)
     std::cout << "Lexer::Token_value::SPACE\n";
 #endif
     return expr(true);
@@ -475,7 +475,7 @@ void Parser::reset() {
 std::vector<Parser::AccessDescriptor>
 Parser::parse(const std::string &string_to_be_parsed) {
 
-#ifdef DEBUG
+#if defined(DEBUG) && defined(LEVEL_THREE)
   std::cout << string_to_be_parsed << "\n";
 #endif
 
@@ -494,7 +494,7 @@ Parser::parse(const std::string &string_to_be_parsed) {
   while (ss) {
     try {
       Lexer::get_token();
-#ifdef DEBUG
+#if defined(DEBUG) && defined(LEVEL_THREE)
       std::cout << "Token parse function: ";
       print_token();
 #endif
@@ -502,13 +502,15 @@ Parser::parse(const std::string &string_to_be_parsed) {
         break;
       Parser::expr(false);
     } catch (Error::Error e) {
+#if defined(DEBUG) && defined(LEVEL_THREE)
       std::cout << "syntax error: " << e.message_ << std::endl;
+#endif
       descriptors.erase(descriptors.begin(), descriptors.end());
       ss.clear();
       return descriptors;
     }
   }
-#ifdef DEBUG
+#if defined(DEBUG) && defined(LEVEL_THREE)
   std::cout << __func__ << "\n";
   std::cout << "# returned descr from parser: " << descriptors.size() << "\n";
 #endif

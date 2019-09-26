@@ -321,7 +321,7 @@ static std::set<std::string> extract_inductions(std::vector<Parser::AccessDescri
 
   std::set<std::string> result{};
   for (size_t i = 0; i < accesses.size(); i++) {
-    std::vector<Parser::AffineAccess> tmp = accesses[i].affine_access_;
+    std::vector<Parser::AffineAccess> tmp = accesses[i].affine_accesses_;
     for (auto it = tmp.begin(); it != tmp.end(); it++) {
       result.insert((*it).induction_var_name_);
     }
@@ -546,13 +546,13 @@ std::vector<Parser::AccessDescriptor> descr_accesses, isl::union_map accesses) {
   // build the accesses.
   for (size_t i = 0; i < descr_accesses.size(); i++) {
 
-    size_t dims = descr_accesses[i].affine_access_.size();
+    size_t dims = descr_accesses[i].affine_accesses_.size();
   
     switch (dims) {
       case 1 : {
         size_t index_in_array_placeholder = 
           find_index_in_arrays(descr_accesses[i].array_name_);
-        auto it = descr_accesses[i].affine_access_.begin();
+        auto it = descr_accesses[i].affine_accesses_.begin();
         size_t index_in_placeholder_dim_zero = 
           find_index_in_placeholders((*it).induction_var_name_);
 
@@ -565,7 +565,7 @@ std::vector<Parser::AccessDescriptor> descr_accesses, isl::union_map accesses) {
       case 2: {
         size_t index_in_array_placeholder = 
           find_index_in_arrays(descr_accesses[i].array_name_);
-        auto it = descr_accesses[i].affine_access_.begin();
+        auto it = descr_accesses[i].affine_accesses_.begin();
         size_t index_in_placeholder_dim_zero =
           find_index_in_placeholders((*it).induction_var_name_);
         it++;
