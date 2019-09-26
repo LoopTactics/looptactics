@@ -14,6 +14,21 @@ if (VERBOSE)
   add_definitions("-DDEBUG")
 endif (VERBOSE)
 
+set(VERBOSE_LEVEL OFF CACHE STRING "debug level")
+set_property(CACHE VERBOSE_LEVEL PROPERTY STRINGS OFF 1 2 3)
+
+if (VERBOSE_LEVEL STREQUAL "1")
+  add_definitions("-DLEVEL_ONE")
+endif (VERBOSE_LEVEL STREQUAL "1")
+
+if (VERBOSE_LEVEL STREQUAL "2")
+  add_definitions("-DLEVEL_TWO")
+endif (VERBOSE_LEVEL STREQUAL "2")
+
+if (VERBOSE_LEVEL STREQUAL "3")
+  add_definitions("-DLEVEL_THREE")
+endif (VERBOSE_LEVEL STREQUAL "3")
+
 # Qt libraries
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
@@ -28,6 +43,10 @@ message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
+# Boost
+# https://stackoverflow.com/questions/9723793/undefined-reference-to-boostsystemsystem-category-when-compiling
+add_definitions(-DBOOST_ERROR_CODE_HEADER_ONLY)
+
 # prevent error 
 # "You must build your code with position independent code if Qt was built with..
 # https://github.com/tora-tool/tora/blob/master/CMakeLists.txt
@@ -37,8 +56,8 @@ endif()
 
 
 # Boost
-#find_package(Boost COMPONENTS program_options REQUIRED)
-#include_directories(${Boost_INCLUDE_DIRS})
+find_package(Boost COMPONENTS program_options filesystem system REQUIRED)
+include_directories(${Boost_INCLUDE_DIRS})
 
 # Isl for haystack, modified to work also with matchers/builders.
 ExternalProject_Add(isl-haystack
@@ -73,7 +92,7 @@ ExternalProject_Add(barvinok
     BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/build-barvinok
     INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/install-barvinok
     UPDATE_COMMAND ./autogen.sh
-    CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --enable-shared-barvinok 
+    CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --enable-shared-barvinok #--with-isl-prefix=${CMAKE_CURRENT_SOURCE_DIR}/external/install-isl-haystack --with-isl=system 
     BUILD_COMMAND make -j4
     EXCLUDE_FROM_ALL 1
 )
@@ -124,6 +143,7 @@ target_link_libraries(islutils ${isl-haystack_LIB})
 target_link_libraries(islutils ${pet_LIB})
 target_link_libraries(islutils ${barvinok_LIB})
 target_link_libraries(islutils ${llvm_libs})
+target_link_libraries(islutils ${Boost_LIBRARIES})
 
 add_executable(main 
   main.cc
