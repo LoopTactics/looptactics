@@ -40,6 +40,8 @@ isl_schedule_node_type toIslType(ScheduleNodeType type) {
     return isl_schedule_node_sequence;
   case ScheduleNodeType::Set:
     return isl_schedule_node_set;
+  case ScheduleNodeType::Loop:
+    return isl_schedule_node_band;
   default:
     assert(false && "cannot convert the given node type");
     return isl_schedule_node_leaf;
@@ -233,6 +235,27 @@ inline ScheduleNodeMatcher anyTree() {
   static isl::schedule_node dummyCapture;
   ScheduleNodeMatcher matcher(dummyCapture);
   matcher.current_ = ScheduleNodeType::AnyTree;
+  return matcher;
+}
+
+inline ScheduleNodeMatcher loop(std::function<bool(isl::schedule_node)> f,
+  ScheduleNodeMatcher && child) {
+
+  if ((child.current_ != ScheduleNodeType::Loop) &&
+      (child.current_ != ScheduleNodeType::AnyTree))
+    assert(0 && "loop expects only AnyTree or Loop as child!");
+  static isl::schedule_node dummyCapture;
+  ScheduleNodeMatcher matcher(dummyCapture);
+  matcher.current_ = ScheduleNodeType::Loop;
+  matcher.children_.emplace_back(child);
+  matcher.capture_ = dummyCapture;
+  matcher.nodeCallback_ = f;
+  return matcher;
+}
+
+inline ScheduleNodeMatcher loop(std::function<bool(isl::schedule_node)> f) {
+
+  auto matcher = loop(f, std::move(anyTree()));
   return matcher;
 }
 

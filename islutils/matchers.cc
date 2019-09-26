@@ -6,6 +6,16 @@ namespace matchers {
 thread_local std::vector<isl::schedule_node>
     ScheduleNodeMatcher::dummyMultiCaptureData_;
 
+void ScheduleNodeMatcher::setLabel(std::string l) {
+  
+  label_ = l;
+}
+
+std::string ScheduleNodeMatcher::getLabel() const {
+  
+  return label_;
+}
+
 bool ScheduleNodeMatcher::isMatching(const ScheduleNodeMatcher &matcher,
                                      isl::schedule_node node) {
   if (!node.get()) {

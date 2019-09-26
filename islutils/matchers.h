@@ -105,6 +105,17 @@ template <typename Arg, typename... Args,
 ScheduleNodeMatcher set(std::function<bool(isl::schedule_node)> callback,
                         Arg arg, Args... args);
 
+/// Create a matcher of type loop.
+///
+/// A matcher of type loop is just a syntactic sugar as it behaves as a "standard" band node. 
+/// But it accepts particular types of nodes only. Specifically, it allows other loop matcher 
+/// and anyLoop only.
+///
+/// @param callback: Boolean callback function for fine-grain matching.
+/// @param child: Child matcher.
+ScheduleNodeMatcher loop(std::function<bool(isl::schedule_node)> callback,
+                         ScheduleNodeMatcher &&child);
+
 /// Create a matcher of type band.
 ///
 /// @param capture: It will contain the captured node.
@@ -117,13 +128,13 @@ ScheduleNodeMatcher band(isl::schedule_node &capture,
 ScheduleNodeMatcher band(ScheduleNodeMatcher &&child);
 /// Create a matcher of type band.
 ///
-/// @param callback: Boolean callback function for finer-grain matching.
+/// @param callback: Boolean callback function for fine-grain matching.
 /// @param child: Child matcher.
 ScheduleNodeMatcher band(std::function<bool(isl::schedule_node)> callback,
                          ScheduleNodeMatcher &&child);
 /// Create a matcher of type band.
 ///
-/// @param callback: Boolean callback function for finer-grain matching.
+/// @param callback: Boolean callback function for fine-grain matching.
 /// @param capture: It will contain the captured node.
 /// @param child: Child matcher.
 ScheduleNodeMatcher band(std::function<bool(isl::schedule_node)> callback,
@@ -141,7 +152,7 @@ ScheduleNodeMatcher context(isl::schedule_node &capture,
 ScheduleNodeMatcher context(ScheduleNodeMatcher &&child);
 /// Create a context matcher.
 ///
-/// @param callback: Boolean callback function for finer-grain matching.
+/// @param callback: Boolean callback function for fine-grain matching.
 /// @param child: Child matcher
 ScheduleNodeMatcher context(std::function<bool(isl::schedule_node)> callback,
                             ScheduleNodeMatcher &&child);
@@ -157,13 +168,13 @@ ScheduleNodeMatcher domain(isl::schedule_node &capture,
 ScheduleNodeMatcher domain(ScheduleNodeMatcher &&child);
 /// Create a domain matcher.
 ///
-/// @param callback: Boolean callback funtion for finer-grain matching.
+/// @param callback: Boolean callback funtion for fine-grain matching.
 /// @param child: Child matcher.
 ScheduleNodeMatcher domain(std::function<bool(isl::schedule_node)> callback,
                            ScheduleNodeMatcher &&child);
 /// Create a domain mathcer.
 ///
-/// @param callback: Boolean callback function for finer-grain matching.
+/// @param callback: Boolean callback function for fine-grain matching.
 /// @param capture: It will contain the captured node.
 /// @param child: Child matcher.
 ScheduleNodeMatcher domain(std::function<bool(isl::schedule_node)> callback,
@@ -181,13 +192,13 @@ ScheduleNodeMatcher extension(isl::schedule_node &capture,
 ScheduleNodeMatcher extension(ScheduleNodeMatcher &&child);
 /// Create an extension matcher.
 ///
-/// @param callback: Boolean callback function for finer-grain matching.
+/// @param callback: Boolean callback function for fine-grain matching.
 /// @param child: Child matcher.
 ScheduleNodeMatcher extension(std::function<bool(isl::schedule_node)> callback,
                               ScheduleNodeMatcher &&child);
 /// Create an extension matcher.
 ///
-/// @param callback: Boolean callback function for finer-grain matching.
+/// @param callback: Boolean callback function for fine-grain matching.
 /// @param capture: It will contain the captured node.
 /// @param child: Child matcher.
 ScheduleNodeMatcher extension(std::function<bool(isl::schedule_node)> callback,
@@ -205,13 +216,13 @@ ScheduleNodeMatcher filter(isl::schedule_node &capture,
 ScheduleNodeMatcher filter(ScheduleNodeMatcher &&child);
 /// Create a filter matcher.
 ///
-/// @param callback: Boolean callback funtion for finer-grain matching.
+/// @param callback: Boolean callback funtion for fine-grain matching.
 /// @param child: Child matcher.
 ScheduleNodeMatcher filter(std::function<bool(isl::schedule_node)> callback,
                            ScheduleNodeMatcher &&child);
 /// Create a filter matcher.
 ///
-/// @param callback: Boolean callback function for finer-grain matching.
+/// @param callback: Boolean callback function for fine-grain matching.
 /// @param capture: It will contain the captured node.
 /// @param child: Child matcher
 ScheduleNodeMatcher filter(std::function<bool(isl::schedule_node)> callback,
@@ -229,13 +240,13 @@ ScheduleNodeMatcher guard(isl::schedule_node &capture,
 ScheduleNodeMatcher guard(ScheduleNodeMatcher &&child);
 /// Create a guard matcher.
 ///
-/// @param callback: Boolean callback function for finer-grain matching.
+/// @param callback: Boolean callback function for fine-grain matching.
 /// @param child: Child matcher.
 ScheduleNodeMatcher guard(std::function<bool(isl::schedule_node)> callback,
                           ScheduleNodeMatcher &&child);
 /// Create a guard matcher.
 ///
-/// @param callback: Boolean callback function for finer-grain matching.
+/// @param callback: Boolean callback function for fine-grain matching.
 /// @param capture: It will contain the captured node.
 /// @param child: Child matcher.
 ScheduleNodeMatcher guard(std::function<bool(isl::schedule_node)> callback,
@@ -253,13 +264,13 @@ ScheduleNodeMatcher mark(isl::schedule_node &capture,
 ScheduleNodeMatcher mark(ScheduleNodeMatcher &&child);
 /// Create a mark matcher.
 ///
-/// @param callback: Callback function for finer-grain matching.
+/// @param callback: Callback function for fine-grain matching.
 /// @param child: Child matcher.
 ScheduleNodeMatcher mark(std::function<bool(isl::schedule_node)> callback,
                          ScheduleNodeMatcher &&child);
 /// Create a mark matcher.
 ///
-/// @param callback: Callback function for finer-grain matching.
+/// @param callback: Callback function for fine-grain matching.
 /// @param capture: It will contain the captured node.
 /// @param child: Child matcher.
 ScheduleNodeMatcher mark(std::function<bool(isl::schedule_node)> callback,
@@ -277,13 +288,13 @@ ScheduleNodeMatcher expansion(isl::schedule_node &capture,
 ScheduleNodeMatcher expansion(ScheduleNodeMatcher &&child);
 /// Create an expansion matcher.
 ///
-/// @param callback: Callback function for finer-grain matching.
+/// @param callback: Callback function for fine-grain matching.
 /// @param child: Child matcher.
 ScheduleNodeMatcher expansion(std::function<bool(isl::schedule_node)> callback,
                               ScheduleNodeMatcher &&child);
 /// Create an expansion matcher.
 ///
-/// @param callback: Callback function for finer-grain matching.
+/// @param callback: Callback function for fine-grain matching.
 /// @param capture: It will contain the captured node.
 /// @param child: Child matcher
 ScheduleNodeMatcher expansion(std::function<bool(isl::schedule_node)> callback,
@@ -339,6 +350,7 @@ enum class ScheduleNodeType {
   AnyTree,
   AnyForest,
   FilterForest,
+  Loop,
 };
 
 inline isl_schedule_node_type toIslType(ScheduleNodeType type);
@@ -398,6 +410,9 @@ class ScheduleNodeMatcher {
   friend ScheduleNodeMatcher anyForest(std::vector<isl::schedule_node> &);
   friend ScheduleNodeMatcher filterForest();
   friend ScheduleNodeMatcher filterForest(std::vector<isl::schedule_node> &);
+  friend ScheduleNodeMatcher loop(std::function<bool(isl::schedule_node)>f,
+                                  ScheduleNodeMatcher &&child);
+  friend ScheduleNodeMatcher loop(std::function<bool(isl::schedule_node)> f);
 
 private:
   explicit ScheduleNodeMatcher(isl::schedule_node &capture)
@@ -409,6 +424,8 @@ private:
 public:
   static bool isMatching(const ScheduleNodeMatcher &matcher,
                          isl::schedule_node node);
+  void setLabel(std::string l);
+  std::string getLabel() const;
 
 private:
   ScheduleNodeType current_;
@@ -418,6 +435,7 @@ private:
   std::function<bool(isl::schedule_node)> nodeCallback_;
   isl::schedule_node &capture_;
   std::vector<isl::schedule_node> &multiCapture_;
+  std::string label_ = "null";
 
   static thread_local std::vector<isl::schedule_node> dummyMultiCaptureData_;
 };
