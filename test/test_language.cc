@@ -5,6 +5,7 @@
 #include "islutils/builders.h"
 #include "islutils/gsl/gsl_assert"
 #include "islutils/parser.h"
+#include <islutils/access_patterns.h>
 
 #include <boost/filesystem.hpp>
 #include <stack>
@@ -14,19 +15,35 @@ using util::ScopedCtx;
 
 namespace lang {
 
-/// Global scop class which contains
-/// information for matcher callbacks.
-class GlobalScop {
-  public:
-  isl::union_map reads_;
-  isl::union_map writes_;
+
+using Placeholder = 
+  matchers::Placeholder<matchers::SingleInputDim, 
+    matchers::UnfixedOutDimPattern<matchers::SimpleAff>>;
+using Access = 
+  matchers::ArrayPlaceholderList<matchers::SingleInputDim, 
+    matchers::FixedOutDimPattern<matchers::SimpleAff>>;
+
+/// helper containers.
+struct PlaceholderSet {
+  Placeholder p_;
+  std::string id_;
 };
+struct ArrayPlaceholderSet {
+  matchers::ArrayPlaceholder p_;
+  std::string id_;
+};
+struct MatchingResult {
+  bool isValid_ = false;
+  std::vector<std::pair<std::string, int>> boundedInduction_;
+}; 
 
-GlobalScop *S;
+/// global pointer. It is clutter and will be removed.
+/// It is used to pass reads and writes information
+/// to matcher callbacks such as "hasPattern"
+std::unique_ptr<std::string> pointer;
 
-
-#ifdef DEBUG
-void dump(const std::vector<Parser::AccessDescriptor> & ads) {
+#if defined(DEBUG) && defined(LEVEL_ONE)
+void dump(const std::vector<Parser::AccessDescriptor> &ads) {
 
   using namespace Parser;
   for (const auto &ad : ads) {
@@ -34,13 +51,33 @@ void dump(const std::vector<Parser::AccessDescriptor> & ads) {
     if (ad.type_ == Type::READ)
       std::cout << "Read access" << std::endl;
     else std::cout << "Write access" << std::endl;
-    for (const auto &af : ad.affine_access_) {
+    for (const auto &af : ad.affine_accesses_) {
       std::cout << "Induction name: " << af.induction_var_name_ << std::endl;
       std::cout << "Increment: " << af.increment_ << std::endl;
       std::cout << "Coefficient: " << af.coefficient_ << std::endl;
     }
   }
 }
+
+void dump(const std::set<std::string> &elems) {
+
+  for (const auto &elem : elems) {
+    std::cout << "Element: " << elem << std::endl;
+  }
+}
+
+void dump(const MatchingResult &res) {
+
+  std::cout << "is valid: " << res.isValid_ << std::endl;
+  for (const auto &r: res.boundedInduction_) {
+    std::cout << " { ";
+    std::cout << "induction : " << std::get<0>(r) << std::endl;
+    std::cout << "schedule dim assigned : " << std::get<1>(r) << std::endl;
+    std::cout << " } \n";
+  }
+}
+  
+
 #endif
 
 /// Count how many times the matcher @m
@@ -139,25 +176,232 @@ static bool hasDepthMoreThanOrEqualToImpl(isl::schedule_node node, const int dep
   return countDepth(node) > depth || countDepth(node) == depth;
 }
 
+/// Extract induction variables from the arrays obtained from the parser.
+/// i.e., C(i, j) += A(i, k) * B(k, j) will return i, j and k
+static std::set<std::string> extractInductions(
+  const std::vector<Parser::AccessDescriptor> &accesses) {
+
+  Expects(!accesses.size() == 0);
+  
+  std::set<std::string> results{};
+  for (const auto &access : accesses) {
+    for (const auto &affineExpr : access.affine_accesses_) {
+      results.insert(affineExpr.induction_var_name_);
+    }
+  }
+
+  #if defined(DEBUG) && defined(LEVEL_ONE)
+    dump(results);
+  #endif
+
+  return results;
+}
+
+/// Extract array name from the arrays obtained from parser.
+/// i.e., C(i, j) += A(i, k) * B(k, j) will return A, B and C
+static std::set<std::string> extractArrayNames(
+  const std::vector<Parser::AccessDescriptor> &accesses) {
+
+  Expects(!accesses.size() == 0);
+
+  std::set<std::string> results{};  
+  for (const auto &access : accesses) {
+    results.insert(access.array_name_);
+  }
+
+  #if defined(DEBUG) && defined(LEVEL_ONE)
+    dump(results);
+  #endif
+
+  return results;
+}
+
+/// Helper function to build the access matcher.
+static std::vector<Access> buildAccessMatchers(const std::vector<PlaceholderSet> &ps,
+  const std::vector<ArrayPlaceholderSet> &aps, const std::vector<Parser::AccessDescriptor> &ds) {
+
+  Expects(!ds.size() == 0);
+
+  using namespace matchers;
+  auto findIndexInArrayPlaceholderSet = [&aps](const std::string id) {
+    for (size_t i = 0; i < aps.size(); i++)
+      if (aps[i].id_.compare(id) == 0)
+        return i;
+    Expects(0);
+  };
+
+  auto findIndexInPlaceholderSet = [&ps](const std::string id) {
+    for (size_t i = 0; i < ps.size(); i++)
+      if (ps[i].id_.compare(id) == 0)  
+        return i;
+    Expects(0);
+  };
+
+  std::vector<Access> accessList;
+
+  for (size_t i = 0; i < ds.size(); i++) {
+    size_t dims = ds[i].affine_accesses_.size();
+
+    switch (dims) {
+      case 1: {
+        size_t indexInArrayPlaceholder =
+          findIndexInArrayPlaceholderSet(ds[i].array_name_);
+        size_t indexInPlaceholder =
+          findIndexInPlaceholderSet(ds[i].affine_accesses_[0].induction_var_name_);
+          accessList.push_back(access(
+            aps[indexInArrayPlaceholder].p_, 
+            ds[i].affine_accesses_[0].coefficient_ 
+            * ps[indexInPlaceholder].p_ + ds[i].affine_accesses_[0].increment_));
+      break;
+      }
+    default :
+      Expects(0);
+    }
+  }
+
+  return std::move(accessList);
+}
+
+/// Helper function to split read access descriptors  
+/// from write access descriptors.
+static std::vector<Parser::AccessDescriptor> getReadAccessDescriptors(
+  const std::vector<Parser::AccessDescriptor> &ds) {
+
+  using namespace Parser;
+  std::vector<AccessDescriptor> res{};  
+  for (auto d : ds) {
+    Expects(d.type_ == Type::READ || d.type_ == Type::WRITE ||
+            d.type_ == Type::READ_AND_WRITE);
+    if (d.type_ == Type::READ || d.type_ == Type::READ_AND_WRITE)
+      res.push_back(d);
+  }
+  return std::move(res);
+}
+
+/// Helper function to split read access descriptors  
+/// from write access descriptors.
+static std::vector<Parser::AccessDescriptor> getWriteAccessDescriptors(
+  const std::vector<Parser::AccessDescriptor> &ds) {
+
+  using namespace Parser;
+  std::vector<AccessDescriptor> res{};  
+  for (auto d : ds) {
+    Expects(d.type_ == Type::READ || d.type_ == Type::WRITE ||
+            d.type_ == Type::READ_AND_WRITE);
+    if (d.type_ == Type::WRITE || d.type_ == Type::READ_AND_WRITE)
+      res.push_back(d);
+  }
+  return std::move(res);
+}
+
+/// Helper function for matching the access patterns.
+static MatchingResult match(isl::ctx ctx, isl::union_map accesses, 
+  const std::vector<Parser::AccessDescriptor> &ds) {
+
+  Expects(!ds.size() == 0);
+
+  auto res = MatchingResult{};
+
+  using namespace matchers;
+
+  std::vector<PlaceholderSet> vectorPlaceholderSet{}; 
+  std::vector<ArrayPlaceholderSet> vectorArrayPlaceholderSet{};
+  std::vector<Access> accessSet{};
+  std::set<std::string> inductionSet = extractInductions(ds);
+  std::set<std::string> arrayNameSet = extractArrayNames(ds);
+
+  for (auto const &arrayName : arrayNameSet) {
+    ArrayPlaceholderSet tmp = {arrayPlaceholder(), arrayName};
+    vectorArrayPlaceholderSet.push_back(std::move(tmp));
+  }
+  for (auto const &induction : inductionSet) {
+    PlaceholderSet tmp = {placeholder(ctx), induction};
+    vectorPlaceholderSet.push_back(std::move(tmp));
+  }
+
+  accessSet = buildAccessMatchers(vectorPlaceholderSet,
+    vectorArrayPlaceholderSet, ds); 
+
+  size_t nMaps = accesses.n_map();
+  if (accessSet.size() != nMaps) {
+    res.isValid_ = false;
+    return res;
+  }
+
+  auto matches = match(accesses, allOf(accessSet));
+  // we always expect 1 match.
+  if (matches.size() == 1) {
+    res.isValid_ = true;
+    for (auto const &ps : vectorPlaceholderSet) {
+      if (!matches[0][ps.p_].candidateSpaces().empty())
+        res.boundedInduction_.push_back(
+          std::make_pair(ps.id_, matches[0][ps.p_].payload().inputDimPos_));
+      else res.isValid_ = false;
+    }
+  }
+  else {
+    res.isValid_ = false;
+  }
+  return res;
+}
+
+/// Helper function for implementation of hasPattern.
+static bool hasPatternImplHelper(isl::ctx ctx, 
+  isl::union_map reads, isl::union_map writes, const std::vector<Parser::AccessDescriptor> &ds) {
+
+  Expects(!reads.is_empty());
+  Expects(!writes.is_empty());
+  Expects(!ds.size() == 0);
+
+  auto resultMatchingReads = match(ctx, reads, getReadAccessDescriptors(ds));
+  #if defined(DEBUG) && defined(LEVEL_ONE)
+    dump(resultMatchingReads);
+  #endif
+
+  auto resultMatchingWrites = match(ctx, writes, getWriteAccessDescriptors(ds));
+  #if defined(DEBUG) && defined(LEVEL_ONE)
+    dump(resultMatchingWrites);
+  #endif
+  
+  return resultMatchingReads.isValid_;
+}
+
 /// Implementation of hasPattern.
 static bool hasPatternImpl(isl::schedule_node node, const std::string &s) {
 
   if (node.get_type() != isl_schedule_node_band)
     return false;
-  if (!node.has_children())
-    return false;
-  auto mayBeLeaf = node.child(0);
-  if (mayBeLeaf.get_type() != isl_schedule_node_leaf)
-    return false;
-  auto schedule = mayBeLeaf.get_prefix_schedule_union_map();
-  auto filteredReads = S->reads_.apply_domain(schedule);
-  auto filteredWrites = S->writes_.apply_domain(schedule);
-  auto accessDescr = Parser::parse(s);
 
-  #ifdef DEBUG
-    dump(accessDescr);
+  // A band node always have a child (may be a leaf), and the prefix
+  // schedule of the child includes the partial schedule of the node.
+  auto prefixSchedule = node.child(0).get_prefix_schedule_union_map();
+  // this is clutter. 
+  auto petScop = pet::Scop::parseFile(node.get_ctx(), *pointer);
+  // end clutter
+  auto scheduledReads = petScop.reads().apply_domain(prefixSchedule); 
+  auto scheduledWrites = petScop.writes().apply_domain(prefixSchedule);
+
+  if (scheduledReads.is_empty() || scheduledWrites.is_empty())
+    return false;
+
+  std::vector<Parser::AccessDescriptor> accessDescrs{};
+  try {
+    accessDescrs = Parser::parse(s);
+  } catch(...) {
+    std::cerr << "Error while parsing: " << s << std::endl;
+    std::cout << "parser error!\n";
+    return false;
+  }
+
+  if (accessDescrs.size() == 0)
+    return false;
+
+  #if defined(DEBUG) && defined(LEVEL_ONE)
+    dump(accessDescrs);
   #endif
-  return false; 
+ 
+  return hasPatternImplHelper(node.get_ctx(), 
+    scheduledReads, scheduledWrites, accessDescrs);
 }
 
 /// check if the loop has depth @depth
@@ -227,9 +471,9 @@ static bool checkIfValid(const std::string &p) {
 static isl::schedule_node wrapOnMatch(
   isl::schedule_node node, const matchers::ScheduleNodeMatcher &m) {
 
-  if (matchers::ScheduleNodeMatcher::isMatching(m, node)) 
+  if (matchers::ScheduleNodeMatcher::isMatching(m, node)) {
     node = node.insert_mark(isl::id::alloc(node.get_ctx(), m.getLabel(), nullptr));
-
+  }
   return node;
 }
 
@@ -247,9 +491,9 @@ static isl::schedule_node match(
   if (node.get_type() == isl_schedule_node_mark)
     return node;
 
-  for (int i = 0; i < node.n_children(); i++)
+  for (int i = 0; i < node.n_children(); ++i) {
     node = match(m, node.child(i)).parent();
-
+  }
   return node;       
 }
 
@@ -324,7 +568,7 @@ TEST(language, testTwo) {
   auto m = loop(hasDepth(3));
   m.setLabel("__test__");
   auto res = evaluate(m, "inputs/nested.c");
-  #ifdef DEBUG
+  #if defined(DEBUG) && defined(LEVEL_ONE)
     std::cout << res << std::endl;
   #endif
   EXPECT_TRUE(res.find(m.getLabel()) != std::string::npos);
@@ -338,7 +582,7 @@ TEST(language, testThree) {
   auto m = loop(hasDepth(3), loop(hasDepth(2)));
   m.setLabel("__test__");
   auto res = evaluate(m, "inputs/nested.c");
-  #ifdef DEBUG
+  #if defined(DEBUG) && defined(LEVEL_ONE)
     std::cout << res << std::endl;
   #endif
   EXPECT_TRUE(res.find(m.getLabel()) != std::string::npos);
@@ -352,7 +596,7 @@ TEST(language, testFour) {
   auto m = loop(hasDepth(10), loop(hasDepth(2)));
   m.setLabel("__test__");
   auto res = evaluate(m, "inputs/nested.c");
-  #ifdef DEBUG
+  #if defined(DEBUG) && defined(LEVEL_ONE)
     std::cout << res << std::endl;
   #endif
   EXPECT_TRUE(res.find(m.getLabel()) == std::string::npos);
@@ -366,7 +610,7 @@ TEST(language, testFive) {
   auto m = loop(hasDepthLessThan(4));
   m.setLabel("__test__");
   auto res = evaluate(m, "inputs/nested.c");
-  #ifdef DEBUG
+  #if defined(DEBUG) && defined(LEVEL_ONE)
     std::cout << res << std::endl;
   #endif
   EXPECT_TRUE(res.find(m.getLabel()) != std::string::npos);
@@ -380,7 +624,7 @@ TEST(language, testSix) {
   auto m = loop(hasDepthMoreThan(2));
   m.setLabel("__test__");
   auto res = evaluate(m, "inputs/nested.c");
-  #ifdef DEBUG
+  #if defined(DEBUG) && defined(LEVEL_ONE)
     std::cout << res << std::endl;
   #endif
   EXPECT_TRUE(res.find(m.getLabel()) != std::string::npos);
@@ -390,24 +634,18 @@ TEST(language, testSeven) {
  
   using namespace lang;
   using namespace matchers;
-  // this is clutter and will be removed.
-  // Ideally, the only function exposed to the user
-  // will be "evaluate". The clutter is needed to give reads and
-  // writes infos to "hasPattern" callback.
-  auto ctx = ScopedCtx(pet::allocCtx());
-  auto petScop = pet::Scop::parseFile(ctx, "inputs/stencilMix.c");
-  auto r = petScop.reads(); 
-  auto w = petScop.reads();
-  auto Gb = GlobalScop();
-  S = &Gb;
-  S->reads_ = r;
-  S->writes_ = w;
-  // end clutter.
 
-  auto m = loop(hasPattern("B(i) = A(i-1) + A(i) + A(i+1)"));
+  auto m = [&]() {
+    using namespace matchers;
+    return band(hasPattern("B(i) = A(i-1) + A(i) + A(i+1)"), anyTree());
+  }();
   m.setLabel("__test__");
+
+  // this is clutter. Will be removed.
+  pointer = std::unique_ptr<std::string>(new std::string("inputs/stencilMix.c"));
+
   auto res = evaluate(m, "inputs/stencilMix.c");
-  #ifdef DEBUG
+  #if defined(DEBUG) && defined(LEVEL_ONE)
     std::cout << res << std::endl;
   #endif 
 }

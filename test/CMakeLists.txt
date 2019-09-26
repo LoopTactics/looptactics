@@ -8,7 +8,8 @@ set(TEST_NAMES
     access
     parser
     stencils 
-    haystack 
+    haystack
+    language 
     synthesis)
 
 set(TEST_INPUTS
