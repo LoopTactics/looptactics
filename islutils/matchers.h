@@ -497,7 +497,7 @@ std::function<bool(isl::schedule_node)> _or(Args... args) {
   return [vec](isl::schedule_node node) {
     std::function<bool(isl::schedule_node)> tmp = vec[0];
     bool result = tmp(node);
-    for (size_t i = 1; vec.size(); i++) {
+    for (size_t i = 1; i < vec.size(); i++) {
       tmp = vec[i];
       result = result or tmp(node);
     }
