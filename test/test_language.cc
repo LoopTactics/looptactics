@@ -15,6 +15,35 @@ using util::ScopedCtx;
 
 namespace lang {
 
+/** \defgroup Matchers Language
+ * \brief User-provided matchers language.
+ *  
+ *  The user can use the language to describe a given loop nest. For example,
+ *  ```
+ *  auto matcher =
+ *    loop(_and(hasDepth(3),
+ *              hasDescendant(loop(hasPattern(C(i,j) += A(i,k) * B(k,j)))));
+ *  ```
+ *  matches a triple nested loop with a gemm-like pattern.
+ *  At the moment we provide the following functions:
+ *  1. hasDepth(int depth) check if the loop has depth @depth. [s]
+ *  2. hasDepthLessThan(int depth) check if the loop has depth less than @depth. [s]
+ *  3. hasDepthLessThanOrEqualTo(int depth) check if the loop has depth less than or equal to @depth. [s]
+ *  4. hasDepthMoreThan(int depth) check if the loop has depth more than @depth. [s]
+ *  5. hasDepthMoreThanOrEqualTo(int depth) check if the loop has depth more than or equal to @depth. [s]
+ *  6. hasPattern(std::string p) check if the loop has the pattern @p among its statements. [a]
+ *  7. hasOnlyPattern(std::string p) check if the loop has only one statement with pattern @p. [a]
+ *  8. hasDescendant(loop l) check if the loop has loop @l as descendant. [m]
+ *  9. hasNumberOfStmtEqualTo(int n) check if the loop has @n stmts. [s]
+ *  [s] structural property.
+ *  [a] access property.
+ *  [m] miscellaneous property.
+ *
+ *  The functions can be composed via _and and _or
+ */
+
+/** \ingroup Matchers */
+
 
 using Placeholder = 
   matchers::Placeholder<matchers::SingleInputDim, 
@@ -32,7 +61,6 @@ struct ArrayPlaceholderSet {
   matchers::ArrayPlaceholder p_;
   std::string id_;
 };
-
 struct MatchResult {
   std::vector<std::pair<std::string, int>> boundedInduction_;
 };
@@ -584,6 +612,16 @@ static bool hasAccessesImpl(isl::schedule_node node, const std::string &s, const
     scheduledReads, scheduledWrites, accessDescrs, d, prefixSchedule);
 }
 
+/// Helper function for hasNumberOfStmtEqualTo.
+static bool hasNumberOfStmtEqualToImpl(isl::schedule_node node, int n) {
+
+  if (node.get_type() != isl_schedule_node_band)
+    return false;
+
+  int stmts = node.child(0).get_prefix_schedule_union_map().n_map();
+  return stmts == n;
+}
+
 /// check if the loop has depth @depth.
 std::function<bool(isl::schedule_node)> hasDepth(const int depth) {
 
@@ -592,7 +630,7 @@ std::function<bool(isl::schedule_node)> hasDepth(const int depth) {
   };
 }
 
-/// check if the the loop has depth less than @depth.
+/// check if the loop has depth less than @depth.
 std::function<bool(isl::schedule_node)> hasDepthLessThan(const int depth) {
 
   return [depth](isl::schedule_node node) {
@@ -611,7 +649,7 @@ std::function<bool(isl::schedule_node)> hasDepthLessThanOrEqualTo(const int dept
 /// check if the loop has depth more than @depth.
 std::function<bool(isl::schedule_node)> hasDepthMoreThan(const int depth) {
 
-  return[depth](isl::schedule_node node) {
+  return [depth](isl::schedule_node node) {
     return hasDepthMoreThanImpl(node, depth);
   };
 }
@@ -619,7 +657,7 @@ std::function<bool(isl::schedule_node)> hasDepthMoreThan(const int depth) {
 /// check if the loop has depth more or equal than @depth.
 std::function<bool(isl::schedule_node)> hasDepthMoreThanOrEqualTo(const int depth) {
 
-  return[depth](isl::schedule_node node) {
+  return [depth](isl::schedule_node node) {
     return hasDepthMoreThanOrEqualToImpl(node, depth);
   };
 }
@@ -627,15 +665,15 @@ std::function<bool(isl::schedule_node)> hasDepthMoreThanOrEqualTo(const int dept
 /// check if the loop has access pattern @s.
 std::function<bool(isl::schedule_node)> hasOnlyPattern(const std::string &s) {
 
-  return[s](isl::schedule_node node) {
+  return [s](isl::schedule_node node) {
     return hasOnlyPatternImpl(node, s);
   };
 }
 
-/// check if the loop has multple access patterns @s.
+/// check if the loop has multiple access patterns @s.
 std::function<bool(isl::schedule_node)> hasPattern(const std::string &s) {
 
-  return[s](isl::schedule_node node) {
+  return [s](isl::schedule_node node) {
     return hasOnlyPatternImpl(node, s, true);
   };
 }
@@ -645,8 +683,16 @@ std::function<bool(isl::schedule_node)> hasPattern(const std::string &s) {
 /// he/she wants to have the accesses described by @s? 
 std::function<bool(isl::schedule_node)> hasAccesses(const std::string &s, const ScheduleDim &d) {
 
-  return[s, d](isl::schedule_node node) {
+  return [s, d](isl::schedule_node node) {
     return hasAccessesImpl(node, s, d);
+  };
+}
+
+/// Check if the loop has @n stmts.
+std::function<bool(isl::schedule_node)> hasNumberOfStmtEqualTo(int n) {
+
+  return [n](isl::schedule_node node) {
+    return hasNumberOfStmtEqualToImpl(node, n);
   };
 }
 
@@ -1001,7 +1047,7 @@ TEST(language, testFourteen) {
   EXPECT_TRUE(checkCodeAnnotation(res, 0, "__test__"));
 }
 
-/// alwyas true.
+/// always true.
 std::function<bool(isl::schedule_node)> alwaysTrue() {
 
   return[](isl::schedule_node node) {
@@ -1138,7 +1184,6 @@ TEST(language, testNineteen) {
   EXPECT_TRUE(checkCodeAnnotation(res, 0, "__test__"));
 }
 
-
 TEST(language, testTwenty) {
 
   using namespace matchers;
@@ -1177,9 +1222,28 @@ TEST(language, testTwenty) {
   readMatches = match(reads, psRead);
   EXPECT_TRUE(readMatches.size() == 1);
 }
-  
 
-/*
+TEST(language, testTwentyOne) {
+
+  using namespace lang;
+
+  auto m = [&]() {
+    using namespace matchers;
+    return loop(hasNumberOfStmtEqualTo(2));
+  }();
+  m.setLabel("__test__"); 
+
+  pointer =
+    std::unique_ptr<std::string>(new std::string("inputs/bicg.c"));
+
+  auto res = evaluate(m, "inputs/bicg.c");
+  #if defined(DEBUG) && defined(LEVEL_ONE)
+    std::cout << res << std::endl;
+  #endif
+  EXPECT_TRUE(checkCodeAnnotation(res, 1, "__test__"));
+}
+
+/*  
 TEST(language, testTwenty) {
 
   using namespace lang;
