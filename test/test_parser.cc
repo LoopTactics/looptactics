@@ -3,9 +3,16 @@
 
 std::ostream &operator<<(std::ostream &os,
                          const std::vector<Parser::AccessDescriptor> &a) {
+  using namespace Parser;
   std::cout << "{\n";
   for (const auto& sa : a) {
     std::cout << sa.array_name_ << std::endl;
+    if (sa.type_ == Type::READ)
+      std::cout << "READ\n";
+    if (sa.type_ == Type::WRITE)
+      std::cout << "WRITE\n";
+    if (sa.type_ == Type::READ_AND_WRITE)
+      std::cout << "READ & WRITE\n";
     for (const auto &ac : sa.affine_accesses_) {
       std::cout << "induction var : " << ac.induction_var_name_ << "\n";
       std::cout << "increment : " << ac.increment_ << "\n";
@@ -333,4 +340,42 @@ TEST(Parser, testThirtyThree) {
   auto res = parse(S);
   std::cout << res << std::endl;
   EXPECT_TRUE(res.size() == 0);
+}
+
+// FIXME: the parse must handle
+// also this type of expression A_1
+TEST(Parser, testThirtyFour) {
+
+  using namespace Parser;
+  std::string S = "x_1(i) = A(i,j) * y_1(j)";
+  auto res = parse(S);
+  std::cout << res << std::endl;
+  EXPECT_TRUE(res.size() == 0);
+}
+
+TEST(Parser, testThirtyFive) {
+
+  using namespace Parser;
+  std::string S = "x(i) = A(i,j) * y(j)";
+  auto res = parse(S);
+  std::cout << res << std::endl;
+  EXPECT_TRUE(res.size() == 3);
+}
+
+TEST(Parser, testThirtySix) {
+
+  using namespace Parser;
+  std::string S = "x(i) = x(i) + A(i,j) * y(j)";
+  auto res = parse(S);
+  std::cout << res << std::endl;
+  EXPECT_TRUE(res.size() == 4);
+}
+
+TEST(Parser, testThirtySeven) {
+
+  using namespace Parser;
+  std::string S = "A(i-1) + A(i) + A(i+1)";
+  auto res = parse(S);
+  std::cout << res << std::endl;
+  EXPECT_TRUE(res.size() == 3);
 }
