@@ -24,7 +24,7 @@ namespace lang {
  *    loop(_and(hasDepth(3),
  *              hasDescendant(loop(hasPattern(C(i,j) += A(i,k) * B(k,j)))));
  *  ```
- *  matches a triple nested loop with a gemm-like pattern.
+ *  matches a loop with depth three that has a descendant loop with a GEMM-like pattern.
  *  At the moment we provide the following functions:
  *  1. hasDepth(int depth) check if the loop has depth @depth. [s]
  *  2. hasDepthLessThan(int depth) check if the loop has depth less than @depth. [s]
