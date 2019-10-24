@@ -23,6 +23,7 @@ struct CacheParameters {
   std::vector<int> cacheSizes{32 * 1024, 512 * 1024};
 };
 
+/*
 static CacheParameters getCacheParameters(const llvm::TargetTransformInfo &TTI) {
 
   CacheParameters res{};
@@ -55,7 +56,7 @@ TEST(haystack, TTI) {
   auto cacheParam = getCacheParameters(TTI);
   EXPECT_TRUE(cacheParam.lineSize != 0);
 }
-
+*/
 
 TEST(haystack, runCacheModel) {
 
