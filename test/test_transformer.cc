@@ -1942,13 +1942,14 @@ TEST(Transformer, InjectStatement) {
   auto code = petScop.codegen();
   EXPECT_TRUE(code.find("someLongAndHopefullyUniqueName") != std::string::npos);
 }
-
+/*
 static isl::multi_union_pw_aff getSchedulePointTile(isl::schedule_node node,
                                                     isl::multi_union_pw_aff t) {
   isl::multi_union_pw_aff sched = node.band_get_partial_schedule();
   return sched.sub(t);
 }
-
+*/
+/*
 static isl::multi_union_pw_aff getScheduleTile(isl::schedule_node node,
                                                std::vector<int> tileSizes) {
   assert(tileSizes.size() != 0 && "empty tileSizes array");
@@ -1974,7 +1975,7 @@ static isl::multi_union_pw_aff getScheduleTile(isl::schedule_node node,
   }
   return sched;
 }
-
+*/
 /*
 static isl::multi_union_pw_aff swapDims(isl::multi_union_pw_aff ps,
                                         int firstDim, int secondDim) {
@@ -2646,14 +2647,6 @@ isl::schedule_node simplifyTree(isl::schedule_node root) {
 
   return root.root();
 }
-
-static isl::multi_union_pw_aff getSchedulePointTile(isl::schedule_node node,
-                                              std::vector<int> &s) {
-
-  auto tile_schedule = getScheduleTile(node, s);
-  auto sched = node.band_get_partial_schedule();
-  return sched.sub(tile_schedule);
-}
 /*
 TEST(Transformer, fusion) {
 
@@ -2703,3 +2696,54 @@ TEST(Transformer, fusion) {
   std::cout << pet_scop.codegen() << "\n";
 }
 */
+
+bool isParallel(isl::union_map schedule, isl::union_map deps) {
+
+  deps = deps.apply_range(schedule);
+  deps = deps.apply_domain(schedule);
+  
+  if (deps.is_empty()) {
+    return true;
+  }
+  
+  isl::map scheduleDeps = isl::map::from_union_map(deps);
+  size_t dim = scheduleDeps.dim(isl::dim::out) - 1;
+
+  for (size_t i = 0; i < dim; i++)
+    scheduleDeps = scheduleDeps.equate(isl::dim::out, i, isl::dim::in, i);
+
+  isl::set deltas = scheduleDeps.deltas();
+  isl::set distance = isl::set::universe(deltas.get_space());
+  
+  for (size_t i = 0; i < dim; i++)
+    distance = distance.fix_si(isl::dim::set, i , 0);
+  
+  distance = distance.lower_bound_si(isl::dim::set, 0, dim);
+  distance = distance.intersect(deltas);
+
+  return distance.is_empty(); 
+}
+
+TEST(Transformer, parallel) {
+
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto petScop =
+    pet::Scop::parseFile(ctx, "inputs/parallel.c");
+  isl::union_map deps = petScop.compute_all_deps();
+  
+  isl::schedule_node root = petScop.getScop().schedule.get_root();
+  isl::union_map schedule = root.child(0).child(0).get_prefix_schedule_union_map();
+  EXPECT_TRUE(isParallel(schedule, deps)); 
+}
+
+TEST(Transformer, nonparallel) {
+
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto petScop =
+    pet::Scop::parseFile(ctx, "inputs/non_parallel.c");
+  isl::union_map deps = petScop.compute_all_deps();
+
+  isl::schedule_node root = petScop.getScop().schedule.get_root();
+  isl::union_map schedule = root.child(0).child(0).get_prefix_schedule_union_map();
+  EXPECT_FALSE(isParallel(schedule, deps));
+}
