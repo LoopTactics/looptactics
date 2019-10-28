@@ -15,6 +15,7 @@ using util::ScopedCtx;
 
 namespace lang {
 
+// OLD API version.
 /** \defgroup Matchers Language
  * \brief User-provided matchers language.
  *  
@@ -44,6 +45,8 @@ namespace lang {
 
 /** \ingroup Matchers */
 
+// NEW API version.
+
 
 using Placeholder = 
   matchers::Placeholder<matchers::SingleInputDim, 
@@ -63,6 +66,18 @@ struct ArrayPlaceholderSet {
 };
 struct MatchResult {
   std::vector<std::pair<std::string, int>> boundedInduction_;
+};
+
+
+class CandidateStmts {
+  public:
+    std::vector<std::string> matches_;
+}candidateStmts;
+
+class MatchedStmts {
+  public:
+    std::vector<std::string> matches_;
+    std::vector<std::string> noMatches_;
 };
 
 enum class ScheduleDim { allDim, anyDim, oneDim }; 
@@ -104,6 +119,19 @@ void dump(const MatchResult &res) {
     std::cout << "schedule dim assigned : " << std::get<1>(r) << std::endl;
     std::cout << " } \n";
   }
+}
+
+void dump(const MatchedStmts &m) {
+  
+  std::cout << "Matched { ";
+  for (const auto &s : m.matches_)
+    std::cout << s << " ";
+  std::cout << " } ";
+
+  std::cout << "Not Matched { ";
+  for (const auto &s : m.noMatches_)
+    std::cout << s << " ";
+  std::cout << " } \n";
 }
 
 #endif
@@ -159,8 +187,8 @@ static bool hasDepthImpl(isl::schedule_node node, const int depth) {
 
   if (node.get_type() != isl_schedule_node_band)
     return false;
-  if (node.band_n_member() != 1)
-    return false;
+  // Expect band node to be single dimensional.
+  Expects(node.band_n_member() == 1);
   return countDepth(node) == depth;
 }
 
@@ -169,8 +197,7 @@ static bool hasDepthLessThanImpl(isl::schedule_node node, const int depth) {
 
   if (node.get_type() != isl_schedule_node_band)
     return false;
-  if (node.band_n_member() != 1)
-    return false;
+  Expects(node.band_n_member() == 1);
   return countDepth(node) < depth;
 }
 
@@ -179,8 +206,7 @@ static bool hasDepthLessThanOrEqualToImpl(isl::schedule_node node, const int dep
 
   if (node.get_type() != isl_schedule_node_band)  
     return false;
-  if (node.band_n_member() != 1)
-    return false;
+  Expects(node.band_n_member() == 1);
   return countDepth(node) < depth || countDepth(node) == depth;
 }
 
@@ -189,8 +215,7 @@ static bool hasDepthMoreThanImpl(isl::schedule_node node, const int depth) {
 
   if (node.get_type() != isl_schedule_node_band)  
     return false;
-  if (node.band_n_member() != 1)
-    return false;
+  Expects(node.band_n_member() == 1);
   return countDepth(node) > depth;
 }
 
@@ -199,8 +224,7 @@ static bool hasDepthMoreThanOrEqualToImpl(isl::schedule_node node, const int dep
 
   if (node.get_type() != isl_schedule_node_band)  
     return false;
-  if (node.band_n_member() != 1)
-    return false;
+  Expects(node.band_n_member() == 1);
   return countDepth(node) > depth || countDepth(node) == depth;
 }
 
@@ -383,15 +407,6 @@ bool checkAssignmentInduction(const MatchResult &matchesReads,
   return true;
 }
 
-/// Helper function to check if the matches are valid. Specifically,
-/// we make sure that the schedule dimension bounded to a given induction
-/// is the same for the writes and reads. We need this check because
-/// placeholder are _not_ reused between different calls to allOf.
-//template <typename CandidatePayload, typename PatternPayload>
-//static bool checkMatches(std::vector<matchers::Match<CandidatePayload, PatternPayload>> matches,
-//  bool allowMultiple = false) {  
-//}
-
 /// Helper function for matching the access patterns.
 static MatchResult match(isl::ctx ctx, isl::union_map accesses, 
   const std::vector<Parser::AccessDescriptor> &ds) {
@@ -553,65 +568,6 @@ static bool hasOnlyPatternImpl(isl::schedule_node node, const std::string &s,
   return res;
 }
 
-/// Helper function for implementation of hasAccessImpl.
-static bool hasAccessesImplHelper(isl::ctx ctx,
-  isl::union_map reads, isl::union_map writes, const std::vector<Parser::AccessDescriptor> &ds,
-  const ScheduleDim &d, isl::union_map schedule) {
-
-  Expects(!ds.size() == 0);
-  Expects(!schedule.is_null());
-
-  if (reads.is_empty() && writes.is_empty())
-    return false;
-
-  if (schedule.n_map() != 1)
-    return false;
-  
-  return false;
-} 
-
-/// Implementation of hasAccesses.
-/// TODO: At the moment I prefer to keep functions separated as it is easier to debug
-/// and remove stuff if it happens to be not necessary. I am planning to move all the lang
-/// namespace in the matchers domain as soon as the interface will be stable. This means that
-/// hasAccessesImpl will most likely merge with hasOnlyPatternImpl.
-static bool hasAccessesImpl(isl::schedule_node node, const std::string &s, const ScheduleDim &d) {
-
-  if (node.get_type() != isl_schedule_node_band)
-    return false;
-
-  // A band node always have a child (may be a leaf), and the prefix
-  // schedule of the child includes the partial schedule of the node.
-  auto prefixSchedule = node.child(0).get_prefix_schedule_union_map();
-  // this is clutter. 
-  auto petScop = pet::Scop::parseFile(node.get_ctx(), *pointer);
-  // end clutter
-  auto scheduledReads = petScop.reads().apply_domain(prefixSchedule); 
-  auto scheduledWrites = petScop.writes().apply_domain(prefixSchedule);
-
-  if (scheduledReads.is_empty() || scheduledWrites.is_empty())
-    return false;
-
-  std::vector<Parser::AccessDescriptor> accessDescrs{};
-  try {
-    accessDescrs = Parser::parse(s);
-  } catch(...) {
-    std::cerr << "Error while parsing: " << s << std::endl;
-    std::cout << "parser error!\n";
-    return false;
-  }
-
-  if (accessDescrs.size() == 0)
-    return false;
-
-  #if defined(DEBUG) && defined(LEVEL_ONE)
-    //dump(accessDescrs);
-  #endif
- 
-  return hasAccessesImplHelper(node.get_ctx(), 
-    scheduledReads, scheduledWrites, accessDescrs, d, prefixSchedule);
-}
-
 /// Helper function for hasNumberOfStmtEqualTo.
 static bool hasNumberOfStmtEqualToImpl(isl::schedule_node node, int n) {
 
@@ -630,6 +586,154 @@ std::function<bool(isl::schedule_node)> hasDepth(const int depth) {
   };
 }
 
+/// wildcard for hasStmt. Accept every possible statement. 
+std::function<bool(isl::schedule_node)> anything() {
+
+  return [](isl::schedule_node node) {
+    // hasStmt pass leaf to callbacks. 
+    Expects(node.get_type() == isl_schedule_node_leaf);
+    return true;
+  };
+}
+
+/// given a prefix schedule of a leaf node returns the statement 
+/// name if any.
+static std::string getStatementName(isl::union_map prefixSchedule) {
+
+  Expects(prefixSchedule.n_map() == 1);
+
+  std::string res{};
+  isl::set domainPrefixSchedule =
+    isl::map::from_union_map(prefixSchedule).domain();
+
+  if (domainPrefixSchedule.has_tuple_name())
+    res = domainPrefixSchedule.get_tuple_name();
+
+  return res;
+}
+
+/// Implementation for hasStmt.
+/// This function restricts the matcher on band node that have:
+/// 1) only a leaf node as child. We assume each leaf node is a statement. 
+///    We run the callback f on the leaf.
+/// 2) a sequence node followed by filter(s). We only look at filter nodes with
+///    a leaf as a child. We run the callback on the leaf. 
+static bool hasStmtImpl(isl::schedule_node node, std::function<bool(isl::schedule_node)> f) {
+
+  if (node.get_type() != isl_schedule_node_band)
+    return false;
+
+  // we expect all the band nodes to be 
+  // single dimension.
+  Expects(node.band_n_member() == 1);
+
+  if (!node.n_children())
+    return false;
+  
+  isl::schedule_node maybeLeafOrSequence = node.first_child();
+  if (maybeLeafOrSequence.get_type() != isl_schedule_node_leaf &&
+      maybeLeafOrSequence.get_type() != isl_schedule_node_sequence)
+    return false;
+
+  // single statement.
+  if (maybeLeafOrSequence.get_type() == isl_schedule_node_leaf) {
+    isl::schedule_node leaf = maybeLeafOrSequence;
+    bool hasMatched = f(leaf);
+    std::string stmtName = getStatementName(leaf.get_prefix_schedule_union_map());
+    Expects(!stmtName.empty());
+    if (hasMatched) 
+      candidateStmts.matches_.push_back(stmtName); 
+    return /*hasMatched;*/ true;
+  }
+
+  // multiple statements.
+  isl::schedule_node sequence = maybeLeafOrSequence;
+  size_t children = sequence.n_children();
+  for (size_t i = 0; i < children; i++) {
+    isl::schedule_node maybeLeaf = sequence.child(i).child(0);
+    if (maybeLeaf.get_type() != isl_schedule_node_leaf)
+      continue;
+    isl::schedule_node leaf = maybeLeaf;
+    bool hasMatched = f(leaf);
+    std::string stmtName = getStatementName(leaf.get_prefix_schedule_union_map());
+    Expects(!stmtName.empty());
+    if (hasMatched)
+      candidateStmts.matches_.push_back(stmtName);
+  }
+  return /*hasAtLeastOneMatch;*/ true;
+}
+
+/// hasStmt make sure that the band node is followed by a leaf.
+/// The assumption is that only leaf node contains statements.
+std::function<bool(isl::schedule_node)> hasStmt(std::function<bool(isl::schedule_node)> f) {
+
+  return [f](isl::schedule_node node) {
+    return hasStmtImpl(node, f);
+  };
+}
+
+/// Implementation for hasDimensionality.
+static bool hasDimensionalityImpl(isl::schedule_node node, size_t dim) {
+
+  if (node.get_type() != isl_schedule_node_band)
+    return false;
+    
+  Expects(node.band_n_member() == 1);
+
+  if (!node.n_children())
+    return false;
+
+  isl::union_map prefixSchedule =
+    node.child(0).get_prefix_schedule_union_map();
+
+  std::vector<isl::map> prefixScheduleAsMap{};  
+  prefixSchedule.foreach_map([&prefixScheduleAsMap](isl::map m) {
+    prefixScheduleAsMap.push_back(m);
+    return isl_stat_ok;
+  });
+
+  size_t dimensionality = 0;
+  for (const auto m : prefixScheduleAsMap) {
+    if (m.dim(isl::dim::out) > dimensionality)
+      dimensionality = m.dim(isl::dim::out);
+  }
+  return dimensionality == dim;
+}
+
+/// hasDimensionality checks the loop dimensionality.
+std::function<bool(isl::schedule_node)> hasDimensionality(int dim) {
+
+  return [dim](isl::schedule_node node) {
+    return hasDimensionalityImpl(node, dim);  
+  };
+}
+
+static bool hasAccessImpl(isl::schedule_node node, std::function<bool(isl::schedule_node)> f) {
+
+  // as we are looking at the access pattern properties
+  // we accept only leaf node.
+  Expects(node.get_type() == isl_schedule_node_leaf);
+  // clutter
+  auto scop = pet::Scop::parseFile(node.get_ctx(), *pointer).getScop();
+  auto reads = scop.reads.curry();
+  auto writes = scop.mustWrites.curry();
+  std::cout << node.get_prefix_schedule_union_map().to_str() << "\n";
+  std::cout << reads.apply_domain(node.get_prefix_schedule_union_map()).to_str() << "\n";
+  std::cout << writes.apply_domain(node.get_prefix_schedule_union_map()).to_str() << "\n"; 
+  return f(node);
+}
+
+/// hasAccess allows composition of access patterns properties.
+/// The composition is obtained by combaining callbacks via _and, _or.
+/// hasAccess can inspect also a single access pattern via allOf, anyOf and oneOf. 
+/// hasAccess must be called in hasStmt.
+std::function<bool(isl::schedule_node)> hasAccess(std::function<bool(isl::schedule_node)> f) {
+
+  return [&f](isl::schedule_node node) {
+    return hasAccessImpl(node, f);
+  };
+}
+    
 /// check if the loop has depth less than @depth.
 std::function<bool(isl::schedule_node)> hasDepthLessThan(const int depth) {
 
@@ -678,16 +782,6 @@ std::function<bool(isl::schedule_node)> hasPattern(const std::string &s) {
   };
 }
 
-/// check if the loop has accesses @s in the @d schedule dimension.
-/// TODO: it is also needed to let the user specify on which dimension
-/// he/she wants to have the accesses described by @s? 
-std::function<bool(isl::schedule_node)> hasAccesses(const std::string &s, const ScheduleDim &d) {
-
-  return [s, d](isl::schedule_node node) {
-    return hasAccessesImpl(node, s, d);
-  };
-}
-
 /// Check if the loop has @n stmts.
 std::function<bool(isl::schedule_node)> hasNumberOfStmtEqualTo(int n) {
 
@@ -710,7 +804,6 @@ static bool checkIfValid(const std::string &p) {
   return false;
 }
 
-
 /// Utility function.
 static isl::schedule_node wrapOnMatch(
   isl::schedule_node node, const matchers::ScheduleNodeMatcher &m) {
@@ -732,8 +825,9 @@ static isl::schedule_node match(
   // check if the node is already annotated.
   // FIXME: this is a workaround to avoid entering
   // an infinite loop.
-  if (node.get_type() == isl_schedule_node_mark)
+  if (node.get_type() == isl_schedule_node_mark) {
     return node;
+  }
 
   for (int i = 0; i < node.n_children(); ++i) {
     node = match(m, node.child(i)).parent();
@@ -779,6 +873,8 @@ TEST(language, compilation) {
   auto m1 = loop(hasDepth(1));
   auto m2 = loop(hasDepth(2), loop(hasDepth(1)));
   auto m3 = loop(hasDepth(2));
+  auto m4 = loop(hasStmt(anything()));
+  auto m5 = loop(hasStmt(hasAccess(anything())));
 }
 
 TEST(language, testOne) {
@@ -1243,103 +1339,150 @@ TEST(language, testTwentyOne) {
   EXPECT_TRUE(checkCodeAnnotation(res, 1, "__test__"));
 }
 
-/*  
-TEST(language, testTwenty) {
+// start testing new api.
+
+isl::schedule_node insertOnMatch(
+  const matchers::ScheduleNodeMatcher &m, isl::schedule_node node,
+  lang::MatchedStmts &matchedStmts) {
+
+  using namespace lang;
+
+  // if the matcher matches, promote the candidates to matches
+  // and remove the candidates to the no match array.
+  if (matchers::ScheduleNodeMatcher::isMatching(m, node)) {
+    for (size_t i = 0; i < candidateStmts.matches_.size(); i++) {
+      matchedStmts.matches_.push_back(candidateStmts.matches_[i]);
+      for (size_t j = 0; j < matchedStmts.noMatches_.size(); j++) {
+        if (matchedStmts.noMatches_[j] == candidateStmts.matches_[i])
+          matchedStmts.noMatches_.erase(matchedStmts.noMatches_.begin() + j);
+      }
+    }
+    candidateStmts.matches_.clear();
+  }
+
+  return node;
+}
+
+isl::schedule_node match(
+  const matchers::ScheduleNodeMatcher &m, isl::schedule_node node,
+  lang::MatchedStmts &matchedStmts) {
+
+  node = insertOnMatch(m, node, matchedStmts);
+
+  for (int i = 0; i < node.n_children(); ++i) {
+    node = match(m, node.child(i), matchedStmts).parent();
+  }
+  return node;
+}
+
+/// Collect all the statements within the scop.
+/// All the collected stmts are stored as "not matched"
+/// in "matchedStmts".
+void collectAllStmts(isl::schedule_node root, lang::MatchedStmts &matchedStmts) {
+
+  isl_schedule_node_foreach_descendant_top_down(
+    root.get(),
+    [](__isl_keep isl_schedule_node *nodePtr, void *user) -> isl_bool {
+      
+      lang::MatchedStmts *p = static_cast<lang::MatchedStmts *>(user);
+      isl::schedule_node node = isl::manage_copy(nodePtr);
+      if (node.get_type() == isl_schedule_node_leaf) {
+        auto name = lang::getStatementName(node.get_prefix_schedule_union_map());
+        p->noMatches_.push_back(name);
+      }
+      return isl_bool_true;
+    }, &matchedStmts);
+}   
+  
+
+lang::MatchedStmts groupStatements(
+  const matchers::ScheduleNodeMatcher &m, const std::string &p) {
+
+  using namespace lang;
+
+  MatchedStmts matchedStmts{};
+
+  if (!checkIfValid(p))
+    return matchedStmts;
+
+  // get the scop.
+  auto ctx = ScopedCtx(pet::allocCtx());
+  auto petScop = pet::Scop::parseFile(ctx, p);
+  auto scop = petScop.getScop();
+
+  isl::schedule_node root = scop.schedule.get_root();
+
+  collectAllStmts(root, matchedStmts);
+  root = match(m, root, matchedStmts);
+
+  return matchedStmts;
+}
+
+TEST(language, testTwentyTwo) {
 
   using namespace lang;
   
-  auto m = [&]() {
+  auto m = []() {
     using namespace matchers;
-    return loop(hasAccesses("A(i-1) + A(i) + A(i+1)", ScheduleDim::allDim));
+    return loop(hasStmt(anything()));
   }();
-  m.setLabel("__test__");
-
-  auto m1 = [&]() {
-    using namespace matchers;
-    return loop(hasAccesses("A(i-1) + A(i) + A(i+1)", ScheduleDim::anyDim));
-  }();
-  m1.setLabel("__test__");
-
-  auto m2 = [&]() {
-    using namespace matchers;
-    return loop(hasAccesses("A(i-1) + A(i) + A(i+1)", ScheduleDim::oneDim));
-  }();
-  m2.setLabel("__test__");
-
-  pointer =
-    std::unique_ptr<std::string>(new std::string("inputs/stencil_five_points.c"));
-
-  auto res = evaluate(m, "inputs/stencil_five_points.c");
-  #if defined(DEBUG) && defined(LEVEL_ONE)
-    std::cout << res << std::endl;
-  #endif
-
-}
-*/
-
-/*
-// Create a relation between a point in the given space and one
-// (if "all" == false) or multiple (otherwise) points in the same space
-// such that the value along the last dimension of the space in the range is
-// strictly greater than the value along the same dimension in the domain, and
-// all other values are mutually equal.
-static isl::map mapToNext(isl::space space, bool all = false) {
-  using map_maker::operator==;
-  using map_maker::operator<;
-  int dim = space.dim(isl::dim::set);
-
-  auto result = isl::map::universe(space.map_from_set());
-  if (dim == 0) {
-    return result;
-  }
-
-  for (int i = 0; i < dim - 1; ++i) {
-    auto aff =
-        isl::aff::var_on_domain(isl::local_space(space), isl::dim::set, i);
-    result = result.intersect(aff == aff);
-  }
-  auto aff =
-      isl::aff::var_on_domain(isl::local_space(space), isl::dim::set, dim - 1);
-  auto next = aff.add_constant_si(1);
-  return all ? result.intersect(aff < aff) : result.intersect(next == aff);
-}
-
-TEST(language, testStride) {
-
-  using namespace matchers;
-
-  auto ctx = ScopedCtx(pet::allocCtx());
-  auto petScop = pet::Scop::parseFile(ctx, "inputs/strided_domain_distance.c");
-  auto scop = petScop.getScop();
-  isl::schedule_node root = scop.schedule.get_root();
-  root = root.child(0).child(0);
-  auto prefixSchedule = root.get_prefix_schedule_union_map();
-  auto scheduledReads = petScop.reads().apply_domain(prefixSchedule);
-  auto scheduledWrites = petScop.writes().apply_domain(prefixSchedule);
-  EXPECT_TRUE(scheduledReads.n_map() != 0);
-  EXPECT_TRUE(scheduledWrites.n_map() != 0);
-  auto nonEmptySchedulePoints = isl::set(scop.domain().apply(prefixSchedule));
-  std::cout << nonEmptySchedulePoints.to_str() << "\n";
   
-  std::vector<isl::map> scheduledReadsAsMap{};
-  scheduledReads.foreach_map([&scheduledReadsAsMap] (isl::map m) {
-    scheduledReadsAsMap.push_back(m);
-    return isl_stat_ok;
-  });
-  std::cout << scheduledReadsAsMap[0].to_str() << "\n";
-  std::cout << "first read: " << scheduledReadsAsMap[0].lexmin().to_str() << "\n";
-  std::cout << scheduledReadsAsMap[1].to_str() << "\n";
-  std::cout << "second read: " << scheduledReadsAsMap[1].lexmin().to_str() << "\n";
-  //auto mappedToNext = mapToNext(scheduledReadsAsMap[0].get_space().domain(), true);
-  //auto lexminMapOne = scheduledReadsAsMap[0].lexmin();
-  //auto lexminMapTwo = scheduledReadsAsMap[1].lexmin();
-  //lexminMapTwo = lexminMapTwo.subtract_domain(lexminMapOne.domain());
-  //std::cout << lexminMapTwo.to_str() << "\n"; 
-  //auto setRangeMapOne = scheduledReadsAsMap[0].range();
-  //auto setRangeMapTwo = scheduledReadsAsMap[1].domain().apply(prefixSchedule);
-  //setRangeMapOne.foreach_point([&](isl::point p) -> isl::stat {
-  //  std::cout << p.to_str() << "\n";
-  //  return isl::stat::ok();
-  //});
+  auto res = groupStatements(m, "inputs/gemm.c");
+  #if defined(DEBUG) && defined(LEVEL_ONE)
+    dump(res);
+  #endif
+  EXPECT_TRUE(res.matches_.size() == 2);
+  EXPECT_TRUE(res.noMatches_.size() == 0);
+
+  auto m0 = []() {
+    using namespace matchers;
+    return loop(hasStmt(hasAccess(anything())));
+  }();
+  pointer =
+    std::unique_ptr<std::string>(new std::string("inputs/gemm.c"));
+  
+  res = groupStatements(m0, "inputs/gemm.c");
+  #if defined(DEBUG) && defined(LEVEL_ONE)
+    dump(res);
+  #endif
+  EXPECT_TRUE(res.matches_.size() == 2);
+  EXPECT_TRUE(res.noMatches_.size() == 0); 
+
+  res = groupStatements(m, "inputs/3mm.c");
+  #if defined(DEBUG) && defined(LEVEL_ONE)
+    dump(res);
+  #endif
+  EXPECT_TRUE(res.matches_.size() == 6);
+  EXPECT_TRUE(res.noMatches_.size() == 0);
+
+  auto m1 = []() {
+    using namespace matchers;
+    return loop(_and(hasDimensionality(3), hasStmt(anything())));
+  }();
+  
+  res = groupStatements(m1, "inputs/gemm.c");
+  #if defined(DEBUG) && defined(LEVEL_ONE)
+    dump(res);
+  #endif
+  EXPECT_TRUE(res.matches_.size() == 1);
+  EXPECT_TRUE(res.noMatches_.size() == 1);
+
+  auto m2 = []() {
+    using namespace matchers;
+    return loop(_and(hasDimensionality(2), hasStmt(anything())));
+  }();
+  
+  res = groupStatements(m2, "inputs/gemm.c");
+  #if defined(DEBUG) && defined(LEVEL_ONE)
+    dump(res);
+  #endif
+  EXPECT_TRUE(res.matches_.size() == 1);
+  EXPECT_TRUE(res.noMatches_.size() == 1);
+
+  res = groupStatements(m2, "inputs/3mm.c");
+  #if defined(DEBUG) && defined(LEVEL_ONE)
+    dump(res);
+  #endif
+  EXPECT_TRUE(res.matches_.size() == 3);
+  EXPECT_TRUE(res.noMatches_.size() == 3);
 }
-*/
