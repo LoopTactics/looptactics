@@ -602,7 +602,6 @@ std::function<bool(isl::schedule_node, AccessRestriction r)>
   };
 }
 
-/// TODO: check access patterns also.
 static bool isGemmLikeImpl(isl::schedule_node node, AccessRestriction r) {
 
   Expects(node.get_type() == isl_schedule_node_leaf);
@@ -618,6 +617,36 @@ static bool isGemmLikeImpl(isl::schedule_node node, AccessRestriction r) {
     return false;
   if (reads.n_map() != 3)
     return false;
+
+  isl::ctx ctx = node.get_ctx();
+
+  using namespace matchers;
+  auto _i = placeholder(ctx);
+  auto _j = placeholder(ctx);
+  auto _k = placeholder(ctx);
+  auto _ii = placeholder(ctx);
+  auto _jj = placeholder(ctx);
+  auto _A = arrayPlaceholder();
+  auto _B = arrayPlaceholder();
+  auto _C = arrayPlaceholder();
+  
+  auto psRead = allOf(access(_A, _i, _j), access(_B, _i, _k), access(_C, _k, _j));
+  auto psWrite = allOf(access(_A, _ii, _jj));
+  
+  auto readMatches = match(reads, psRead);
+  auto writeMatches = match(writes, psWrite);
+  
+  if ((readMatches.size() != 1) || (writeMatches.size() != 1))
+    return false;
+
+  if (writeMatches[0][_ii].payload().inputDimPos_ !=
+      readMatches[0][_i].payload().inputDimPos_)
+    return false;
+
+  if (writeMatches[0][_jj].payload().inputDimPos_ !=
+      readMatches[0][_j].payload().inputDimPos_)
+    return false; 
+
   return true;
 }
 
