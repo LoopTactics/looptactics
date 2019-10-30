@@ -93,6 +93,7 @@ bool ScheduleNodeMatcher::isMatching(const ScheduleNodeMatcher &matcher,
 
 static bool hasPreviousSiblingImpl(isl::schedule_node node,
                                    const ScheduleNodeMatcher &siblingMatcher) {
+
   while (isl_schedule_node_has_previous_sibling(node.get()) == isl_bool_true) {
     node = isl::manage(isl_schedule_node_previous_sibling(node.release()));
     if (ScheduleNodeMatcher::isMatching(siblingMatcher, node)) {
@@ -104,6 +105,7 @@ static bool hasPreviousSiblingImpl(isl::schedule_node node,
 
 static bool hasNextSiblingImpl(isl::schedule_node node,
                                const ScheduleNodeMatcher &siblingMatcher) {
+
   while (isl_schedule_node_has_next_sibling(node.get()) == isl_bool_true) {
     node = isl::manage(isl_schedule_node_next_sibling(node.release()));
     if (ScheduleNodeMatcher::isMatching(siblingMatcher, node)) {
@@ -115,17 +117,20 @@ static bool hasNextSiblingImpl(isl::schedule_node node,
 
 std::function<bool(isl::schedule_node)>
 hasPreviousSibling(const ScheduleNodeMatcher &siblingMatcher) {
+
   return std::bind(hasPreviousSiblingImpl, std::placeholders::_1,
                    siblingMatcher);
 }
 
 std::function<bool(isl::schedule_node)>
 hasNextSibling(const ScheduleNodeMatcher &siblingMatcher) {
+
   return std::bind(hasNextSiblingImpl, std::placeholders::_1, siblingMatcher);
 }
 
 std::function<bool(isl::schedule_node)>
 hasSibling(const ScheduleNodeMatcher &siblingMatcher) {
+
   return [siblingMatcher](isl::schedule_node node) {
     return hasPreviousSiblingImpl(node, siblingMatcher) ||
            hasNextSiblingImpl(node, siblingMatcher);
@@ -157,6 +162,36 @@ hasDescendant(const ScheduleNodeMatcher &descendantMatcher) {
           return data->found ? isl_bool_false : isl_bool_true;
         },
         &data);
+    return r == isl_stat_ok && data.found;
+  };
+}
+
+// not tested.
+std::function<bool(isl::schedule_node)>
+hasAncestor(const ScheduleNodeMatcher &ancestorMatcher) {
+
+  isl::schedule_node n;  
+  return [ancestorMatcher](isl::schedule_node node) {
+    struct Data {
+      bool found;
+      const ScheduleNodeMatcher &ancestorMatcher;
+    };
+    Data data{false, ancestorMatcher};
+
+    auto r = isl_schedule_node_foreach_ancestor_top_down(
+      node.get(),
+      [](__isl_keep isl_schedule_node *cn, void *user) -> isl_stat {
+        auto data = static_cast<Data *>(user);
+        if (data->found) {
+          return isl_stat_error;
+        }
+
+        auto n = isl::manage_copy(cn);
+        data->found =
+          ScheduleNodeMatcher::isMatching(data->ancestorMatcher, n);
+        return  data->found ? isl_stat_error : isl_stat_ok;
+      },  
+      &data);
     return r == isl_stat_ok && data.found;
   };
 }

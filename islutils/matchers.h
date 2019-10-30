@@ -456,6 +456,9 @@ std::function<bool(isl::schedule_node)>
 hasDescendant(const ScheduleNodeMatcher &descendantMatcher);
 
 std::function<bool(isl::schedule_node)>
+hasAncestor(const ScheduleNodeMatcher &ancestorMatcher);
+
+std::function<bool(isl::schedule_node)>
 hasChild(const ScheduleNodeMatcher &descendantMatcher);
 
 /// And between callbacks.
