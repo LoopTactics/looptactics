@@ -9,7 +9,8 @@ set(TEST_NAMES
     parser
     stencils 
     haystack
-    language 
+    #old_language 
+    language
     synthesis)
 
 set(TEST_INPUTS
