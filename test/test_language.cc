@@ -282,8 +282,8 @@ std::function<bool(isl::schedule_node)> hasAccess(std::function<bool(isl::schedu
 }
 
 /// helper function to get reads and writes.
-/// scop writes and reads. Note the use of "pointer" which is 
-/// a global-visibilty pointer to store the file name.
+/// Scop writes and reads. Note the use of "pointer" which is 
+/// a global-visibility pointer to store the file name.
 std::pair<isl::union_map, isl::union_map> getReadsAndWrites(isl::ctx ctx) {
 
   // get reads and write for the leaf's schedule.
@@ -658,15 +658,90 @@ std::function<bool(isl::schedule_node, AccessRestriction r)> isGemmLike() {
   };
 }
 
-// FIXME
+static isl::map getEqualAndLarger(isl::space setDomain) {
+
+  isl::space space = setDomain.map_from_set();  
+  isl::map map = isl::map::universe(space);
+  size_t lastDim = map.dim(isl::dim::in) - 1;
+  
+  for (size_t i = 0; i < lastDim; i++)
+    map = map.equate(isl::dim::in, i, isl::dim::out, i);
+
+  map = map.order_lt(isl::dim::in, lastDim, isl::dim::out, lastDim);
+  return map;
+}
+
+static isl::set getStride(isl::map schedule, isl::map access) {
+
+  isl::space space = schedule.get_space().range();
+  isl::map nextScatt = getEqualAndLarger(space);
+
+  schedule = schedule.reverse();
+  nextScatt = nextScatt.lexmin();
+  
+  nextScatt = nextScatt.apply_range(schedule);
+  nextScatt = nextScatt.apply_range(access.apply_domain(schedule));
+  nextScatt = nextScatt.apply_domain(schedule);
+  nextScatt = nextScatt.apply_domain(access.apply_domain(schedule));
+
+  isl::set deltas = nextScatt.deltas();
+  return deltas;
+}
+  
+static bool isStrideX(isl::map schedule, isl::map access, int strideValue) {
+
+  //std::cout << schedule.to_str() << "\n";
+  //std::cout << access.to_str() << "\n";
+
+  isl::set stride = getStride(schedule, access);
+  isl::set strideX = isl::set::universe(stride.get_space());
+
+  //std::cout << "stride :" << stride.to_str() << "\n";
+
+  for (size_t i = 0; i < strideX.dim(isl::dim::set) - 1; i++) {
+    strideX = strideX.fix_si(isl::dim::set, i, 0);
+  }
+  strideX = strideX.fix_si(isl::dim::set, strideX.dim(isl::dim::set) - 1,
+                           strideValue);
+  if (stride.is_empty())
+    return false;
+  return stride.is_subset(strideX);  
+}
+
+/// All the accesses to arrays have stride 1. (TODO: re-check assumptions).
 static bool isPointWiseImpl(isl::schedule_node node, AccessRestriction r) {
 
   Expects(node.get_type() == isl_schedule_node_leaf);
   Expects(r == AccessRestriction::ALL);
 
   auto reads = getReadsAndWrites(node).first;
-  if (reads.n_map() != 0)
-    return false;
+  auto writes = getReadsAndWrites(node).second;
+  isl::map schedule = isl::map::from_union_map(
+    node.get_prefix_schedule_union_map());
+
+  std::vector<isl::map> readsVector{};
+  std::vector<isl::map> writesVector{};
+
+  reads.foreach_map([&](isl::map m) {
+    if (isArray(m))
+      readsVector.push_back(m);
+    return isl_stat_ok;
+  });
+  writes.foreach_map([&](isl::map m) {
+    if (isArray(m))
+      writesVector.push_back(m);
+    return isl_stat_ok;
+  });
+
+  for (const auto &m : readsVector) {
+    if (!isStrideX(schedule, m, 1))
+      return false;
+  }
+
+  for (const auto &m : writesVector) {
+    if (!isStrideX(schedule, m, 1))
+      return false;
+  }
   return true;
 }
 
@@ -1042,6 +1117,7 @@ TEST(language, testTwentyEigth) {
   #if defined(DEBUG) && defined(LEVEL_ONE)
     dump(res);
   #endif
+  EXPECT_TRUE(res.matches_.size() == 2);
 }
 
 TEST(language, testTwentyNine) {
@@ -1082,35 +1158,61 @@ TEST(language, testTwentyNine) {
   #if defined(DEBUG) && defined(LEVEL_ONE)
     dump(res);
   #endif
+  EXPECT_TRUE(res.matches_.size() == 4);
 
   res = groupStatements(m1, "inputs/2mm.c");
   #if defined(DEBUG) && defined(LEVEL_ONE)
     dump(res);
   #endif
+  EXPECT_TRUE(res.matches_.size() == 2);
 
   res = groupStatements(m2, "inputs/2mm.c");
   #if defined(DEBUG) && defined(LEVEL_ONE)
     dump(res);
   #endif
+  EXPECT_TRUE(res.matches_.size() == 2);
 
   res = groupStatements(m3, "inputs/2mm.c");
   #if defined(DEBUG) && defined(LEVEL_ONE)
     dump(res);
   #endif
+  EXPECT_TRUE(res.matches_.size() == 2);
 
   res = groupStatements(m4, "inputs/2mm.c");
   #if defined(DEBUG) && defined(LEVEL_ONE)
     dump(res);
   #endif
+  EXPECT_TRUE(res.matches_.size() == 2);
 
   res = groupStatements(m3, "inputs/2mm.c", GroupStrategy::MULTIPLE_MATCH_ONE_INSTANCE);
   #if defined(DEBUG) && defined(LEVEL_ONE)
     dump(res);
   #endif
+  EXPECT_TRUE(res.matches_.size() == 1);
 
   res = groupStatements(m2, "inputs/2mm.c", GroupStrategy::MULTIPLE_MATCH_ONE_INSTANCE);
   #if defined(DEBUG) && defined(LEVEL_ONE)
     dump(res);
   #endif
+  EXPECT_TRUE(res.matches_.size() == 1);
+}
+
+TEST(language, testThirty) {
+
+  using namespace lang;
+
+  auto m = []() {
+    using namespace matchers;
+    return loop(hasStmt(hasAccess(isPointWise())));
+  }();
+
+  pointer =
+    std::unique_ptr<std::string>(new std::string("inputs/pointWise.c"));
+
+  auto res = groupStatements(m, "inputs/pointWise.c");
+  #if defined(DEBUG) && defined(LEVEL_ONE)
+    dump(res);
+  #endif
+  EXPECT_TRUE(res.matches_.size() == 0);
 }
 
