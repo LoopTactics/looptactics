@@ -8,6 +8,30 @@ jobs:
       - checkout
 
       - run:
+        name: checkout submodules
+        command: |
+          git submodule --init --recursive
+
+      - run:
+        name: cmake
+        command: |
+          mkdir -p build
+          cd build
+          cmake ../
+
+      - run:
+        name: build barvinok
+        command: make barvinok
+
+      - run:
+        name: build loop tactics
+        command: make 
+
+      - run:
+        name: check
+        command: make check
+
+      - run:
           name: Greeting
           command: echo Hello, world.
 
