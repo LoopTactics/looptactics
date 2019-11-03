@@ -1,42 +1,51 @@
-version: 2
-jobs:
-  build:
-    docker:
-      - image: debian:stretch
-
-    steps:
-      - checkout
-
-      - run:
-          name: checkout submodules
-          command: git submodule --init --recursive
-
-      - run:
-          name: cmake
-          command: |
-            mkdir -p build
-            cd build
-            cmake ../
-
-      - run:
-          name: build barvinok
-          command: make barvinok
-
-      - run:
-          name: build loop tactics
-          command: make 
-
-      - run:
-          name: check
-          command: make check
-
-      - run:
-          name: Greeting
-          command: echo Hello, world.
-
-      - run:
-          name: Print the Current Time
-          command: date
+#version: 2
+#jobs:
+#  build:
+#    docker:
+#      - image: debian:stretch
+#
+#    steps:
+#      - checkout
+#
+#      - run:
+#          name: install git
+#          command: apt-get update && apt-get install -y git
+#
+#      - run:
+#          name: checkout submodules
+#          command: |
+#            #GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" git submodule update --init --recursive external/isl-haystack
+#            git submodule update --init --recursive external/pet
+#            git submodule update --init --recursive external/haystack
+#            git submodule update --init --recursive external/googletest
+#            git submodule update --init --recursive external/barvinok
+#
+#      - run:
+#          name: cmake
+#          command: |
+#            mkdir -p build
+#            cd build
+#            cmake ../
+#
+#      - run:
+#          name: build barvinok
+#          command: make barvinok
+#
+#      - run:
+#          name: build loop tactics
+#          command: make 
+#
+#      - run:
+#          name: check
+#          command: make check
+#
+#      - run:
+#          name: Greeting
+#          command: echo Hello, world.
+#
+#      - run:
+#          name: Print the Current Time
+#          command: date
 
 #version: 2
 #jobs:
