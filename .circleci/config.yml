@@ -9,8 +9,7 @@ jobs:
 
       - run:
         name: checkout submodules
-        command: |
-          git submodule --init --recursive
+        command: git submodule --init --recursive
 
       - run:
         name: cmake
