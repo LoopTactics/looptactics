@@ -8,7 +8,7 @@ set(TEST_NAMES
     access
     parser
     stencils 
-    haystack
+    #haystack
     #old_language 
     language
     synthesis)

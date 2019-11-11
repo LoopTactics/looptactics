@@ -30,34 +30,34 @@ if (VERBOSE_LEVEL STREQUAL "3")
 endif (VERBOSE_LEVEL STREQUAL "3")
 
 # Qt libraries
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
-set(CMAKE_AUTOMOC ON)
-find_package(Qt5 COMPONENTS Widgets REQUIRED)
-include_directories(${Qt5Core_INCLUDE_DIRS})
-ADD_DEFINITIONS(-DQT_NO_KEYWORDS)
+#set(CMAKE_INCLUDE_CURRENT_DIR ON)
+#set(CMAKE_AUTOMOC ON)
+#find_package(Qt5 COMPONENTS Widgets REQUIRED)
+#include_directories(${Qt5Core_INCLUDE_DIRS})
+#ADD_DEFINITIONS(-DQT_NO_KEYWORDS)
 
 # LLVM used to get cache configuration via TTI.
-find_package(LLVM REQUIRED CONFIG)
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
-include_directories(${LLVM_INCLUDE_DIRS})
-add_definitions(${LLVM_DEFINITIONS})
+#find_package(LLVM REQUIRED CONFIG)
+#message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+#message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+#include_directories(${LLVM_INCLUDE_DIRS})
+#add_definitions(${LLVM_DEFINITIONS})
 
 # Boost
 # https://stackoverflow.com/questions/9723793/undefined-reference-to-boostsystemsystem-category-when-compiling
-add_definitions(-DBOOST_ERROR_CODE_HEADER_ONLY)
+#add_definitions(-DBOOST_ERROR_CODE_HEADER_ONLY)
 
 # prevent error 
 # "You must build your code with position independent code if Qt was built with..
 # https://github.com/tora-tool/tora/blob/master/CMakeLists.txt
-if (Qt5_POSITION_INDEPENDENT_CODE)
-  SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
-endif()
+#if (Qt5_POSITION_INDEPENDENT_CODE)
+#  SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
+#endif()
 
 
 # Boost
-find_package(Boost COMPONENTS program_options filesystem system REQUIRED)
-include_directories(${Boost_INCLUDE_DIRS})
+#find_package(Boost COMPONENTS program_options filesystem system REQUIRED)
+#include_directories(${Boost_INCLUDE_DIRS})
 
 # Isl for haystack, modified to work also with matchers/builders.
 ExternalProject_Add(isl-haystack
@@ -119,11 +119,11 @@ add_library(islutils
             islutils/matchers.cc
             islutils/builders.cc
             islutils/pet_wrapper.cc
-            islutils/util.cc
+            #islutils/util.cc
             islutils/access_patterns.cc
-            islutils/haystack_runner.cc
+            #islutils/haystack_runner.cc
             islutils/parser.cc
-            islutils/loop_opt.cc
+            #islutils/loop_opt.cc
             haystack/Access.cpp
             haystack/HayStack.cpp
             haystack/Program.cpp
@@ -133,7 +133,7 @@ add_library(islutils
 
 # Find the libraries that correspond to the LLVM components
 # that we wish to use
-llvm_map_components_to_libnames(llvm_libs core nativecodegen ExecutionEngine)
+#llvm_map_components_to_libnames(llvm_libs core nativecodegen ExecutionEngine)
 
 target_include_directories(islutils PUBLIC ${CMAKE_SOURCE_DIR})
 target_include_directories(islutils PUBLIC ${isl-haystack_INCLUDE})
@@ -142,22 +142,22 @@ target_include_directories(islutils PUBLIC ${barvinok_INCLUDE})
 target_link_libraries(islutils ${isl-haystack_LIB})
 target_link_libraries(islutils ${pet_LIB})
 target_link_libraries(islutils ${barvinok_LIB})
-target_link_libraries(islutils ${llvm_libs})
-target_link_libraries(islutils ${Boost_LIBRARIES})
+#target_link_libraries(islutils ${llvm_libs})
+#target_link_libraries(islutils ${Boost_LIBRARIES})
 
-add_executable(main 
-  main.cc
-  islutils/highlighter.cc
-  islutils/mainwindow.cc
-  islutils/tuner_thread.cc
-  )
+#add_executable(main 
+#  main.cc
+#  islutils/highlighter.cc
+#  islutils/mainwindow.cc
+#  islutils/tuner_thread.cc
+#  )
 
 #add_executable(main
 #    haystack/main.cpp
 #)
 
-target_link_libraries(main islutils)
-target_link_libraries(main Qt5::Widgets)
+#target_link_libraries(main islutils)
+#target_link_libraries(main Qt5::Widgets)
 #target_link_libraries(main ${Boost_LIBRARIES})
 
 add_subdirectory(test)

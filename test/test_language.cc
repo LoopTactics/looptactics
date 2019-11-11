@@ -7,7 +7,7 @@
 #include "islutils/parser.h"
 #include <islutils/access_patterns.h>
 
-#include <boost/filesystem.hpp>
+//#include <boost/filesystem.hpp>
 #include <stack>
 #include <iostream>
 
@@ -757,6 +757,7 @@ std::function<bool(isl::schedule_node, AccessRestriction r)> isPointWise() {
 /// Check if "p" is a valid file path.
 static bool checkIfValid(const std::string &p) {
 
+/*
   namespace filesys = boost::filesystem;
   try {
     filesys::path path(p);
@@ -766,6 +767,8 @@ static bool checkIfValid(const std::string &p) {
     std::cerr << e.what() << std::endl;
   }
   return false;
+*/
+  return true;
 }
 
 ///
