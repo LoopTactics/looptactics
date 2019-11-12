@@ -85,17 +85,17 @@ ExternalProject_Add(pet
 )
 
 # Barvinok for haystack
-ExternalProject_Add(barvinok
-    DEPENDS pet
-    PREFIX external/barvinok
-    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/barvinok
-    BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/build-barvinok
-    INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/install-barvinok
-    UPDATE_COMMAND ./autogen.sh
-    CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --enable-shared-barvinok #--with-isl-prefix=${CMAKE_CURRENT_SOURCE_DIR}/external/install-isl-haystack --with-isl=system 
-    BUILD_COMMAND make -j4
-    EXCLUDE_FROM_ALL 1
-)
+#ExternalProject_Add(barvinok
+#    DEPENDS pet
+#    PREFIX external/barvinok
+#    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/barvinok
+#    BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/build-barvinok
+#    INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/install-barvinok
+#    UPDATE_COMMAND ./autogen.sh
+#    CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --enable-shared-barvinok #--with-isl-prefix=${CMAKE_CURRENT_SOURCE_DIR}/external/install-isl-haystack --with-isl=system 
+#    BUILD_COMMAND make -j4
+#    EXCLUDE_FROM_ALL 1
+#)
 
 add_subdirectory(external/googletest EXCLUDE_FROM_ALL)
 
@@ -103,9 +103,9 @@ set(pet_LIB "libpet.so")
 set(pet_LIBPATH "external/install-pet/lib")
 set(pet_INCLUDE "external/install-pet/include")
 
-set(barvinok_LIB "libbarvinok.so")
-set(barvinok_LIBPATH "external/install-barvinok/lib")
-set(barvinok_INCLUDE "external/install-barvinok/include")
+#set(barvinok_LIB "libbarvinok.so")
+#set(barvinok_LIBPATH "external/install-barvinok/lib")
+#set(barvinok_INCLUDE "external/install-barvinok/include")
 
 set(isl-haystack_LIB "libisl.so")
 set(isl-haystack_LIBPATH "external/install-isl-haystack/lib")
@@ -124,11 +124,11 @@ add_library(islutils
             #islutils/haystack_runner.cc
             islutils/parser.cc
             #islutils/loop_opt.cc
-            haystack/Access.cpp
-            haystack/HayStack.cpp
-            haystack/Program.cpp
-            haystack/Timer.cpp
-            haystack/isl-helpers.cpp
+            #haystack/Access.cpp
+            #haystack/HayStack.cpp
+            #haystack/Program.cpp
+            #haystack/Timer.cpp
+            #haystack/isl-helpers.cpp
 )
 
 # Find the libraries that correspond to the LLVM components
@@ -138,10 +138,10 @@ add_library(islutils
 target_include_directories(islutils PUBLIC ${CMAKE_SOURCE_DIR})
 target_include_directories(islutils PUBLIC ${isl-haystack_INCLUDE})
 target_include_directories(islutils PUBLIC ${pet_INCLUDE})
-target_include_directories(islutils PUBLIC ${barvinok_INCLUDE})
+#target_include_directories(islutils PUBLIC ${barvinok_INCLUDE})
 target_link_libraries(islutils ${isl-haystack_LIB})
 target_link_libraries(islutils ${pet_LIB})
-target_link_libraries(islutils ${barvinok_LIB})
+#target_link_libraries(islutils ${barvinok_LIB})
 #target_link_libraries(islutils ${llvm_libs})
 #target_link_libraries(islutils ${Boost_LIBRARIES})
 
