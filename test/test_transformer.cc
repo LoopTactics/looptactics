@@ -9,7 +9,6 @@
 #include <islutils/matchers.h>
 #include <islutils/pet_wrapper.h>
 #include <islutils/aff_op.h>
-#include <islutils/cout_overloading.h>
 #include <islutils/access.h>
 #include <thread>
 #include <fstream>
