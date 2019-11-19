@@ -5,13 +5,7 @@ set(TEST_NAMES
     matcher
     builders
     transformer
-    access
-    parser
-    stencils 
-    #haystack
-    #old_language 
-    language
-    synthesis)
+    access)
 
 set(TEST_INPUTS
     3mm.c
@@ -42,5 +36,3 @@ foreach(case ${TEST_NAMES})
   add_dependencies(check "check-${case}")
 endforeach()
 
-#add_executable("main" "main.cpp")
-#target_link_libraries("main" islutils)

@@ -4,9 +4,6 @@
 [submodule "external/pet"]
 	path = external/pet
 	url = https://repo.or.cz/pet.git
-[submodule "external/barvinok"]
-	path = external/barvinok
-	url = https://repo.or.cz/barvinok.git
 [submodule "external/isl-haystack"]
 	path = external/isl-haystack
-	url = git@github.com:chelini/isl-haystack.git
+	url = https://github.com/chelini/isl-haystack.git
