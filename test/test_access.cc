@@ -87,6 +87,27 @@ TEST(AccessMatcher, MatchResults) {
   }
 }
 
+TEST(AccessMatcher, MatchResultsThreeDimensional) {
+  using namespace matchers;
+  
+  auto ctx = ScopedCtx(); 
+  auto umap = isl::union_map(ctx, "{[i,j,k]->A[a,b]: a=i and b=k;"
+                                  " [i,j,k]->B[a,b]: a=k and b=j;"
+                                  " [i,j,k]->C[a,b]: a=i and b=j}");
+  auto _i = placeholder(ctx);
+  auto _j = placeholder(ctx);
+  auto _k = placeholder(ctx);
+  auto matches = match(umap, allOf(access(_i, _j), access(_i, _k), access(_k, _j)));
+  ASSERT_EQ(matches.size(), 1);
+
+  EXPECT_FALSE(matches[0][_i].candidateSpaces().empty());
+  EXPECT_FALSE(matches[0][_j].candidateSpaces().empty());
+  EXPECT_FALSE(matches[0][_k].candidateSpaces().empty());
+  EXPECT_TRUE(matches[0][_i].payload().inputDimPos_ == 0);
+  EXPECT_TRUE(matches[0][_j].payload().inputDimPos_ == 1);
+  EXPECT_TRUE(matches[0][_k].payload().inputDimPos_ == 2); 
+}
+
 TEST(AccessMatcher, MatchResultsMultipleSpaces) {
   using namespace matchers;
 
@@ -615,3 +636,4 @@ TEST(AccessMatcher, GroupFoldsAPI) {
   EXPECT_EQ(match(umapSame, psDiff).size(), 0);
   EXPECT_EQ(match(umapDiff, psDiff).size(), 2);
 }
+
