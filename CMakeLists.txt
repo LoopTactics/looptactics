@@ -21,7 +21,7 @@ ExternalProject_Add(isl-haystack
     BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/build-isl-haystack
     INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/install-isl-haystack
     UPDATE_COMMAND ./autogen.sh
-    CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --with-clang=system --with-int=imath-32
+    CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --with-int=imath-32
     BUILD_COMMAND make -j4
     EXCLUDE_FROM_ALL 1
 )
@@ -41,15 +41,25 @@ ExternalProject_Add(pet
 
 add_subdirectory(external/googletest EXCLUDE_FROM_ALL)
 
-set(pet_LIB "libpet.so")
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+  set(pet_LIB "libpet.dylib")
+else ()
+  set(pet_LIB "libpet.so")
+endif () 
+
 set(pet_LIBPATH "external/install-pet/lib")
 set(pet_INCLUDE "external/install-pet/include")
 
-set(isl-haystack_LIB "libisl.so")
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+  set(isl-haystack_LIB "libisl.dylib")
+else ()
+  set(isl-haystack_LIB "libisl.so")
+endif ()
+
 set(isl-haystack_LIBPATH "external/install-isl-haystack/lib")
 set(isl-haystack_INCLUDE "external/install-isl-haystack/include")
 
-link_directories(islutils ${isl-haystack_LIBPATH} ${pet_LIBPATH} ${barvinok_LIBPATH})
+link_directories(islutils ${isl-haystack_LIBPATH} ${pet_LIBPATH})
 
 add_library(islutils
 
@@ -59,15 +69,18 @@ add_library(islutils
             islutils/access_patterns.cc
 )
 
+add_executable(main
+  main.cc
+)
+
 target_include_directories(islutils PUBLIC ${CMAKE_SOURCE_DIR})
 target_include_directories(islutils PUBLIC ${isl-haystack_INCLUDE})
 target_include_directories(islutils PUBLIC ${pet_INCLUDE})
 target_link_libraries(islutils ${isl-haystack_LIB})
 target_link_libraries(islutils ${pet_LIB})
 
-add_executable(main 
-  main.cc
-)
+target_link_libraries(main islutils)
+
 
 add_subdirectory(test)
 add_subdirectory(docs)
