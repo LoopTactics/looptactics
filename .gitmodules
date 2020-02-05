@@ -4,6 +4,7 @@
 [submodule "external/pet"]
 	path = external/pet
 	url = https://repo.or.cz/pet.git
-[submodule "external/isl-haystack"]
-	path = external/isl-haystack
-	url = https://github.com/chelini/isl-haystack.git
+[submodule "external/isl"]
+	path = external/isl
+	url = https://github.com/chelini/isl.git
+	branch = bindings

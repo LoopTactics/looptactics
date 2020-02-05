@@ -14,12 +14,12 @@ if (VERBOSE)
   add_definitions("-DDEBUG")
 endif (VERBOSE)
 
-# Isl for haystack, modified to work also with matchers/builders.
-ExternalProject_Add(isl-haystack
-    PREFIX external/isl-haystack
-    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/isl-haystack
-    BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/build-isl-haystack
-    INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/install-isl-haystack
+# Isl, with C++ bindings matchers/builders.
+ExternalProject_Add(isl
+    PREFIX external/isl
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/isl
+    BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/build-isl
+    INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/install-isl
     UPDATE_COMMAND ./autogen.sh
     CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --with-int=imath-32
     BUILD_COMMAND make -j4
@@ -28,13 +28,13 @@ ExternalProject_Add(isl-haystack
 
 # Pet 
 ExternalProject_Add(pet
-     DEPENDS isl-haystack
+     DEPENDS isl
      PREFIX external/pet
      SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/pet
      BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/build-pet
      INSTALL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/install-pet
      UPDATE_COMMAND ./autogen.sh
-     CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --with-isl-prefix=${CMAKE_CURRENT_SOURCE_DIR}/external/install-isl-haystack --with-isl=system
+     CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> --with-isl-prefix=${CMAKE_CURRENT_SOURCE_DIR}/external/install-isl --with-isl=system
      BUILD_COMMAND make -j4
      EXCLUDE_FROM_ALL 1
 )
@@ -51,15 +51,15 @@ set(pet_LIBPATH "external/install-pet/lib")
 set(pet_INCLUDE "external/install-pet/include")
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
-  set(isl-haystack_LIB "libisl.dylib")
+  set(isl_LIB "libisl.dylib")
 else ()
-  set(isl-haystack_LIB "libisl.so")
+  set(isl_LIB "libisl.so")
 endif ()
 
-set(isl-haystack_LIBPATH "external/install-isl-haystack/lib")
-set(isl-haystack_INCLUDE "external/install-isl-haystack/include")
+set(isl_LIBPATH "external/install-isl/lib")
+set(isl_INCLUDE "external/install-isl/include")
 
-link_directories(islutils ${isl-haystack_LIBPATH} ${pet_LIBPATH})
+link_directories(islutils ${isl_LIBPATH} ${pet_LIBPATH})
 
 add_library(islutils
 
@@ -74,9 +74,9 @@ add_executable(main
 )
 
 target_include_directories(islutils PUBLIC ${CMAKE_SOURCE_DIR})
-target_include_directories(islutils PUBLIC ${isl-haystack_INCLUDE})
+target_include_directories(islutils PUBLIC ${isl_INCLUDE})
 target_include_directories(islutils PUBLIC ${pet_INCLUDE})
-target_link_libraries(islutils ${isl-haystack_LIB})
+target_link_libraries(islutils ${isl_LIB})
 target_link_libraries(islutils ${pet_LIB})
 
 target_link_libraries(main islutils)
