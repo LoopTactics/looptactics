@@ -10,15 +10,9 @@ after submodule update.
 ```sh
 git submodule update --init --recursive
 cmake .
-make barvinok
+make pet
 make
 ```
-
-We use Haystack (https://github.com/spcl/haystack)
-Haystack is an analytical cache model that given a program computes the number of cache misses. The tool aims at providing the programmer with a better intuition of the memory access costs that on todays machines increasingly dominate the overall program execution time. The tool counts the cache misses symbolically and thus neither executes the program nor enumerates all memory accesses explicitly which makes the model runtime problem size independent. The tool models fully associative caches with LRU replacement policy.
-
-The paper "A Fast Analytical Model of Fully Associative Caches" (Tobias Gysi, Tobias Grosser, Laurin Brandner, and Torsten Hoefler) provides further implementation details. The software was developed by SPCL (ETH Zurich).
-
 
 If it does not find clang headers try:
 ```sh
@@ -52,11 +46,14 @@ This is free software; see the source for copying conditions.  There is NO
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 ```
 
-```
-TODO:
-1. Tuner
-2. Compute the flops using pet
-```
+Contributors:
+
+Alex Zinenko (https://ozinenko.com/)
+
+Lorenzo Chelini (l.chelini@tue.nl / l.chelini@icloud.com)
+
+Tobias Grosser (https://www.grosser.es/)
+
 
 If you use this tool please cite:
 ```
@@ -65,4 +62,26 @@ If you use this tool please cite:
   author={Zinenko, Oleksandr and Chelini, Lorenzo and Grosser, Tobias},
   year={2018}
 }
+
+@article{10.1145/3372266,
+author = {Chelini, Lorenzo and Zinenko, Oleksandr and Grosser, Tobias and Corporaal, Henk},
+title = {Declarative Loop Tactics for Domain-Specific Optimization},
+year = {2019},
+issue_date = {January 2020},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {16},
+number = {4},
+issn = {1544-3566},
+url = {https://doi.org/10.1145/3372266},
+doi = {10.1145/3372266},
+journal = {ACM Trans. Archit. Code Optim.},
+month = dec,
+articleno = {Article 55},
+numpages = {25},
+keywords = {declarative loop optimizations, Loop tactics, polyhedral model}
+}
 ```
+
+More information:
+Write to l.chelini@tue.nl / l.chelini@icloud.com
